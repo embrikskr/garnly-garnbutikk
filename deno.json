@@ -1,0 +1,9 @@
+{
+  "tasks": {
+    "check": "deno check supabase/functions/*/index.ts",
+    "test": "deno test --allow-env supabase/functions/_shared/",
+    "fmt": "deno fmt supabase/functions"
+  },
+  "fmt": { "lineWidth": 140 },
+  "compilerOptions": { "lib": ["deno.window", "dom"], "strict": true }
+}

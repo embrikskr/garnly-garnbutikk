@@ -1,0 +1,16 @@
+project_id = "zesaeleooiptrpjzqhxe"
+
+[functions.sync-store]
+verify_jwt = false
+[functions.sync-products]
+verify_jwt = false
+[functions.order-intake]
+verify_jwt = false
+[functions.order-cancelled]
+verify_jwt = false
+[functions.offer-respond]
+verify_jwt = false
+[functions.timeout-sweeper]
+verify_jwt = false
+[functions.pos-webhook]
+verify_jwt = false
