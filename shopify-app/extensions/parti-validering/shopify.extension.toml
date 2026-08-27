@@ -1,0 +1,17 @@
+api_version = "2025-07"
+
+[[extensions]]
+name = "Garnly parti-validering"
+handle = "garnly-parti-validering"
+type = "function"
+description = "Blokkerer kjøp der ingen enkelt butikk har hele antallet av en varelinje (garnparti-regelen)."
+
+  [[extensions.targeting]]
+  target = "purchase.validation.run"
+  input_query = "src/run.graphql"
+  export = "run"
+
+  [extensions.build]
+  command = ""
+  path = "dist/function.wasm"
+  watch = ["src/**/*.js"]

@@ -1,0 +1,13 @@
+# Fylles ut av `shopify app config link` (client_id m.m.). Se README.md.
+name = "garnly-validering"
+embedded = false
+
+[access_scopes]
+# Funksjonen selv trenger ingen scopes; metafeltet skrives av backend-appen «Garnly ruting».
+scopes = ""
+
+[webhooks]
+api_version = "2025-07"
+
+[build]
+include_config_on_deploy = true

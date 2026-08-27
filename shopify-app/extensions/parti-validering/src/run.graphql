@@ -1,0 +1,19 @@
+query RunInput {
+  cart {
+    lines {
+      quantity
+      merchandise {
+        __typename
+        ... on ProductVariant {
+          id
+          product {
+            title
+          }
+          metafield(namespace: "garnly", key: "stock_by_store") {
+            value
+          }
+        }
+      }
+    }
+  }
+}

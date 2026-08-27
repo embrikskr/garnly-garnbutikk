@@ -13,6 +13,16 @@ jobs:
         with: { deno-version: v2.x }
       - run: deno task check
       - run: deno task test
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - name: Test Shopify Validation Function
+        working-directory: shopify-app
+        run: node --test "extensions/parti-validering/test/*.test.mjs"
+      - name: Bygg dashboard
+        working-directory: dashboard
+        run: |
+          npm ci
+          npm run build
 
   deploy:
     needs: check

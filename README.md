@@ -68,12 +68,45 @@ curl -X POST https://zesaeleooiptrpjzqhxe.supabase.co/functions/v1/sync-store -H
 
 Sjekk `unmatched_items` og `sync_runs` i Supabase-tabellvisningen. Når matchingen ser riktig ut, kjør uten `dry_run`.
 
+### 5. EAN og lagersporing på variantene
+
+Shopify-variantene mangler i dag strekkoder, og lager spores ikke. Når butikkene leverer
+produktlister (CSV med `ean;navn`), kjør:
+
+```bash
+deno task set-barcodes -- liste.csv            # tørrkjøring: viser matching og hva som ville blitt gjort
+deno task set-barcodes -- liste.csv --apply    # skriver barcode + slår på lagersporing
+```
+
+Kjør deretter `sync-products` på nytt (steg 4) så `products`-tabellen speiler endringene.
+
+## Admin-dashboard (`dashboard/`)
+
+Next.js-app for Garnly ops: oversikt per butikk, ordrer med tilbudshistorikk, umatchede varer
+(koble/ignorer), lager og synk-status med «Synk nå»-knapp.
+
+```bash
+cd dashboard
+cp .env.example .env.local   # fyll inn
+npm install
+npm run dev                  # http://localhost:3000
+```
+
+Deploy: Vercel-prosjekt med **Root Directory `dashboard/`** og miljøvariablene fra `.env.example`.
+Sett `DASHBOARD_PASSWORD` – uten den er dashboardet åpent.
+
+## Kassevalidering i Shopify (`shopify-app/`)
+
+Shopify Function som håndhever garnparti-regelen i kassen (byggeplan §7). Se `shopify-app/README.md`
+for deploy med Shopify CLI.
+
 ## Lokal utvikling
 
 ```bash
 deno task check      # typesjekk
 deno task test       # enhetstester (ruting, frister, matching)
 supabase functions serve --env-file .env   # kjør funksjonene lokalt
+node --test "shopify-app/extensions/parti-validering/test/*.test.mjs"   # test valideringsfunksjonen
 ```
 
 ## Deploy

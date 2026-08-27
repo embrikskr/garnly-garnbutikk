@@ -1,6 +1,6 @@
 # Status – garnly-garnbutikk
 
-Oppdatert: 2026-08-27
+Oppdatert: 2026-08-27 (kveld)
 
 ## Bygget (ikke deployet ennå)
 - Skjema (001), cron (002)
@@ -8,6 +8,15 @@ Oppdatert: 2026-08-27
 - Edge Functions: sync-store, sync-products, order-intake, offer-respond, timeout-sweeper, order-cancelled, pos-webhook
 - Shipmondo-adapter (SHIPPING_PROVIDER=none til fraktvalget er tatt)
 - Enhetstester for ruting, frister og matching (10 stk, grønne)
+- **Admin-dashboard** (`dashboard/`, Next.js): oversikt, ordrer m/tilbudshistorikk, umatchede varer
+  med koble/ignorer (koble lærer produktet EAN/SKU), lager per butikk, synk-status med «Synk nå».
+  Beskyttes med HTTP Basic (DASHBOARD_PASSWORD). Deployes til Vercel med root `dashboard/`.
+- **Shopify Validation Function** (`shopify-app/`, §7): blokkerer kjøp der ingen enkelt butikk har
+  hele antallet av en varelinje, basert på metafeltet `garnly.stock_by_store`. 7 enhetstester grønne.
+  Input-query validert mot Functions-skjemaet. Deploy krever Shopify CLI (se `shopify-app/README.md`).
+- **`scripts/set-barcodes.ts`**: skriver EAN (barcode) og slår på lagersporing på Shopify-varianter
+  fra en CSV med `ean;navn` (butikkenes produktlister). Tørrkjøring som standard, `--apply` skriver.
+  Mutasjonen validert mot Admin API 2025-07. Løser blokkerende punkt 3 så snart vi får produktlister.
 
 ## Funn fra Shopify 27.08.2026
 - Garnly2 har 133 produkter, 250+ varianter: **0 strekkoder, 0 SKU, lager ikke sporet**. Hver farge er eget produkt.
@@ -21,6 +30,10 @@ Oppdatert: 2026-08-27
 4. Frakt: Shipmondo vs Cargonizer (Logistra)
 
 ## Ikke bygget ennå
-- Shopify Validation Function (§7)
-- Admin-dashboard
 - Partnerside med innlogging (fase 2)
+
+## Ikke deployet ennå (krever tilganger)
+- Supabase: `supabase db push` + `functions deploy` (krever SUPABASE_ACCESS_TOKEN; CI gjør det på push til main)
+- Dashboard: Vercel-prosjekt med root `dashboard/` og env fra `dashboard/.env.example`
+- Validation Function: `shopify app deploy` fra `shopify-app/` (krever Shopify CLI-innlogging),
+  deretter aktiveres valideringen i Shopify admin → Settings → Checkout

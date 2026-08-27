@@ -1,0 +1,13 @@
+{
+  "name": "garnly-shopify-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "shopify app dev",
+    "deploy": "shopify app deploy",
+    "test": "node --test \"extensions/parti-validering/test/*.test.mjs\""
+  },
+  "devDependencies": {
+    "@shopify/cli": "^3.80.0"
+  }
+}

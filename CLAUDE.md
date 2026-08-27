@@ -32,6 +32,9 @@ supabase/functions/
   timeout-sweeper/        cron hvert minutt
   order-cancelled/        webhook orders/cancelled
   pos-webhook/            Mystore products/update → trigger synk
+scripts/                  set-barcodes.ts: EAN + lagersporing på Shopify-varianter fra CSV
+dashboard/                Next.js admin-dashboard (Vercel): oversikt, ordrer, umatchet, lager, synk
+shopify-app/              Shopify Function: kassevalidering «ett parti fra én butikk» (§7)
 ```
 
 ## Regler for arbeid i repoet
