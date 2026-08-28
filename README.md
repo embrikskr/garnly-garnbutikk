@@ -68,7 +68,25 @@ curl -X POST https://zesaeleooiptrpjzqhxe.supabase.co/functions/v1/sync-store -H
 
 Sjekk `unmatched_items` og `sync_runs` i Supabase-tabellvisningen. Når matchingen ser riktig ut, kjør uten `dry_run`.
 
-### 5. EAN og lagersporing på variantene
+### 5. Bygg sortimentet fra kassesystemene
+
+Sortimentet hentes fra butikkenes kassesystemer, kureres og opprettes i Shopify (med EAN og
+lagersporing fra start):
+
+```bash
+# 1) Hent og slå sammen på EAN → produktimport.csv (env: DUELL_* og/eller MYSTORE_*)
+deno task import-products
+
+# 2) Åpne CSV-en, sett x i behold-kolonnen og fyll pris for varene Garnly skal selge
+
+# 3) Opprett de valgte som DRAFT-produkter i Shopify (env: SHOPIFY_SHOP, SHOPIFY_ADMIN_TOKEN)
+deno task import-products -- --create produktimport.csv
+```
+
+Gå gjennom utkastene i Shopify admin (bilder, beskrivelser, ACTIVE), og kjør deretter
+`sync-products` (steg 4) så `products`-tabellen speiler katalogen.
+
+### 5b. EAN og lagersporing på eksisterende varianter (reserve)
 
 Shopify-variantene mangler i dag strekkoder, og lager spores ikke. Når butikkene leverer
 produktlister (CSV med `ean;navn`), kjør:

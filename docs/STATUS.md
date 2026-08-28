@@ -18,6 +18,13 @@ Oppdatert: 2026-08-27 (kveld)
   fra en CSV med `ean;navn` (butikkenes produktlister). Tørrkjøring som standard, `--apply` skriver.
   Mutasjonen validert mot Admin API 2025-07. Løser blokkerende punkt 3 så snart vi får produktlister.
 
+## Sortimentbeslutning 28.08.2026
+Embrik: produktene som ligger i Shopify i dag er IKKE de som skal selges. Sortimentet skal hentes
+fra Duell og Mystore, kureres, og opprettes på nytt i Shopify (med EAN og lagersporing fra start).
+Verktøy: `scripts/import-products.ts` (hent → slå sammen på EAN → kurerings-CSV → opprett som DRAFT).
+De 133 eksisterende produktene arkiveres når Embrik bekrefter (destruktiv operasjon, krever eksplisitt ja).
+`set-barcodes.ts` blir dermed mest relevant som reserve hvis noen eksisterende produkter likevel beholdes.
+
 ## Funn fra Shopify 27.08.2026
 - Garnly2 har 133 produkter, 250+ varianter: **0 strekkoder, 0 SKU, lager ikke sporet**. Hver farge er eget produkt.
 - Konsekvens: EAN-matching fungerer ikke før strekkoder er lagt inn. Navnematching (brand + garn + farge) er reserve.
