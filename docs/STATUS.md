@@ -1,6 +1,20 @@
 # Status – garnly-garnbutikk
 
-Oppdatert: 2026-08-27 (kveld)
+Oppdatert: 2026-09-04
+
+## Deployet 04.09.2026
+- Supabase `zesaeleooiptrpjzqhxe`: skjema (001) + cron (002) kjørt, 3 cron-jobber aktive.
+  `functions_url`/`cron_secret` ligger i **Vault** (ALTER DATABASE ... SET er ikke tillatt på Supabase).
+- Alle 7 Edge Functions deployet, 21 secrets satt. `timeout-sweeper` testet OK ende-til-ende.
+- Shopify-app «Garnly ruting» på nye Dev Dashboard-plattformen (client credentials-grant, ikke fast
+  token). Client ID/secret i function-secrets; backenden fornyer token selv. Webhook-API 2026-07,
+  Admin API satt til 2026-07.
+- Webhooks opprettet via API: ORDERS_PAID → order-intake, ORDERS_CANCELLED → order-cancelled.
+- Locations finnes allerede i Shopify: «Strikkefryd (Mjøndalen)» (gid .../125074604318),
+  «Garnkilden (Stavanger)» (gid .../125074637086) + Shop location.
+- Dashboard live på Vercel (garnly-garnbutikk.vercel.app, HTTP Basic).
+- Gjenstår i første deploy: Strikkefryd inn i stores/store_secrets (venter på Mystore-token),
+  sync-products, sync-store dry_run mot Strikkefryd (Embrik skal godkjenne før ekte skriving).
 
 ## Bygget (ikke deployet ennå)
 - Skjema (001), cron (002)
