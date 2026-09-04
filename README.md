@@ -14,11 +14,12 @@ supabase link --project-ref zesaeleooiptrpjzqhxe
 supabase db push                       # kjører migrasjonene
 ```
 
-Sett databaseinnstillingene pg_cron trenger (SQL Editor i Supabase Dashboard):
+Legg inn de to Vault-hemmelighetene pg_cron trenger (SQL Editor i Supabase Dashboard).
+(`alter database ... set` er ikke tillatt for postgres-rollen på Supabase, derfor Vault.)
 
 ```sql
-alter database postgres set app.functions_url = 'https://zesaeleooiptrpjzqhxe.supabase.co/functions/v1';
-alter database postgres set app.cron_secret   = '<lang tilfeldig streng>';
+select vault.create_secret('https://zesaeleooiptrpjzqhxe.supabase.co/functions/v1', 'functions_url');
+select vault.create_secret('<lang tilfeldig streng, samme som CRON_SECRET>', 'cron_secret');
 ```
 
 Lag `.env` fra `.env.example`, fyll inn, og sett secrets:
