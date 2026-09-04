@@ -1,7 +1,10 @@
 /**
  * Shopify Admin GraphQL-klient. Alle operasjoner er validert mot Admin API 2025-07-skjemaet.
  *
- * Env: SHOPIFY_SHOP (kycbgs-yy.myshopify.com), SHOPIFY_ADMIN_TOKEN (custom app), SHOPIFY_API_VERSION
+ * Env: SHOPIFY_SHOP (kycbgs-yy.myshopify.com), SHOPIFY_API_VERSION, og én av:
+ *   - SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET (Dev Dashboard-app i egen organisasjon;
+ *     token hentes med client credentials-grant og fornyes automatisk – utløper etter 24 t)
+ *   - SHOPIFY_ADMIN_TOKEN (fast token fra en eldre admin-opprettet custom app)
  */
 const API_VERSION = Deno.env.get("SHOPIFY_API_VERSION") ?? "2025-07";
 
@@ -12,17 +15,46 @@ export class ShopifyError extends Error {
   }
 }
 
+let cachedToken: { token: string; at: number } | null = null;
+
+/** Admin-token: fast token hvis satt, ellers client credentials-grant med cache (fornyes før 24 t). */
+export async function adminToken(shop: string): Promise<string> {
+  const fixed = Deno.env.get("SHOPIFY_ADMIN_TOKEN");
+  if (fixed) return fixed;
+  const id = Deno.env.get("SHOPIFY_CLIENT_ID");
+  const secret = Deno.env.get("SHOPIFY_CLIENT_SECRET");
+  if (!id || !secret) throw new ShopifyError("SHOPIFY_ADMIN_TOKEN eller SHOPIFY_CLIENT_ID/SHOPIFY_CLIENT_SECRET mangler");
+  if (cachedToken && Date.now() - cachedToken.at < 23 * 3600 * 1000) return cachedToken.token;
+  const res = await fetch(`https://${shop}/admin/oauth/access_token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ client_id: id, client_secret: secret, grant_type: "client_credentials" }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !json.access_token) {
+    throw new ShopifyError(`Shopify client credentials feilet: ${res.status} ${JSON.stringify(json).slice(0, 200)}`);
+  }
+  cachedToken = { token: json.access_token as string, at: Date.now() };
+  return cachedToken.token;
+}
+
 export async function gql<T = any>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
   const shop = Deno.env.get("SHOPIFY_SHOP");
-  const token = Deno.env.get("SHOPIFY_ADMIN_TOKEN");
-  if (!shop || !token) throw new ShopifyError("SHOPIFY_SHOP / SHOPIFY_ADMIN_TOKEN mangler");
+  if (!shop) throw new ShopifyError("SHOPIFY_SHOP mangler");
 
   for (let attempt = 0; attempt < 4; attempt++) {
+    const token = await adminToken(shop);
     const res = await fetch(`https://${shop}/admin/api/${API_VERSION}/graphql.json`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Shopify-Access-Token": token },
       body: JSON.stringify({ query, variables }),
     });
+    if (res.status === 401) {
+      // Token kan være utløpt/tilbakekalt: tøm cache og prøv igjen med ferskt token
+      cachedToken = null;
+      if (attempt < 3) continue;
+      throw new ShopifyError("Shopify: 401 unauthorized etter fornyet token");
+    }
     if (res.status === 429) {
       await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
       continue;
@@ -212,7 +244,8 @@ export async function createFulfillment(foId: string, tracking?: { number: strin
 // Webhook-verifisering
 // ---------------------------------------------------------------------------
 export async function verifyShopifyHmac(rawBody: string, hmacHeader: string | null): Promise<boolean> {
-  const secret = Deno.env.get("SHOPIFY_WEBHOOK_SECRET");
+  // Webhooks opprettet av appen via API signeres med appens client secret
+  const secret = Deno.env.get("SHOPIFY_WEBHOOK_SECRET") || Deno.env.get("SHOPIFY_CLIENT_SECRET");
   if (!secret || !hmacHeader) return false;
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(rawBody));
