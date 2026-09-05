@@ -48,16 +48,29 @@ async function syncOne(store: StoreRow, dryRun: boolean) {
     const adapter = getAdapter(store.pos_system);
     const lines = await adapter.fetchStock(store, (sec?.secrets ?? {}) as Record<string, string>);
 
-    const { data: products } = await db.from("products").select("*").eq("active", true);
-    const { matched, unmatched } = matchLines(lines, products ?? []);
+    // PostgREST returnerer maks 1000 rader per kall – pagineres eksplisitt
+    const products: ProductRow[] = [];
+    for (let from = 0;; from += 1000) {
+      const { data, error } = await db.from("products").select("*").eq("active", true).range(from, from + 999);
+      if (error) throw new Error("products select: " + error.message);
+      products.push(...(data ?? []));
+      if (!data || data.length < 1000) break;
+    }
+    const { matched, unmatched } = matchLines(lines, products);
 
     // Slå sammen duplikater (samme produkt kan komme flere ganger, f.eks. flere avdelinger)
     const qtyByProduct = new Map<string, number>();
     for (const { product, line } of matched) qtyByProduct.set(product.id, (qtyByProduct.get(product.id) ?? 0) + line.qty);
 
-    // Forrige tilstand for diff
-    const { data: prev } = await db.from("inventory").select("product_id, qty").eq("store_id", store.id);
-    const prevMap = new Map((prev ?? []).map((r: { product_id: string; qty: number }) => [r.product_id, r.qty]));
+    // Forrige tilstand for diff (paginert, samme 1000-radersgrense)
+    const prev: Array<{ product_id: string; qty: number }> = [];
+    for (let from = 0;; from += 1000) {
+      const { data, error } = await db.from("inventory").select("product_id, qty").eq("store_id", store.id).range(from, from + 999);
+      if (error) throw new Error("inventory select: " + error.message);
+      prev.push(...(data ?? []));
+      if (!data || data.length < 1000) break;
+    }
+    const prevMap = new Map(prev.map((r) => [r.product_id, r.qty]));
 
     const upserts: Array<{ store_id: string; product_id: string; qty_raw: number; qty: number; synced_at: string }> = [];
     const changes: Array<{ product: ProductRow; qty: number }> = [];
@@ -103,9 +116,15 @@ async function syncOne(store: StoreRow, dryRun: boolean) {
       })));
       shopifyWritten = withItem.length;
 
-      // Metafelt for kassevalidering (§7): stock per location på hver endret variant
+      // Metafelt for kassevalidering (§7): stock per location på hver endret variant.
+      // .in() med tusenvis av id-er sprenger URL-grensen – chunkes i bolker på 200.
       const ids = withItem.map((c) => c.product.id);
-      const { data: allLoc } = await db.from("inventory").select("product_id, qty, stores!inner(shopify_location_id)").in("product_id", ids);
+      const allLoc: any[] = [];
+      for (let i = 0; i < ids.length; i += 200) {
+        const { data, error } = await db.from("inventory").select("product_id, qty, stores!inner(shopify_location_id)").in("product_id", ids.slice(i, i + 200));
+        if (error) throw new Error("inventory metafelt-select: " + error.message);
+        allLoc.push(...(data ?? []));
+      }
       const byVariant = new Map<string, Record<string, number>>();
       for (const r of (allLoc ?? []) as any[]) {
         const p = productById.get(r.product_id);
