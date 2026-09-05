@@ -38,6 +38,7 @@ export interface ProductRow {
   shopify_variant_id: string | null;
   shopify_inventory_item_id: string | null;
   active: boolean;
+  exclude_from_sync: boolean;
 }
 
 /** Én lagerrad fra et kassesystem. Adapteren normaliserer alt til dette. */

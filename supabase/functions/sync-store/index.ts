@@ -48,10 +48,11 @@ async function syncOne(store: StoreRow, dryRun: boolean) {
     const adapter = getAdapter(store.pos_system);
     const lines = await adapter.fetchStock(store, (sec?.secrets ?? {}) as Record<string, string>);
 
-    // PostgREST returnerer maks 1000 rader per kall – pagineres eksplisitt
+    // PostgREST returnerer maks 1000 rader per kall – pagineres eksplisitt.
+    // exclude_from_sync: bare garn skal synkes (003) – kits o.l. holdes helt utenfor.
     const products: ProductRow[] = [];
     for (let from = 0;; from += 1000) {
-      const { data, error } = await db.from("products").select("*").eq("active", true).range(from, from + 999);
+      const { data, error } = await db.from("products").select("*").eq("active", true).eq("exclude_from_sync", false).range(from, from + 999);
       if (error) throw new Error("products select: " + error.message);
       products.push(...(data ?? []));
       if (!data || data.length < 1000) break;
