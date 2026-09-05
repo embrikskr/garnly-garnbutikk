@@ -93,8 +93,9 @@ async function syncOne(store: StoreRow, dryRun: boolean) {
 
     // Unmatched
     if (unmatched.length) {
+      // Tom streng i stedet for NULL: NULL er "unik" i unique-constrainten og gir duplikater
       const rows = unmatched.filter((u) => u.ean || u.sku).map((u) => ({
-        store_id: store.id, ean: u.ean, sku: u.sku, name: u.name, qty: u.qty, last_seen: now,
+        store_id: store.id, ean: u.ean ?? "", sku: u.sku ?? "", name: u.name, qty: u.qty, last_seen: now,
       }));
       for (let i = 0; i < rows.length; i += 500) {
         await db.from("unmatched_items").upsert(rows.slice(i, i + 500), { onConflict: "store_id,ean,sku", ignoreDuplicates: false });
