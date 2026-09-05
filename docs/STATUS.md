@@ -13,8 +13,22 @@ Oppdatert: 2026-09-04
 - Locations finnes allerede i Shopify: «Strikkefryd (Mjøndalen)» (gid .../125074604318),
   «Garnkilden (Stavanger)» (gid .../125074637086) + Shop location.
 - Dashboard live på Vercel (garnly-garnbutikk.vercel.app, HTTP Basic).
-- Gjenstår i første deploy: Strikkefryd inn i stores/store_secrets (venter på Mystore-token),
-  sync-products, sync-store dry_run mot Strikkefryd (Embrik skal godkjenne før ekte skriving).
+## Strikkefryd LIVE 05.09.2026
+- Strikkefryd (Mystore, shop=strikkefryd) lagt inn i stores/store_secrets. Location
+  «Strikkefryd (Mjøndalen)» gid .../125074604318. Kontakt = embriks e-post i pilot.
+- sync-products: 3690 varianter speilet (1721 med EAN). Bare garn synkes – 23 «Yarn kit»
+  ekskludert (exclude_from_sync, migrasjon 003).
+- Mystore-adapter rettet mot ekte felt (name-objekt, ikke products_name; status/disabled filtreres).
+- **Lager skrevet til Shopify**: 1488 garnvarianter med lager aktivert + lagersporing på +
+  antall satt på Strikkefryd-location, og metafelt garnly.stock_by_store satt. Verifisert i Shopify
+  (Peer Gynt 1042 = 59 stk osv.). 5262 rader lest, 1565 matchet, resten (oppskrifter/gavekort/ikke-ført) i unmatched_items.
+- Videre lagerendringer håndteres av cron hvert 15. min.
+
+## Kjente forbedringspunkter (ikke-blokkerende)
+- Første synk av en ny butikk gjøres med `deno task backfill-store <slug>` (tung aktivering
+  tåler ikke Edge Function-tidsbudsjettet). sync-store bør senere gjøres chunk-gjenopptakbar
+  så onboarding skjer uten manuelt steg. Backfill er gjenopptakbar og idempotent.
+- Migrasjoner kjørt mot prosjektet via Management API (001–004). Vault holder functions_url/cron_secret.
 
 ## Bygget (ikke deployet ennå)
 - Skjema (001), cron (002)
