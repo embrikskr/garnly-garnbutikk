@@ -1,19 +1,22 @@
 /**
  * Mystore / Acendy API v2 adapter.
  * Dokumentasjon: https://mystoreapi.docs.apiary.io/
+ * Feltnavn VERIFISERT mot ekte butikk (strikkefryd) 04.09.2026:
+ *   products-attributter: name (objekt per språk, f.eks. {"no": "..."}), ean, sku, quantity,
+ *   quantity_physical, quantity_reserved, status (0 = inaktiv), updated_at m.fl.
+ *   product-variants-attributter: ean, sku, quantity, disabled + relationships.product.
+ *   NB: "products_name" finnes IKKE som felt; ugyldige fieldsets gir 400.
  *
  *   Base: https://api.mystore.no/shops/<shop>/
  *   Headers: Authorization: Bearer <token>, Accept: application/vnd.api+json
- *   GET products?page[number]=n&page[size]=50&fields[products]=sku,ean,quantity,updated_at,products_name
- *   GET product-variants?page[number]=n&page[size]=50   (varianter har egne sku/ean/quantity)
  *   Rate limit: 120 kall/min per token.
- *   Filter: filter[updated_at][path]=updated_at&filter[updated_at][value]=<ts>&filter[updated_at][operator]=gte
  *
  * pos_config:  { "shop": "butikknavn", "use_variants": true }
  * secrets:     { "token": "<personal access token>" }
  *
  * Produkter MED varianter: lageret ligger på variantene, produktets quantity ignoreres.
  * Produkter UTEN varianter: produktets quantity brukes.
+ * Inaktive produkter (status 0) og deaktiverte varianter hoppes over.
  */
 import type { StockLine, StoreRow } from "../types.ts";
 import { AdapterError, normalizeEan, type PosAdapter, sleep } from "./types.ts";
@@ -81,10 +84,13 @@ export const mystoreAdapter: PosAdapter = {
 
   async fetchStock(store, secrets): Promise<StockLine[]> {
     const products = await getAll(store, secrets, "products", {
-      "fields[products]": "sku,ean,quantity,products_name,updated_at",
+      "fields[products]": "sku,ean,quantity,name,updated_at,status",
     });
     const useVariants = store.pos_config.use_variants !== false;
     const variants = useVariants ? await getAll(store, secrets, "product-variants") : [];
+
+    const productById = new Map(products.map((p) => [p.id, p]));
+    const isActive = (p: JsonApiResource | undefined) => !p || Number(p.attributes.status ?? 1) !== 0;
 
     // Produkter som har varianter: lageret ligger på variantene
     const productsWithVariants = new Set<string>();
@@ -93,7 +99,8 @@ export const mystoreAdapter: PosAdapter = {
       const rel = v.relationships?.product?.data;
       const pid = rel && !Array.isArray(rel) ? rel.id : null;
       if (pid) productsWithVariants.add(pid);
-      const parent = pid ? products.find((p) => p.id === pid) : undefined;
+      const parent = pid ? productById.get(pid) : undefined;
+      if (v.attributes.disabled || !isActive(parent)) continue;
       out.push({
         ean: normalizeEan(v.attributes.ean),
         sku: v.attributes.sku ? String(v.attributes.sku) : null,
@@ -102,7 +109,7 @@ export const mystoreAdapter: PosAdapter = {
       });
     }
     for (const p of products) {
-      if (productsWithVariants.has(p.id)) continue;
+      if (productsWithVariants.has(p.id) || !isActive(p)) continue;
       out.push({
         ean: normalizeEan(p.attributes.ean),
         sku: p.attributes.sku ? String(p.attributes.sku) : null,
