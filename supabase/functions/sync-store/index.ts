@@ -32,10 +32,24 @@ Deno.serve(async (req) => {
     stores = (data ?? []).filter((s: StoreRow) => !s.last_sync_at || new Date(s.last_sync_at).getTime() < cutoff);
   }
 
-  const results: Record<string, unknown>[] = [];
-  for (const store of stores) {
-    results.push(await syncOne(store, !!body.dry_run));
+  const work = (async () => {
+    const results: Record<string, unknown>[] = [];
+    for (const store of stores) {
+      results.push(await syncOne(store, !!body.dry_run));
+    }
+    return results;
+  })();
+
+  // pg_cron-kallet (pg_net) har 120 s timeout, mens en full synk kan ta flere minutter.
+  // Uten wait:true svarer vi derfor med en gang og fullfører i bakgrunnen; status
+  // havner uansett i sync_runs. Manuelle kall kan sende {"wait":true} for å få resultatet.
+  // @ts-ignore EdgeRuntime finnes i Supabase Edge Functions
+  if (!body.wait && typeof EdgeRuntime !== "undefined") {
+    // @ts-ignore
+    EdgeRuntime.waitUntil(work.catch((e: unknown) => console.error("sync-store bakgrunnsfeil:", e)));
+    return json({ started: stores.length, background: true });
   }
+  const results = await work;
   return json({ synced: results.length, results });
 });
 
