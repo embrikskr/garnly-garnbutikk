@@ -88,30 +88,49 @@ export interface QtyChange {
   quantity: number;
 }
 
-/** Setter "available" absolutt på en location. Maks 250 per kall, batches automatisk. */
+/**
+ * Setter "available" absolutt på en location. Maks 250 per kall, batches automatisk.
+ * Admin API 2026-07: inventorySetQuantities krever @idempotent-direktiv (nøkkel per batch,
+ * stabil over gql()-retries) og changeFromQuantity på hver rad. Vi er kilden til sannhet, så
+ * changeFromQuantity = null slår av compare-and-swap-sjekken.
+ */
 export async function setAvailableQuantities(changes: QtyChange[], reason = "correction") {
-  const Q = `mutation SetQty($input: InventorySetQuantitiesInput!) {
-    inventorySetQuantities(input: $input) { inventoryAdjustmentGroup { createdAt } userErrors { field message code } } }`;
+  const Q = `mutation SetQty($input: InventorySetQuantitiesInput!, $key: String!) {
+    inventorySetQuantities(input: $input) @idempotent(key: $key) { inventoryAdjustmentGroup { createdAt } userErrors { field message code } } }`;
   for (let i = 0; i < changes.length; i += 250) {
     const batch = changes.slice(i, i + 250);
     const res = await gql(Q, {
+      key: crypto.randomUUID(),
       input: {
         name: "available",
         reason,
-        ignoreCompareQuantity: true,
-        quantities: batch.map((c) => ({ inventoryItemId: c.inventoryItemId, locationId: c.locationId, quantity: c.quantity })),
+        referenceDocumentUri: "gid://garnly-sync/StoreSync/inventory",
+        quantities: batch.map((c) => ({ inventoryItemId: c.inventoryItemId, locationId: c.locationId, quantity: c.quantity, changeFromQuantity: null })),
       },
     });
     assertNoUserErrors(res, "inventorySetQuantities");
   }
 }
 
-/** Sørger for at inventory items er aktivert på en location (kreves før setAvailableQuantities). */
-export async function activateInventoryAtLocation(inventoryItemIds: string[], locationId: string) {
-  const M = `mutation Act($inventoryItemId: ID!, $locationId: ID!) {
-    inventoryActivate(inventoryItemId: $inventoryItemId, locationId: $locationId, available: 0) { inventoryLevel { id } userErrors { field message } } }`;
+/** Slår på lagersporing (inventoryItem.tracked) – kreves før lager kan settes. Idempotent. */
+export async function enableTracking(inventoryItemIds: string[]) {
+  const M = `mutation Track($id: ID!) {
+    inventoryItemUpdate(id: $id, input: { tracked: true }) { inventoryItem { id tracked } userErrors { field message } } }`;
   for (const id of inventoryItemIds) {
-    const res = await gql(M, { inventoryItemId: id, locationId });
+    const res = await gql(M, { id });
+    assertNoUserErrors(res, "inventoryItemUpdate");
+  }
+}
+
+/**
+ * Sørger for at inventory items er aktivert på en location (kreves før setAvailableQuantities).
+ * 2026-07: inventoryActivate krever @idempotent-direktiv.
+ */
+export async function activateInventoryAtLocation(inventoryItemIds: string[], locationId: string) {
+  const M = `mutation Act($inventoryItemId: ID!, $locationId: ID!, $key: String!) {
+    inventoryActivate(inventoryItemId: $inventoryItemId, locationId: $locationId, available: 0) @idempotent(key: $key) { inventoryLevel { id } userErrors { field message } } }`;
+  for (const id of inventoryItemIds) {
+    const res = await gql(M, { inventoryItemId: id, locationId, key: crypto.randomUUID() });
     const errs = res.inventoryActivate?.userErrors ?? [];
     // "already active"-varianter ignoreres
     const real = errs.filter((e: any) => !/already/i.test(e.message));

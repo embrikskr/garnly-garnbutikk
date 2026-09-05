@@ -10,7 +10,7 @@
  */
 import { adminClient, audit, json, requireInternalSecret } from "../_shared/db.ts";
 import { getAdapter } from "../_shared/adapters/index.ts";
-import { activateInventoryAtLocation, setAvailableQuantities, setStockByStoreMetafields } from "../_shared/shopify.ts";
+import { activateInventoryAtLocation, enableTracking, setAvailableQuantities, setStockByStoreMetafields } from "../_shared/shopify.ts";
 import type { ProductRow, StoreRow } from "../_shared/types.ts";
 import { matchLines } from "../_shared/matching.ts";
 
@@ -78,14 +78,15 @@ async function syncOne(store: StoreRow, dryRun: boolean) {
     for (const { product, line } of matched) qtyByProduct.set(product.id, (qtyByProduct.get(product.id) ?? 0) + line.qty);
 
     // Forrige tilstand for diff (paginert, samme 1000-radersgrense)
-    const prev: Array<{ product_id: string; qty: number }> = [];
+    const prev: Array<{ product_id: string; qty: number; shopify_activated: boolean }> = [];
     for (let from = 0;; from += 1000) {
-      const { data, error } = await db.from("inventory").select("product_id, qty").eq("store_id", store.id).range(from, from + 999);
+      const { data, error } = await db.from("inventory").select("product_id, qty, shopify_activated").eq("store_id", store.id).range(from, from + 999);
       if (error) throw new Error("inventory select: " + error.message);
       prev.push(...(data ?? []));
       if (!data || data.length < 1000) break;
     }
     const prevMap = new Map(prev.map((r) => [r.product_id, r.qty]));
+    const activatedSet = new Set(prev.filter((r) => r.shopify_activated).map((r) => r.product_id));
 
     const upserts: Array<{ store_id: string; product_id: string; qty_raw: number; qty: number; synced_at: string }> = [];
     const changes: Array<{ product: ProductRow; qty: number }> = [];
@@ -121,9 +122,16 @@ async function syncOne(store: StoreRow, dryRun: boolean) {
     let shopifyWritten = 0;
     if (!dryRun && store.shopify_location_id && changes.length) {
       const withItem = changes.filter((c) => c.product.shopify_inventory_item_id);
-      // Første synk: aktiver items på location (idempotent, men koster ett kall per item, så bare når prev var tom)
-      if (prevMap.size === 0) {
-        await activateInventoryAtLocation(withItem.map((c) => c.product.shopify_inventory_item_id!), store.shopify_location_id);
+      // Slå på lagersporing + aktiver på location for rader som ikke er aktivert før.
+      // Én gang per (butikk, produkt); sporet i inventory.shopify_activated.
+      const toActivate = withItem.filter((c) => !activatedSet.has(c.product.id));
+      if (toActivate.length) {
+        const itemIds = toActivate.map((c) => c.product.shopify_inventory_item_id!);
+        await enableTracking(itemIds);
+        await activateInventoryAtLocation(itemIds, store.shopify_location_id);
+        for (let i = 0; i < toActivate.length; i += 500) {
+          await db.from("inventory").update({ shopify_activated: true }).eq("store_id", store.id).in("product_id", toActivate.slice(i, i + 500).map((c) => c.product.id));
+        }
       }
       await setAvailableQuantities(withItem.map((c) => ({
         inventoryItemId: c.product.shopify_inventory_item_id!,
