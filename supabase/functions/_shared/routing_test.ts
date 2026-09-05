@@ -86,7 +86,7 @@ Deno.test("tilbud utenfor åpningstid starter ved åpning", () => {
 
 const P = (o: Partial<ProductRow>): ProductRow => ({
   id: o.id ?? "p", ean: null, sku: null, name: o.name ?? "x", brand: null, yarn_name: null, color_code: null, color_name: null,
-  shopify_product_id: null, shopify_variant_id: null, shopify_inventory_item_id: null, active: true, ...o,
+  shopify_product_id: null, shopify_variant_id: null, shopify_inventory_item_id: null, active: true, exclude_from_sync: false, ...o,
 });
 
 Deno.test("matching: EAN først, så SKU, så navn", () => {
