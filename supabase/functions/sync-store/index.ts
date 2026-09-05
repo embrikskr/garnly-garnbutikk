@@ -122,9 +122,11 @@ async function syncOne(store: StoreRow, dryRun: boolean) {
     let shopifyWritten = 0;
     if (!dryRun && store.shopify_location_id && changes.length) {
       const withItem = changes.filter((c) => c.product.shopify_inventory_item_id);
-      // Slå på lagersporing + aktiver på location for rader som ikke er aktivert før.
-      // Én gang per (butikk, produkt); sporet i inventory.shopify_activated.
-      const toActivate = withItem.filter((c) => !activatedSet.has(c.product.id));
+      // Aktiver (lagersporing + inventoryActivate) bare varer som faktisk har lager.
+      // Å aktivere alle 0-varer butikken ikke fører ville kostet tusenvis av kall ved
+      // første synk; en vare uten inventory level på locationen vises uansett som utsolgt der.
+      // Én gang per (butikk, produkt), sporet i inventory.shopify_activated.
+      const toActivate = withItem.filter((c) => c.qty > 0 && !activatedSet.has(c.product.id));
       if (toActivate.length) {
         const itemIds = toActivate.map((c) => c.product.shopify_inventory_item_id!);
         await enableTracking(itemIds);
@@ -132,17 +134,21 @@ async function syncOne(store: StoreRow, dryRun: boolean) {
         for (let i = 0; i < toActivate.length; i += 500) {
           await db.from("inventory").update({ shopify_activated: true }).eq("store_id", store.id).in("product_id", toActivate.slice(i, i + 500).map((c) => c.product.id));
         }
+        for (const c of toActivate) activatedSet.add(c.product.id);
       }
-      await setAvailableQuantities(withItem.map((c) => ({
+      // Skriv lager for varer som er aktivert (nå eller før). 0-varer som aldri ble aktivert
+      // hoppes over – de har ingen inventory level på locationen og skal ikke ha det.
+      const writable = withItem.filter((c) => activatedSet.has(c.product.id));
+      await setAvailableQuantities(writable.map((c) => ({
         inventoryItemId: c.product.shopify_inventory_item_id!,
         locationId: store.shopify_location_id!,
         quantity: c.qty,
       })));
-      shopifyWritten = withItem.length;
+      shopifyWritten = writable.length;
 
-      // Metafelt for kassevalidering (§7): stock per location på hver endret variant.
+      // Metafelt for kassevalidering (§7): stock per location på hver skrevet variant.
       // .in() med tusenvis av id-er sprenger URL-grensen – chunkes i bolker på 200.
-      const ids = withItem.map((c) => c.product.id);
+      const ids = writable.map((c) => c.product.id);
       const allLoc: any[] = [];
       for (let i = 0; i < ids.length; i += 200) {
         const { data, error } = await db.from("inventory").select("product_id, qty, stores!inner(shopify_location_id)").in("product_id", ids.slice(i, i + 200));
