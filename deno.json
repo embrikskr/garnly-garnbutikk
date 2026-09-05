@@ -4,7 +4,8 @@
     "test": "deno test --allow-env supabase/functions/_shared/",
     "fmt": "deno fmt supabase/functions scripts",
     "set-barcodes": "deno run --allow-net --allow-env --allow-read scripts/set-barcodes.ts",
-    "import-products": "deno run --allow-net --allow-env --allow-read --allow-write scripts/import-products.ts"
+    "import-products": "deno run --allow-net --allow-env --allow-read --allow-write scripts/import-products.ts",
+    "backfill-store": "deno run --allow-net --allow-env scripts/backfill-store-inventory.ts"
   },
   "fmt": { "lineWidth": 140 },
   "compilerOptions": { "lib": ["deno.window", "dom"], "strict": true }

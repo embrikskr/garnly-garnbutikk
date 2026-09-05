@@ -55,6 +55,10 @@ Deno.serve(async (req) => {
 
 async function syncOne(store: StoreRow, dryRun: boolean) {
   const db = adminClient();
+  // Claim: sett last_sync_at med en gang så en overlappende cron-kjøring (synken går i
+  // bakgrunnen og kan ta > 5 min) hopper over butikken via due-filteret i stedet for å
+  // kjøre parallelt og klippe diffen. Ekte kjøring; dry_run rører ikke butikkstatus.
+  if (!dryRun) await db.from("stores").update({ last_sync_at: new Date().toISOString() }).eq("id", store.id);
   const { data: run } = await db.from("sync_runs").insert({ store_id: store.id }).select().single();
   const runId = run?.id;
   try {
