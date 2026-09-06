@@ -111,14 +111,24 @@ async function syncOne(store: StoreRow, dryRun: boolean) {
       if (error) throw new Error("inventory upsert: " + error.message);
     }
 
-    // Unmatched
+    // Unmatched. Tom streng i stedet for NULL (NULL er "unik" i unique-constrainten).
+    // Dedupliser på (ean, sku) FØR upsert: flere linjer kan dele samme nøkkel (samme ean
+    // på produkt + variant, gjentatt varenr), og da nekter Postgres å røre raden to ganger
+    // i én ON CONFLICT-batch (feilkode 21000). Summerer antallet for like nøkler.
     if (unmatched.length) {
-      // Tom streng i stedet for NULL: NULL er "unik" i unique-constrainten og gir duplikater
-      const rows = unmatched.filter((u) => u.ean || u.sku).map((u) => ({
-        store_id: store.id, ean: u.ean ?? "", sku: u.sku ?? "", name: u.name, qty: u.qty, last_seen: now,
-      }));
+      const byKey = new Map<string, { store_id: string; ean: string; sku: string; name: string | null; qty: number; last_seen: string }>();
+      for (const u of unmatched) {
+        if (!u.ean && !u.sku) continue;
+        const ean = u.ean ?? "", sku = u.sku ?? "";
+        const key = `${ean}${sku}`;
+        const prev = byKey.get(key);
+        if (prev) prev.qty += u.qty;
+        else byKey.set(key, { store_id: store.id, ean, sku, name: u.name, qty: u.qty, last_seen: now });
+      }
+      const rows = [...byKey.values()];
       for (let i = 0; i < rows.length; i += 500) {
-        await db.from("unmatched_items").upsert(rows.slice(i, i + 500), { onConflict: "store_id,ean,sku", ignoreDuplicates: false });
+        const { error } = await db.from("unmatched_items").upsert(rows.slice(i, i + 500), { onConflict: "store_id,ean,sku", ignoreDuplicates: false });
+        if (error) throw new Error("unmatched_items upsert: " + error.message);
       }
     }
 
