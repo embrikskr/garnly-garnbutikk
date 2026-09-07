@@ -59,10 +59,21 @@ De 133 eksisterende produktene arkiveres når Embrik bekrefter (destruktiv opera
 - Én location («Shop location»), ingen webhooks.
 
 ## Blokkerende avklaringer
-1. Duell: department-token for butikken, og hvilket felt som gir EAN i `all/product/stock`
-2. Mystore: shopnavn + personlig tilgangstoken
-3. EAN på Shopify-varianter (eller butikkenes produktlister med strekkoder, så vi kan legge dem inn)
-4. Frakt: Shipmondo vs Cargonizer (Logistra)
+1. Mystore: ✅ løst for Strikkefryd (shop=strikkefryd + token).
+2. Frakt: Shipmondo vs Cargonizer (Logistra) – fortsatt åpent.
+
+## Garnkilden (Duell) – BLOKKERT på Duell-siden (07.09.2026)
+- Har client_number 722490 + client_token, men IKKE department-token (Embrik har ikke tilgang i Duell Admin).
+- **Viktigere blokker:** api.kasseservice.no ligger bak AWS WAF («Human Verification»/CAPTCHA) som
+  utfordrer datasenter-/serverkall. Verifisert at kall blokkeres BÅDE fra dette miljøet OG fra
+  Supabase Edge Functions (HTTP 405 + WAF-side) OG via WebFetch. Duells egen dokumentasjon ligger
+  bak samme utfordring. Duells WooCommerce-plugin virker fordi den kjører på butikkens eget webhotell.
+- Konsekvens: Duell-synken vil ikke fungere fra Supabase før Kasseservice/Duell åpner API-tilgang
+  for integrasjonen (IP-allowlist for Supabases egress, eller en integrasjonsmetode uten interaktiv WAF).
+- Neste steg (Embrik → support@duell.no): be om (a) API-tilgang/allowlisting for et sky-/serverbasert
+  integrasjonsoppsett mot all/product/stock, og (b) department-token for Garnkilden.
+- Duell-adapteren er klar; EAN-feltet i all/product/stock er fremdeles uverifisert (pickEan prøver
+  flere kandidater) og bekreftes ved første ekte synk når tilgang er på plass.
 
 ## Ikke bygget ennå
 - Partnerside med innlogging (fase 2)
