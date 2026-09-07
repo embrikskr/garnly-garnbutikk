@@ -5,7 +5,8 @@
     "fmt": "deno fmt supabase/functions scripts",
     "set-barcodes": "deno run --allow-net --allow-env --allow-read scripts/set-barcodes.ts",
     "import-products": "deno run --allow-net --allow-env --allow-read --allow-write scripts/import-products.ts",
-    "backfill-store": "deno run --allow-net --allow-env scripts/backfill-store-inventory.ts"
+    "backfill-store": "deno run --allow-net --allow-env scripts/backfill-store-inventory.ts",
+    "enable-tracking": "deno run --allow-net --allow-env scripts/enable-tracking.ts"
   },
   "fmt": { "lineWidth": 140 },
   "compilerOptions": { "lib": ["deno.window", "dom"], "strict": true }
