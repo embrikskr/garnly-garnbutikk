@@ -21,12 +21,39 @@ import { AdapterError, normalizeEan, type PosAdapter, sleep } from "./types.ts";
 const BASE = "https://api.kasseservice.no/v1/";
 const tokenCache = new Map<string, { token: string; at: number }>();
 
+/**
+ * Duells API krever at kall kommer fra en hvitelistet, fast IP. Supabase Edge Functions har
+ * ingen fast utgående IP, så vi ruter Duell-kallene gjennom en fast-IP-proxy når DUELL_PROXY_URL
+ * er satt (f.eks. http://bruker:passord@host:port fra QuotaGuard/Fixie). Uten den kalles Duell
+ * direkte (som før). Klienten opprettes én gang og gjenbrukes.
+ */
+let _proxyClient: unknown | null | undefined;
+function proxyClient(): unknown | null {
+  if (_proxyClient !== undefined) return _proxyClient;
+  const raw = Deno.env.get("DUELL_PROXY_URL");
+  // deno-lint-ignore no-explicit-any
+  const D = Deno as any;
+  if (!raw || typeof D.createHttpClient !== "function") return (_proxyClient = null);
+  const u = new URL(raw);
+  const basicAuth = u.username ? { username: decodeURIComponent(u.username), password: decodeURIComponent(u.password) } : undefined;
+  const proxyUrl = `${u.protocol}//${u.host}`;
+  _proxyClient = D.createHttpClient({ proxy: { url: proxyUrl, basicAuth } });
+  return _proxyClient;
+}
+
+/** fetch som ruter gjennom Duell-proxyen hvis konfigurert. */
+function duellFetch(input: string | URL, init: RequestInit = {}): Promise<Response> {
+  const client = proxyClient();
+  // deno-lint-ignore no-explicit-any
+  return fetch(input, (client ? { ...init, client } : init) as any);
+}
+
 async function login(secrets: Record<string, string>): Promise<string> {
   const key = secrets.client_number;
   const cached = tokenCache.get(key);
   if (cached && Date.now() - cached.at < 20 * 60 * 60 * 1000) return cached.token;
 
-  const res = await fetch(BASE + "getaccesstokens", {
+  const res = await duellFetch(BASE + "getaccesstokens", {
     method: "POST",
     headers: { "Content-Type": "application/json", "User-Agent": "Garnly Sync" },
     body: JSON.stringify({ client_number: secrets.client_number, client_token: secrets.client_token }),
@@ -43,7 +70,7 @@ async function get(path: string, params: Record<string, string>, secrets: Record
   const token = await login(secrets);
   const url = new URL(BASE + path);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-  const res = await fetch(url, {
+  const res = await duellFetch(url, {
     headers: { Authorization: `Bearer ${token}`, Accept: "application/json", "User-Agent": "Garnly Sync" },
   });
   if (res.status === 401 && retry) {
