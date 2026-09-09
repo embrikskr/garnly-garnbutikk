@@ -125,3 +125,17 @@ function localToUtc(y: number, m: number, d: number, h: number, min: number, tz:
   }
   return guess;
 }
+
+/**
+ * Er en ny oppdeling verdt å gjennomføre?
+ *
+ * Brukes når siste butikk har avslått en gruppe og ingen enkeltbutikk kan ta hele.
+ * Vi planlegger da på nytt mot dagens lager, uten butikkene som allerede har sagt nei
+ * til denne ordren. Er noen linjer dekket av dem som står igjen, er det framgang: enten
+ * en oppdeling på flere butikker, eller en butikk som ikke var kandidat sist.
+ *
+ * Dekker ingen noe, er det ingenting å hente og ordren må til et menneske.
+ */
+export function replanIsUseful(groups: Group[], _uncovered: LineItem[], _totalLines: number): boolean {
+  return groups.reduce((n, g) => n + g.line_items.length, 0) > 0;
+}

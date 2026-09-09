@@ -133,3 +133,19 @@ Deno.test("normalizeEan: GTIN-14 med ledende null = EAN-13, korte interne koder 
   assertEquals(normalizeEan("18379"), null);
   assertEquals(normalizeEan(""), null);
 });
+
+Deno.test("replanIsUseful: framgang så lenge noen linjer blir dekket", async () => {
+  const { replanIsUseful } = await import("./routing.ts");
+  const L = (id: string) => ({ line_item_id: id, variant_id: "v", product_id: "p" + id, qty: 1, title: id });
+  const a = L("a"), b = L("b");
+
+  // Splitt på to butikker.
+  assertEquals(replanIsUseful([{ line_items: [a], candidates: ["s2"] }, { line_items: [b], candidates: ["s3"] }], [], 2), true);
+  // Én butikk tar halve, resten eskalerer: halve ordren blir levert.
+  assertEquals(replanIsUseful([{ line_items: [a], candidates: ["s2"] }], [b], 2), true);
+  // En butikk som ikke var kandidat sist tar alt. Framgang, ikke en runddans:
+  // butikkene som har sagt nei til ordren er allerede holdt utenfor.
+  assertEquals(replanIsUseful([{ line_items: [a, b], candidates: ["s4"] }], [], 2), true);
+  // Ingen av de gjenværende dekker noe.
+  assertEquals(replanIsUseful([], [a, b], 2), false);
+});

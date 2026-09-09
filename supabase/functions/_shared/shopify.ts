@@ -282,6 +282,28 @@ export async function moveFulfillmentOrder(foId: string, locationId: string, lin
 }
 
 /** Splitter ut gitte linjer i egen fulfillment order. Returnerer { newId, remainingId }. */
+/**
+ * Splitter en fulfillment order som ligger på hold, og lar begge delene ligge på hold.
+ *
+ * Shopify nekter å splitte en fulfillment order som er på hold: «is currently not in a
+ * splittable state». Vi holder alle ordrer under ruting, så holdet må slippes først og
+ * settes tilbake på begge delene etterpå. Vinduet der ordren er uten hold er brøkdeler
+ * av et sekund, og den er uansett ikke tildelt noen butikk ennå.
+ */
+export async function splitHeldFulfillmentOrder(foId: string, lineItems: Array<{ id: string; quantity: number }>) {
+  await releaseHold(foId);
+  try {
+    const res = await splitFulfillmentOrder(foId, lineItems);
+    await holdFulfillmentOrder(res.newId, "Garnly ordreruting pågår");
+    if (res.remainingId) await holdFulfillmentOrder(res.remainingId, "Garnly ordreruting pågår");
+    return res;
+  } catch (e) {
+    // Fikk vi ikke splittet, må holdet tilbake, ellers står ordren åpen for pakking.
+    await holdFulfillmentOrder(foId, "Garnly ordreruting pågår").catch(() => {});
+    throw e;
+  }
+}
+
 export async function splitFulfillmentOrder(foId: string, lineItems: Array<{ id: string; quantity: number }>) {
   const M = `mutation Split($fulfillmentOrderSplits: [FulfillmentOrderSplitInput!]!) {
     fulfillmentOrderSplit(fulfillmentOrderSplits: $fulfillmentOrderSplits) {

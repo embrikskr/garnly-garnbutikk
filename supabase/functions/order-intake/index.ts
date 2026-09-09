@@ -10,7 +10,7 @@
  * Kan også kalles internt med { "order_id": "gid://shopify/Order/…" } + x-cron-secret (re-kjøring).
  */
 import { adminClient, audit, json } from "../_shared/db.ts";
-import { getOrder, holdFulfillmentOrder, splitFulfillmentOrder, verifyShopifyHmac } from "../_shared/shopify.ts";
+import { getOrder, holdFulfillmentOrder, splitHeldFulfillmentOrder, verifyShopifyHmac } from "../_shared/shopify.ts";
 import { planGroups } from "../_shared/routing.ts";
 import { escalateGroup, makeNextOffer } from "../_shared/offers.ts";
 import type { LineItem } from "../_shared/types.ts";
@@ -93,10 +93,9 @@ async function processOrder(orderGid: string) {
     const isLast = i === groups.length - 1 && uncovered.length === 0;
     if (i === 0 && groups.length === 1 && uncovered.length === 0) { groupFoIds.push(fo.id); break; }
     if (isLast) { groupFoIds.push(remainingFoId); break; }
-    const { newId, remainingId } = await splitFulfillmentOrder(remainingFoId, groups[i].line_items.map((l) => ({ id: l.line_item_id, quantity: l.qty })));
+    const { newId, remainingId } = await splitHeldFulfillmentOrder(remainingFoId, groups[i].line_items.map((l) => ({ id: l.line_item_id, quantity: l.qty })));
     groupFoIds.push(newId);
     remainingFoId = remainingId ?? remainingFoId;
-    await holdFulfillmentOrder(newId, "Garnly ordreruting pågår");
   }
 
   for (let i = 0; i < groups.length; i++) {
