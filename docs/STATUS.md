@@ -10,7 +10,7 @@ allerede sto i drift, og migrasjonene 003–008 er kjørt.
 
 | Butikk | Kassesystem | Rader lest | Matchet | Med lager | Status |
 |---|---|---|---|---|---|
-| Strikkefryd | Mystore | 5262 | 1845 | 1488 varianter i Shopify | live siden 05.09 |
+| Strikkefryd | Mystore | 5262 | 1845 | 1742 varianter i Shopify | live siden 05.09 |
 | Garnkilden | Duell | 6010 | 1341 | 1167 varer, 15 437 enheter | **live 09.09** |
 
 ### Garnkilden virker nå
@@ -71,12 +71,28 @@ er tom. Et tilbud ville altså ikke nådd noen. `notify_offers` er derfor satt t
 **true** på begge butikker inntil panelet er ute. Ingen ordrer har kommet ennå,
 så ingenting er gått tapt. Sett den tilbake til false når panelet er live.
 
-### Kjent svakhet
+### Feil funnet ved verifisering: 254 varer var usynlige i butikken
 
-21 synkkjøringer står som `running` og ble aldri avsluttet, alle Strikkefryd,
-fra 06.09 og utover. Bakgrunnsjobben (`EdgeRuntime.waitUntil`) blir av og til
-gjenvunnet før den er ferdig. Neste cron-kjøring tar det igjen, så lageret blir
-riktig, men `sync_runs` viser feil bilde. Bør ryddes med en tidsavbrudd-markering.
+Strikkefryd hadde 1742 varer med lager i basen, men bare 1488 aktivert i Shopify.
+Arwetta Classic 955 sto med 12 på lager hos oss, mens varen i Shopify bare fantes
+på «Shop location» med 0. Kunder så den som utsolgt. Hele Arwetta-serien var rammet.
+
+Årsaken er rekkefølgen i `sync-store`: antallet skrives til `inventory` før
+Shopify-skrivingen. Dør kjøringen mellom de to, har basen riktig tall, neste
+kjøring ser ingen endring, og varen får aldri noe inventory level på locationen.
+Det skjedde 21 ganger fra 06.09 og utover, og reparerte seg aldri selv.
+
+Rettet to steder:
+- `sync-store` driver nå Shopify-arbeidet av endrede varer **pluss** varer med
+  lager som mangler aktivering. Neste synk henter dermed inn det som er strandet.
+- De 254 ble hentet inn med `deno task backfill-store strikkefryd` (258 aktivert).
+
+Begge butikker står nå på null varer som mangler aktivering.
+
+De hengende `sync_runs`-radene er fortsatt et lite problem i seg selv:
+bakgrunnsjobben (`EdgeRuntime.waitUntil`) blir av og til gjenvunnet før den er
+ferdig, så statusen blir stående på `running`. Lageret blir riktig nå uansett,
+men radene bør merkes som avbrutt etter en tidsfrist.
 
 ---
 
