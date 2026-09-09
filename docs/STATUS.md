@@ -65,26 +65,20 @@ de 1513 nye variantene fra 05.09.
 
 ### Butikkpanelet er live
 
-**https://zesaeleooiptrpjzqhxe.supabase.co/functions/v1/panel**
+**https://garnly-butikkpanel.vercel.app**
 
 Embrik vil ikke ha e-post til butikkene, bare panelet. `notify_offers` står derfor
 på false på begge butikker, og verken Resend- eller Twilio-nøkkel er satt. Panelet
 er eneste kanal.
 
-Cloudflare Pages ble droppet: Supabase Storage serverer HTML som `text/plain` av
-sikkerhetsgrunner, og Pages krever en innlogging vi ikke har. Panelet serveres i
-stedet av en `panel`-funksjon som har filene bakt inn (`deno task build-panel`).
+Vercel med rot `panel/`, samme sted som dashboardet. Cloudflare Pages ble droppet
+(krever innlogging vi ikke har), og Supabase Storage duger ikke fordi den serverer
+HTML som `text/plain` av sikkerhetsgrunner. En midlertidig `panel`-funksjon holdt
+det gående til Vercel var oppe, og er slettet nå: to kopier kan komme i utakt.
 
-**Dette er en mellomløsning.** Supabase krever betalt tillegg for eget domene på
-funksjoner, så `butikk.garnly.no` kan ikke peke hit. Panelet skal over på Vercel,
-der domenet er gratis og dashboardet allerede ligger. `panel/vercel.json` er klar
-(rot `panel/`, `outputDirectory: "."`). Når adressen er på plass: sett
-`PANEL_ORIGIN` til den, og slett `panel`-funksjonen. To kopier som kan komme i
-utakt er verre enn én.
-
-Verifisert: begge butikker logger inn, RLS gir hver av dem kun egne rader
-(`stores` returnerer én butikk per bruker), alle tre panel-views svarer 200, og
-CORS-preflight mot `offer-respond` slipper gjennom nøyaktig dette origin.
+Verifisert mot Vercel-adressen: begge butikker logger inn med anon-nøkkelen som
+faktisk serveres derfra, RLS gir hver av dem kun egne rader, panel-viewene svarer
+200, og `offer-respond` returnerer nøyaktig dette origin i CORS-headeren.
 `v_panel_queue` eksponerer ikke `raw_order` – kun postnummer og sted av kundedata.
 
 Innloggingene ligger utenfor repoet. Passordene bør byttes av butikkene selv.
@@ -182,9 +176,10 @@ men radene bør merkes som avbrutt etter en tidsfrist.
 3. Frakt for Garnkilden: samme åpne valg som for Strikkefryd.
 
 ## Ikke deployet ennå (krever tilganger)
-- **Panelet på Vercel + butikk.garnly.no**: krever Vercel-innlogging. Importer repoet
-  med Root Directory `panel`, framework «Other», ingen build-kommando. Deretter domenet
-  under Settings → Domains. Panelet kjører i mellomtiden på Supabase-domenet (se over).
+- **butikk.garnly.no**: valgfritt. Legg domenet til i Vercel-prosjektet, sett CNAME,
+  og oppdater `PANEL_ORIGIN`. Panelet virker uten det.
+- **Produksjonsgren i Vercel**: prosjektet ble importert fra `claude/filene-osm-lkrd5t`.
+  Sett den til `main` under Settings → Git etter merge, ellers slutter panelet å oppdatere seg.
 - **Validation Function**: `shopify app deploy` fra `shopify-app/` (krever Shopify CLI-innlogging),
   deretter aktiveres valideringen i Shopify admin → Settings → Checkout.
 - **Ikon** `panel/icon.png` (512×512) for hjemskjerm på nettbrett.

@@ -15,27 +15,21 @@ sanntid, og de svarer med Godta eller Avslå. Ingen e-post per ordre.
 
 ## Hvor det kjører
 
-Panelet kjøres midlertidig av Edge Function `panel`, som har filene bakt inn:
+**https://garnly-butikkpanel.vercel.app**
 
-**https://zesaeleooiptrpjzqhxe.supabase.co/functions/v1/panel**
+Vercel-prosjekt med Root Directory `panel/`, framework «Other», ingen build-kommando.
+`vercel.json` setter `outputDirectory` til `.`, som er det som hindrer feilen
+«No Output Directory named public». Git-push deployer.
 
-Det er en mellomløsning. Supabase krever et betalt tillegg for eget domene på
-funksjoner, så `butikk.garnly.no` kan ikke peke hit. Panelet skal over på Vercel,
-der domenet er gratis og resten av frontendene allerede ligger.
+`PANEL_ORIGIN` på Supabase peker hit, og `offer-respond` slipper bare gjennom denne
+adressen. Bytter adressen, må secreten oppdateres og funksjonen deployes på nytt.
 
-### Flytt til Vercel
+Panelet trenger ingen miljøvariabler i Vercel. Supabase-URL og anon-nøkkel står i
+`config.js` og er ment å være offentlige; RLS gjør jobben. Legg aldri service
+role-nøkkelen eller Shopify-secretene inn i dette prosjektet.
 
-1. Vercel → Add New → Project → importer `embrikskr/garnly-garnbutikk`.
-2. **Root Directory: `panel`**. Framework Preset: Other. Ingen build-kommando.
-   `panel/vercel.json` setter allerede `outputDirectory` til `.`, som er det som
-   hindrer feilen «No Output Directory named public».
-3. Deploy. Legg så til `butikk.garnly.no` under Settings → Domains, og sett CNAME-en
-   Vercel oppgir.
-4. Si fra om adressen, så settes `PANEL_ORIGIN` og `panel`-funksjonen fjernes.
-   To kopier av panelet som kan komme i utakt er verre enn én.
-
-Endrer du noe her, kjør `deno task build-panel` og deploy `panel`-funksjonen på
-nytt så lenge den er i bruk. Etter flyttingen til Vercel deployer Git-pushen selv.
+Skal `butikk.garnly.no` brukes: legg den til under Settings → Domains, sett CNAME-en
+Vercel oppgir, og oppdater `PANEL_ORIGIN`.
 
 ### Ikon
 
