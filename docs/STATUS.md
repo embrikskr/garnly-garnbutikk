@@ -1,6 +1,65 @@
 # Status – garnly-garnbutikk
 
-Oppdatert: 2026-09-04
+Oppdatert: 2026-09-09
+
+## Nå (09.09.2026, kveld)
+
+**Backenden kjører.** Cron hvert 5. minutt, 242 vellykkede synkkjøringer.
+Butikkpanelet, alias-matchingen og Duell-synken er slått sammen med det som
+allerede sto i drift, og migrasjonene 003–008 er kjørt.
+
+| Butikk | Kassesystem | Rader lest | Matchet | Med lager | Status |
+|---|---|---|---|---|---|
+| Strikkefryd | Mystore | 5262 | 1565 | 1488 varianter i Shopify | live siden 05.09 |
+| Garnkilden | Duell | 6010 | 1341 | 1167 varer, 15 437 enheter | tørrkjørt, **ikke skrevet til Shopify** |
+
+### Garnkilden virker nå
+
+Tre ting sto i veien, alle løst:
+
+1. **WAF.** `api.kasseservice.no` blokkerer datasenter-IP-er. Kallene rutes nå
+   gjennom en tinyproxy på en Oracle Always Free-maskin (79.76.60.202) som Duell
+   har hvitelistet. `DUELL_PROXY_URL` i function-secrets. Gratis, fast IP,
+   dekker alle Duell-butikker – ikke én proxy per butikk.
+2. **Sideblading.** Duell kapper sider til 100 rader uansett hva `length` sier.
+   Adapteren flyttet `start` med ønsket sidestørrelse (500) og hoppet dermed over
+   fire av fem rader: Garnkilden ga 700 av 3345 rader. Retter man dette, leses
+   alle 6010.
+3. **Manglende strekkode.** `all/product/stock` gir verken strekkode eller navn,
+   bare `product_id` og antall – derfor matchet 0 av 700. Strekkoden ligger i
+   `product/list` (6010 produkter, 5098 med strekkode). Den er klient-omfattende
+   og tar ~2 minutter å bla gjennom, så den mellomlagres i tabellen `pos_catalog`
+   og friskes opp daglig av den nye `pos-catalog`-funksjonen. Lager og katalog
+   kobles på `product_id`; `product_number` er ikke unikt og duger ikke som nøkkel.
+
+De 2357 garnvarene som fortsatt ikke matcher, er garn Garnkilden fører men som
+Garnly ikke har i sortimentet. Det er en sortimentsbeslutning, ikke en feil.
+Knapper, pinner og oppskrifter (1900 varer) skal heller ikke matche.
+
+### Dette må avgjøres før Garnkilden kan skrives til Shopify
+
+`stores.active` for Garnkilden står på **false**. Skriver vi lageret til Shopify
+uten å aktivere butikken, blir varene kjøpbare uten at rutingen kan tilby dem til
+noen: en kunde kan kjøpe noe bare Garnkilden har, og ordren blir stående. De to
+tingene må skje samtidig. Sier Embrik ja, er det én SQL-oppdatering og én
+synkkjøring uten `dry_run`.
+
+### Varsling har ingen mottaker ennå
+
+Migrasjon 008 setter `notify_offers` til false, fordi butikkene skal svare i
+panelet. Panelet er ikke deployet (krever Cloudflare Pages), og `RESEND_API_KEY`
+er tom. Et tilbud ville altså ikke nådd noen. `notify_offers` er derfor satt til
+**true** på begge butikker inntil panelet er ute. Ingen ordrer har kommet ennå,
+så ingenting er gått tapt. Sett den tilbake til false når panelet er live.
+
+### Kjent svakhet
+
+21 synkkjøringer står som `running` og ble aldri avsluttet, alle Strikkefryd,
+fra 06.09 og utover. Bakgrunnsjobben (`EdgeRuntime.waitUntil`) blir av og til
+gjenvunnet før den er ferdig. Neste cron-kjøring tar det igjen, så lageret blir
+riktig, men `sync_runs` viser feil bilde. Bør ryddes med en tidsavbrudd-markering.
+
+---
 
 ## Deployet 04.09.2026
 - Supabase `zesaeleooiptrpjzqhxe`: skjema (001) + cron (002) kjørt, 3 cron-jobber aktive.
@@ -24,62 +83,62 @@ Oppdatert: 2026-09-04
   (Peer Gynt 1042 = 59 stk osv.). 5262 rader lest, 1565 matchet, resten (oppskrifter/gavekort/ikke-ført) i unmatched_items.
 - Videre lagerendringer håndteres av cron hvert 15. min.
 
+## Gjort 02.09.2026 (Cowork)
+- Strikkefryd (Mystore) API testet live: 2131 produkter, 4918 varianter, ~88 % med EAN, 3530 varianter med lager.
+- Strikkefryds katalog matchet mot Garnly2 på garnlinje + fargekode: **1381 EAN-er skrevet inn som `barcode` på Garnly2-varianter** (av 3667 garnvarianter). Rapport: `docs/barcode_match_rapport.csv`.
+- Resten uten strekkode er i hovedsak linjer Strikkefryd ikke fører (Hillesvåg, Isager, deler av Dale/Rauma) → EAN hentes fra Duell-butikken eller produsentlister senere.
+- Strikkefryd-token skal inn i `store_secrets` ved deploy; be butikken lage ny token når integrasjonen er i drift (denne har vært delt i chat).
+- Fortsatt i Shopify: lager ikke sporet på variantene (settes av inventoryActivate ved første synk), ingen SKU, én location, ingen webhooks.
+
+## Gjort 03.09.2026 (Cowork)
+- Duell-butikken er **Garnkilden AS** (Stavanger). API verifisert fra Embriks maskin: login, `department/list` (api_token for avdeling 1), `product/list` (6 001 produkter, 3 107 garn, 85 % med EAN) og `all/product/stock`.
+- Duell-adapteren skrevet om etter ekte API: strekkode ligger i `product/list`, lager i `all/product/stock`, maks 100 rader/side, paginer på mottatte rader. `listDepartments()` for onboarding.
+- Garnkilden matchet mot Garnly2: 824 varianter identiske med Strikkefryd (bekrefter forrige runde), **340 nye EAN-er skrevet** (Finull, Vams, Pandora, Fivel, Alpaca Silk, Mitu m.fl.), 8 konflikter beholdt Strikkefryd-verdien (se `docs/barcode_match_rapport_garnkilden.csv`).
+- Totalt nå: ~1 720 av 3 667 garnvarianter har strekkode. De ~1 950 uten er Filcolana (Arwetta, Peruvian, Saga, Vilja, Tilia, Anina, Pernilla, Alva-rest), Hillesvåg (Ask, Troll, Luna, Huldra, Sol, Vilje, Vidde) og Ryegarn: ingen av de to butikkene fører dem.
+- **WAF-advarsel:** api.kasseservice.no svarer med AWS WAF-captcha til skyservere (Cowork-containeren ble blokkert). Fra Embriks Mac gikk alt. Må testes fra Supabase Edge Functions ved deploy; fallback = be support@duell.no hvitliste, eller proxy.
+- Duell-tokens er IP-bundet (`ip`-claim i JWT); hver kjøremiljø må logge inn selv (adapteren gjør det).
+
+## Gjort 06.09.2026 (Cowork)
+- Embrik/Halvor la inn **57 nye produkter / 1 348 varianter** i Shopify 05.09 (Isager, Ístex, Cardiff, Lana Grossa, Permin, Rauma, Rowan, Solberg, Viking), alle DRAFT, med EAN som både `sku` og `barcode`. Ingen EAN-kollisjoner med de 133 eldre produktene.
+- Dekning mot butikkene (`docs/sortiment_dekning_2026-09-06.csv`): **1 275 varianter matcher på EAN** (Strikkefryd 435, Garnkilden 917, begge 77). 69 av de 73 uten strekkode er koblet via `product_aliases` (Cardiff Classic/Prime hos Garnkilden har bare interne koder som «18379», Strikkefryd har ingen EAN på dem). 4 finnes ikke hos noen: Classic 739 Japan Blue, Spinni «3» (ufullstendig tittel), Plötulopi 0417 Red, Tumi B137 Korallrød.
+- Viktig funn: Duell leverer noen EAN-er som GTIN-14 med ledende null (`05744003423439`). `normalizeEan` håndterer det; egne analyser må gjøre det samme.
+- Lokasjoner i Shopify: Strikkefryd (Mjøndalen) `gid://shopify/Location/125074604318`, Garnkilden (Stavanger) `gid://shopify/Location/125074637086`. Fortsatt ingen lagersporing på noen varianter (5 203); `sync-products` slår det på ved første kjøring.
+- Sortimentsregneark (Garnly_sortiment_Strikkefryd_Garnkilden.xlsx) ligger på Embriks Mac i ~/Garnly; garnlinje-versjonen som Google Sheet i Drive «Garnly → AI → Garnly».
+
+## Gjort 09.09.2026 (Cowork)
+- **Butikkpanel bygget** (`panel/`). E-post per tilbud skalerer ikke: en butikk med 50 ordrer om dagen får 50 e-poster, og fristene begynner å gå ut. Erstattet med en side butikken har oppe på nettbrett ved pakkebordet.
+  - Sanntid via Supabase Realtime på `offers`, polling hvert 30. sekund som reserve, lyd og telling i fanetittel ved ny ordre, wake lock så skjermen ikke sovner.
+  - Innlogging med Supabase Auth (e-post + passord). `store_users` + RLS gir butikken kun sine egne rader. Views `v_panel_queue`, `v_panel_assigned`, `v_panel_stats` skjuler `raw_order` og resten av kundedataene.
+  - Godta/avslå går til `offer-respond` med bruker-JWT. Funksjonen fikk tre inngangsveier: panel (POST + JWT), engangslenke (GET, reserve) og internt kall (auto_accept). All logikk er delt.
+  - «Godta alle» for kø, nedtelling per ordre som skifter farge når det er under en time og under et halvt igjen.
+- `stores.notify_offers` (default false) skrur av e-post og SMS per tilbud. `notifyOps` til Garnly står igjen, det er intern varsling og ikke butikkspam.
+- Shopify: to butikklokasjoner manglet i fraktprofilen, derfor viste hele butikken utsolgt selv med lager inne. Lagt inn, testet handlekurv og fraktrater. Garnpakkene fikk lagersporing av, siden de settes sammen av garn butikken allerede har.
+
 ## Kjente forbedringspunkter (ikke-blokkerende)
 - Første synk av en ny butikk gjøres med `deno task backfill-store <slug>` (tung aktivering
   tåler ikke Edge Function-tidsbudsjettet). sync-store bør senere gjøres chunk-gjenopptakbar
   så onboarding skjer uten manuelt steg. Backfill er gjenopptakbar og idempotent.
-- Migrasjoner kjørt mot prosjektet via Management API (001–004). Vault holder functions_url/cron_secret.
-
-## Bygget (ikke deployet ennå)
-- Skjema (001), cron (002)
-- Adaptere: Duell, Mystore, CSV
-- Edge Functions: sync-store, sync-products, order-intake, offer-respond, timeout-sweeper, order-cancelled, pos-webhook
-- Shipmondo-adapter (SHIPPING_PROVIDER=none til fraktvalget er tatt)
-- Enhetstester for ruting, frister og matching (10 stk, grønne)
-- **Admin-dashboard** (`dashboard/`, Next.js): oversikt, ordrer m/tilbudshistorikk, umatchede varer
-  med koble/ignorer (koble lærer produktet EAN/SKU), lager per butikk, synk-status med «Synk nå».
-  Beskyttes med HTTP Basic (DASHBOARD_PASSWORD). Deployes til Vercel med root `dashboard/`.
-- **Shopify Validation Function** (`shopify-app/`, §7): blokkerer kjøp der ingen enkelt butikk har
-  hele antallet av en varelinje, basert på metafeltet `garnly.stock_by_store`. 7 enhetstester grønne.
-  Input-query validert mot Functions-skjemaet. Deploy krever Shopify CLI (se `shopify-app/README.md`).
-- **`scripts/set-barcodes.ts`**: skriver EAN (barcode) og slår på lagersporing på Shopify-varianter
-  fra en CSV med `ean;navn` (butikkenes produktlister). Tørrkjøring som standard, `--apply` skriver.
-  Mutasjonen validert mot Admin API 2025-07. Løser blokkerende punkt 3 så snart vi får produktlister.
-
-## Sortimentbeslutning 28.08.2026
-Embrik: produktene som ligger i Shopify i dag er IKKE de som skal selges. Sortimentet skal hentes
-fra Duell og Mystore, kureres, og opprettes på nytt i Shopify (med EAN og lagersporing fra start).
-Verktøy: `scripts/import-products.ts` (hent → slå sammen på EAN → kurerings-CSV → opprett som DRAFT).
-De 133 eksisterende produktene arkiveres når Embrik bekrefter (destruktiv operasjon, krever eksplisitt ja).
-`set-barcodes.ts` blir dermed mest relevant som reserve hvis noen eksisterende produkter likevel beholdes.
-
-## Funn fra Shopify 27.08.2026
-- Garnly2 har 133 produkter, 250+ varianter: **0 strekkoder, 0 SKU, lager ikke sporet**. Hver farge er eget produkt.
-- Konsekvens: EAN-matching fungerer ikke før strekkoder er lagt inn. Navnematching (brand + garn + farge) er reserve.
-- Én location («Shop location»), ingen webhooks.
+- Migrasjoner kjøres mot prosjektet via Management API (001–008). Vault holder functions_url/cron_secret.
+- Migrasjonsnumrene 003 og 004 fantes i to versjoner. De som er kjørt i produksjon beholdt
+  numrene (`003_exclude_from_sync`, `004_inventory_activated`); panel og alias ble flyttet til
+  007 og 008.
 
 ## Blokkerende avklaringer
-1. Mystore: ✅ løst for Strikkefryd (shop=strikkefryd + token).
-2. Frakt: Shipmondo vs Cargonizer (Logistra) – fortsatt åpent.
+1. Frakt: Shipmondo vs Cargonizer (Logistra) – fortsatt åpent.
+2. EAN for Filcolana/Hillesvåg/Ryegarn: tredje butikk eller produsentlister.
+3. Skal Garnkilden aktiveres og lageret skrives til Shopify? Se over.
 
-## Garnkilden (Duell) – BLOKKERT på Duell-siden (07.09.2026)
-- Har client_number 722490 + client_token, men IKKE department-token (Embrik har ikke tilgang i Duell Admin).
-- **Viktigere blokker:** api.kasseservice.no ligger bak AWS WAF («Human Verification»/CAPTCHA) som
-  utfordrer datasenter-/serverkall. Verifisert at kall blokkeres BÅDE fra dette miljøet OG fra
-  Supabase Edge Functions (HTTP 405 + WAF-side) OG via WebFetch. Duells egen dokumentasjon ligger
-  bak samme utfordring. Duells WooCommerce-plugin virker fordi den kjører på butikkens eget webhotell.
-- Konsekvens: Duell-synken vil ikke fungere fra Supabase før Kasseservice/Duell åpner API-tilgang
-  for integrasjonen (IP-allowlist for Supabases egress, eller en integrasjonsmetode uten interaktiv WAF).
-- Neste steg (Embrik → support@duell.no): be om (a) API-tilgang/allowlisting for et sky-/serverbasert
-  integrasjonsoppsett mot all/product/stock, og (b) department-token for Garnkilden.
-- Duell-adapteren er klar; EAN-feltet i all/product/stock er fremdeles uverifisert (pickEan prøver
-  flere kandidater) og bekreftes ved første ekte synk når tilgang er på plass.
+## Ikke deployet ennå (krever tilganger)
+- **Butikkpanelet** (`panel/`): `npx wrangler pages deploy panel --project-name garnly-butikkpanel`
+  krever Cloudflare-innlogging. anon-nøkkelen er lagt inn i `panel/config.js`. Etterpå:
+  `supabase secrets set PANEL_ORIGIN=https://butikk.garnly.no`, CNAME, og en bruker per butikk
+  i Supabase Auth + rad i `store_users`.
+- **Validation Function**: `shopify app deploy` fra `shopify-app/` (krever Shopify CLI-innlogging),
+  deretter aktiveres valideringen i Shopify admin → Settings → Checkout.
+- **Ikon** `panel/icon.png` (512×512) for hjemskjerm på nettbrett.
 
 ## Ikke bygget ennå
 - Partnerside med innlogging (fase 2)
 
-## Ikke deployet ennå (krever tilganger)
-- Supabase: `supabase db push` + `functions deploy` (krever SUPABASE_ACCESS_TOKEN; CI gjør det på push til main)
-- Dashboard: Vercel-prosjekt med root `dashboard/` og env fra `dashboard/.env.example`
-- Validation Function: `shopify app deploy` fra `shopify-app/` (krever Shopify CLI-innlogging),
-  deretter aktiveres valideringen i Shopify admin → Settings → Checkout
+---
+

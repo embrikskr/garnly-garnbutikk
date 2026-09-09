@@ -9,7 +9,7 @@
  */
 window.GARNLY_CONFIG = {
   SUPABASE_URL: "https://zesaeleooiptrpjzqhxe.supabase.co",
-  SUPABASE_ANON_KEY: "SETT_INN_ANON_KEY",
+  SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inplc2FlbGVvb2lwdHJwanpxaHhlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc4MjIzOTcsImV4cCI6MjEwMzM5ODM5N30.WrblLlSQvxk3wtvgghBz3NHLo0vO8gr_s3f_HRPnEhg",
   // Hvor ofte panelet henter på nytt selv om sanntid skulle falle ut (millisekunder)
   POLL_MS: 30000,
 };
