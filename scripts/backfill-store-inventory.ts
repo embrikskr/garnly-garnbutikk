@@ -63,11 +63,31 @@ console.log(`Aktivering ferdig (${done}).`);
 console.log(`Skriver lager for ${withItem.length} varer …`);
 await setAvailableQuantities(withItem.map((r) => ({ inventoryItemId: r.inventory_item_id!, locationId: store.shopify_location_id, quantity: r.qty })));
 
-// 3) Metafelt garnly.stock_by_store per variant (§7)
+// 3) Metafelt garnly.stock_by_store per variant (§7).
+// Metafeltet er hele bildet per variant, ikke bare denne butikkens tall: skriver vi bare
+// vår egen location, mister varer begge butikker fører den andres antall, og
+// kassevalideringen tror butikken er alene om varen. Hentes derfor på tvers av butikker.
+// .in() med tusenvis av id-er sprenger URL-grensen, så vi chunker.
+const ids = withItem.map((r) => r.product_id);
+const locByProduct = new Map<string, Record<string, number>>();
+for (let i = 0; i < ids.length; i += 200) {
+  const { data, error } = await db
+    .from("inventory")
+    .select("product_id, qty, stores!inner(shopify_location_id)")
+    .in("product_id", ids.slice(i, i + 200));
+  if (error) throw new Error("inventory metafelt-select: " + error.message);
+  for (const r of (data ?? []) as any[]) {
+    const loc = r.stores?.shopify_location_id;
+    if (!loc) continue;
+    const m = locByProduct.get(r.product_id) ?? {};
+    m[loc] = r.qty;
+    locByProduct.set(r.product_id, m);
+  }
+}
 const byVariant = new Map<string, Record<string, number>>();
 for (const r of withItem) {
   if (!r.variant_id) continue;
-  byVariant.set(r.variant_id, { [store.shopify_location_id]: r.qty });
+  byVariant.set(r.variant_id, locByProduct.get(r.product_id) ?? { [store.shopify_location_id]: r.qty });
 }
 console.log(`Skriver stock_by_store-metafelt for ${byVariant.size} varianter …`);
 await setStockByStoreMetafields([...byVariant].map(([variantId, stockByLocation]) => ({ variantId, stockByLocation })));
