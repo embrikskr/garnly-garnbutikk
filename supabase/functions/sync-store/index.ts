@@ -137,10 +137,26 @@ async function syncOne(store: StoreRow, dryRun: boolean) {
       }
     }
 
+    // Varer som skal røres i Shopify: de som har endret antall, PLUSS varer med lager som
+    // ennå ikke er aktivert på locationen. Uten det andre blir en vare usynlig for alltid
+    // hvis en kjøring dør mellom inventory-upserten over og Shopify-skrivingen under:
+    // basen har da riktig antall, neste kjøring ser ingen endring, og varen får aldri noe
+    // inventory level. Den viser seg som utsolgt i butikken selv om lageret er inne.
+    const changed = new Set(changes.map((c) => c.product.id));
+    const stranded: Array<{ product: ProductRow; qty: number }> = [];
+    for (const [productId, raw] of qtyByProduct) {
+      if (changed.has(productId) || activatedSet.has(productId)) continue;
+      const qty = Math.max(0, raw - store.safety_stock);
+      const product = productById.get(productId);
+      if (qty > 0 && product) stranded.push({ product, qty });
+    }
+    if (stranded.length) console.log(`[sync] ${store.name}: ${stranded.length} varer med lager manglet aktivering, tas nå`);
+    const work = [...changes, ...stranded];
+
     // Shopify
     let shopifyWritten = 0;
-    if (!dryRun && store.shopify_location_id && changes.length) {
-      const withItem = changes.filter((c) => c.product.shopify_inventory_item_id);
+    if (!dryRun && store.shopify_location_id && work.length) {
+      const withItem = work.filter((c) => c.product.shopify_inventory_item_id);
       // Aktiver (lagersporing + inventoryActivate) bare varer som faktisk har lager.
       // Å aktivere alle 0-varer butikken ikke fører ville kostet tusenvis av kall ved
       // første synk; en vare uten inventory level på locationen vises uansett som utsolgt der.
