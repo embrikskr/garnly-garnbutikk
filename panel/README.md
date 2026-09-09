@@ -33,8 +33,12 @@ Vercel oppgir, og oppdater `PANEL_ORIGIN`.
 
 ### Ikon
 
-Legg et `icon.png` på 512×512 i denne mappen, ellers faller ikonet tilbake på
-nettleserens standard når butikken legger panelet på hjemskjermen.
+`icon.png` og `favicon.ico` genereres av `python3 scripts/make-panel-icon.py`
+(krever Pillow). Ikke rediger dem for hånd – endre skriptet og kjør det på nytt.
+
+Faviconen tegnes på nytt per størrelse, ikke nedskalert fra 512: spiralen har tre
+omdreininger på hjemskjermikonet og halvannen i fanen, fordi den tynne varianten
+blir en grå klump på 16 piksler.
 
 ## Gi en butikk tilgang
 
