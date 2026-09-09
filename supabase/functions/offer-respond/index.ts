@@ -39,6 +39,9 @@ function cors(req: Request): Record<string, string> {
   };
 }
 
+/** Tidsfrist for sanntidssjekk av lager ved aksept. Se bruken i applyResponse. */
+const LIVE_CHECK_MS = 8000;
+
 type Outcome = { ok: boolean; title: string; message: string; code?: string };
 
 Deno.serve(async (req) => {
@@ -154,8 +157,22 @@ async function applyResponse(offer: any, action: "accept" | "decline", byUser?: 
   if (eans.length === items.length && store.pos_system !== "manual") {
     try {
       const { data: sec } = await db.from("store_secrets").select("secrets").eq("store_id", store.id).maybeSingle();
-      const live = await getAdapter(store.pos_system).fetchStockFor(store, (sec?.secrets ?? {}) as Record<string, string>, eans);
-      const short = items.filter((i) => (live.get(eanByProduct.get(i.product_id)!) ?? 0) < i.qty);
+      // Sanntidssjekken har en tidsfrist. Ingen av adapterne kan spørre om enkeltvarer
+      // ennå: fetchStockFor henter hele katalogen (Strikkefryd ~5200 rader, Garnkilden
+      // ~6000 gjennom proxy) og bruker over ett minutt. Butikken satt da og trykket
+      // Godta uten at noe skjedde. Rekker vi ikke sjekken, godtar vi på lageret fra
+      // synken, som er maks 15 minutter gammelt. Sjekken er en sikring mot oversalg
+      // det siste kvarteret, ikke fasit – og en frist som går ut er langt bedre enn
+      // en knapp som ikke virker.
+      const live = await Promise.race([
+        getAdapter(store.pos_system).fetchStockFor(store, (sec?.secrets ?? {}) as Record<string, string>, eans),
+        new Promise<null>((r) => setTimeout(() => r(null), LIVE_CHECK_MS)),
+      ]);
+      if (!live) {
+        console.warn(`[offer-respond] sanntidssjekk mot ${store.pos_system} brukte mer enn ${LIVE_CHECK_MS} ms, godtar på synket lager`);
+        await audit("offer", offer.id, "live_check_timeout", { store: store.name, pos: store.pos_system });
+      }
+      const short = live ? items.filter((i) => (live.get(eanByProduct.get(i.product_id)!) ?? 0) < i.qty) : [];
       if (short.length) {
         await db.from("offers").update({ status: "declined_stock", responded_at: now, response_note: "live-sjekk: " + short.map((s) => s.title).join(", ") }).eq("id", offer.id);
         await audit("offer", offer.id, "declined_stock", { short: short.map((s) => s.title) });
