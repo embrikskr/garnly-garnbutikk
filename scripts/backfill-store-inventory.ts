@@ -14,7 +14,7 @@
  * Env:   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SHOPIFY_SHOP, SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { activateInventoryAtLocation, enableTracking, setAvailableQuantities, setStockByStoreMetafields } from "../supabase/functions/_shared/shopify.ts";
+import { activateInventoryAtLocation, enableTracking, setOnHandQuantities, setStockByStoreMetafields } from "../supabase/functions/_shared/shopify.ts";
 
 const slug = Deno.args[0];
 if (!slug) {
@@ -59,9 +59,9 @@ for (const r of toActivate) {
 }
 console.log(`Aktivering ferdig (${done}).`);
 
-// 2) Sett lager (batches på 250 håndteres i setAvailableQuantities)
+// 2) Sett lager (batches på 250 håndteres i setOnHandQuantities)
 console.log(`Skriver lager for ${withItem.length} varer …`);
-await setAvailableQuantities(withItem.map((r) => ({ inventoryItemId: r.inventory_item_id!, locationId: store.shopify_location_id, quantity: r.qty })));
+await setOnHandQuantities(withItem.map((r) => ({ inventoryItemId: r.inventory_item_id!, locationId: store.shopify_location_id, quantity: r.qty })));
 
 // 3) Metafelt garnly.stock_by_store per variant (§7).
 // Metafeltet er hele bildet per variant, ikke bare denne butikkens tall: skriver vi bare

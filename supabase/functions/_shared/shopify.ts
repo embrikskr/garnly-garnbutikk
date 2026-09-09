@@ -89,12 +89,22 @@ export interface QtyChange {
 }
 
 /**
- * Setter "available" absolutt på en location. Maks 250 per kall, batches automatisk.
+ * Setter fysisk lager ("on_hand") absolutt på en location. Maks 250 per kall, batches automatisk.
+ *
+ * VIKTIG: vi skriver on_hand, ikke available. Kassesystemet teller det som fysisk står i
+ * butikken, og det er nøyaktig Shopifys on_hand. available er on_hand minus det som er lovet
+ * bort til ubetjente ordrer (committed), og den regner Shopify ut selv.
+ *
+ * Skrev vi available, ville hver synk mens en ordre lå ubehandlet blåst opp lageret: med 13 i
+ * kassa og 1 solgt på nett står Shopify på available=12, committed=1, on_hand=13. Faller kassa
+ * til 11 og vi skriver available=11, blir on_hand 12 – Shopify tror det står 12 i butikken når
+ * det står 11, og selger én for mye. Skriver vi on_hand=11, blir available 10, som er riktig.
+ * Verifisert mot ekte data 09.09.2026.
  * Admin API 2026-07: inventorySetQuantities krever @idempotent-direktiv (nøkkel per batch,
  * stabil over gql()-retries) og changeFromQuantity på hver rad. Vi er kilden til sannhet, så
  * changeFromQuantity = null slår av compare-and-swap-sjekken.
  */
-export async function setAvailableQuantities(changes: QtyChange[], reason = "correction") {
+export async function setOnHandQuantities(changes: QtyChange[], reason = "correction") {
   const Q = `mutation SetQty($input: InventorySetQuantitiesInput!, $key: String!) {
     inventorySetQuantities(input: $input) @idempotent(key: $key) { inventoryAdjustmentGroup { createdAt } userErrors { field message code } } }`;
   for (let i = 0; i < changes.length; i += 250) {
@@ -102,7 +112,7 @@ export async function setAvailableQuantities(changes: QtyChange[], reason = "cor
     const res = await gql(Q, {
       key: crypto.randomUUID(),
       input: {
-        name: "available",
+        name: "on_hand",
         reason,
         referenceDocumentUri: "gid://garnly-sync/StoreSync/inventory",
         quantities: batch.map((c) => ({ inventoryItemId: c.inventoryItemId, locationId: c.locationId, quantity: c.quantity, changeFromQuantity: null })),

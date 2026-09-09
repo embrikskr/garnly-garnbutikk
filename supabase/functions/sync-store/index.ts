@@ -10,7 +10,7 @@
  */
 import { adminClient, audit, json, requireInternalSecret } from "../_shared/db.ts";
 import { getAdapter } from "../_shared/adapters/index.ts";
-import { activateInventoryAtLocation, enableTracking, setAvailableQuantities, setStockByStoreMetafields } from "../_shared/shopify.ts";
+import { activateInventoryAtLocation, enableTracking, setOnHandQuantities, setStockByStoreMetafields } from "../_shared/shopify.ts";
 import type { ProductRow, StoreRow } from "../_shared/types.ts";
 import { matchLines } from "../_shared/matching.ts";
 
@@ -174,7 +174,7 @@ async function syncOne(store: StoreRow, dryRun: boolean) {
       // Skriv lager for varer som er aktivert (nå eller før). 0-varer som aldri ble aktivert
       // hoppes over – de har ingen inventory level på locationen og skal ikke ha det.
       const writable = withItem.filter((c) => activatedSet.has(c.product.id));
-      await setAvailableQuantities(writable.map((c) => ({
+      await setOnHandQuantities(writable.map((c) => ({
         inventoryItemId: c.product.shopify_inventory_item_id!,
         locationId: store.shopify_location_id!,
         quantity: c.qty,
