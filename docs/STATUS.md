@@ -10,8 +10,8 @@ allerede sto i drift, og migrasjonene 003–008 er kjørt.
 
 | Butikk | Kassesystem | Rader lest | Matchet | Med lager | Status |
 |---|---|---|---|---|---|
-| Strikkefryd | Mystore | 5262 | 1565 | 1488 varianter i Shopify | live siden 05.09 |
-| Garnkilden | Duell | 6010 | 1341 | 1167 varer, 15 437 enheter | tørrkjørt, **ikke skrevet til Shopify** |
+| Strikkefryd | Mystore | 5262 | 1845 | 1488 varianter i Shopify | live siden 05.09 |
+| Garnkilden | Duell | 6010 | 1341 | 1167 varer, 15 437 enheter | **live 09.09** |
 
 ### Garnkilden virker nå
 
@@ -36,13 +36,32 @@ De 2357 garnvarene som fortsatt ikke matcher, er garn Garnkilden fører men som
 Garnly ikke har i sortimentet. Det er en sortimentsbeslutning, ikke en feil.
 Knapper, pinner og oppskrifter (1900 varer) skal heller ikke matche.
 
-### Dette må avgjøres før Garnkilden kan skrives til Shopify
+### Garnkilden er live (09.09, kveld)
 
-`stores.active` for Garnkilden står på **false**. Skriver vi lageret til Shopify
-uten å aktivere butikken, blir varene kjøpbare uten at rutingen kan tilby dem til
-noen: en kunde kan kjøpe noe bare Garnkilden har, og ordren blir stående. De to
-tingene må skje samtidig. Sier Embrik ja, er det én SQL-oppdatering og én
-synkkjøring uten `dry_run`.
+Embrik ga klarsignal. `stores.active` satt til true, og lageret skrevet med
+`deno task backfill-store garnkilden`, ikke med cron-synken: første synk må
+aktivere og slå på lagersporing på over tusen varianter, og det får ikke plass i
+Edge Function-budsjettet.
+
+| Steg | Resultat |
+|---|---|
+| Aktivert på location | 1124 nye, 1167 totalt |
+| Antall skrevet | 1167 varer |
+| Metafelt `stock_by_store` | 1167 varianter |
+
+Verifisert direkte mot Shopify: Merinoull 1001 optisk hvit viser 37 hos
+Garnkilden og 36 hos Strikkefryd, både som inventory level og i metafeltet.
+Videre endringer tas av cron-synken hvert 5. minutt.
+
+**Feil funnet og rettet underveis.** Backfill-skriptet skrev `stock_by_store`
+med bare butikkens egen location. For de 931 varene begge butikker fører, ville
+Strikkefryds antall blitt slettet fra metafeltet, og kassevalideringen ville
+trodd Garnkilden var alene om varen. Cron-synken ville ikke rettet det, siden den
+bare skriver metafelt for varer der antallet endrer seg. Skriptet henter nå
+tallene på tvers av butikkene.
+
+Strikkefryd gikk samtidig fra 1565 til 1845 matchede rader, etter alias-seeden og
+de 1513 nye variantene fra 05.09.
 
 ### Varsling har ingen mottaker ennå
 
@@ -126,7 +145,7 @@ riktig, men `sync_runs` viser feil bilde. Bør ryddes med en tidsavbrudd-markeri
 ## Blokkerende avklaringer
 1. Frakt: Shipmondo vs Cargonizer (Logistra) – fortsatt åpent.
 2. EAN for Filcolana/Hillesvåg/Ryegarn: tredje butikk eller produsentlister.
-3. Skal Garnkilden aktiveres og lageret skrives til Shopify? Se over.
+3. Frakt for Garnkilden: samme åpne valg som for Strikkefryd.
 
 ## Ikke deployet ennå (krever tilganger)
 - **Butikkpanelet** (`panel/`): `npx wrangler pages deploy panel --project-name garnly-butikkpanel`
