@@ -19,6 +19,12 @@
 
 * { box-sizing: border-box; }
 
+/* hidden-attributtet får bare display:none fra nettleserens eget stilsett, som taper
+   mot en hvilken som helst klasseregel. .login setter display:grid, så innloggings-
+   kortet ble liggende over panelet etter vellykket innlogging: det så ut som om
+   ingenting skjedde. Denne regelen gjør el.hidden = true til å bety noe overalt. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   background: var(--cream);
