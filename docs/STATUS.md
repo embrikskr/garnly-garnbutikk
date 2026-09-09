@@ -74,7 +74,13 @@ er eneste kanal.
 Cloudflare Pages ble droppet: Supabase Storage serverer HTML som `text/plain` av
 sikkerhetsgrunner, og Pages krever en innlogging vi ikke har. Panelet serveres i
 stedet av en `panel`-funksjon som har filene bakt inn (`deno task build-panel`).
-Det gir samme origin som API-et, så `PANEL_ORIGIN` og CORS blir triviell.
+
+**Dette er en mellomløsning.** Supabase krever betalt tillegg for eget domene på
+funksjoner, så `butikk.garnly.no` kan ikke peke hit. Panelet skal over på Vercel,
+der domenet er gratis og dashboardet allerede ligger. `panel/vercel.json` er klar
+(rot `panel/`, `outputDirectory: "."`). Når adressen er på plass: sett
+`PANEL_ORIGIN` til den, og slett `panel`-funksjonen. To kopier som kan komme i
+utakt er verre enn én.
 
 Verifisert: begge butikker logger inn, RLS gir hver av dem kun egne rader
 (`stores` returnerer én butikk per bruker), alle tre panel-views svarer 200, og
@@ -176,8 +182,9 @@ men radene bør merkes som avbrutt etter en tidsfrist.
 3. Frakt for Garnkilden: samme åpne valg som for Strikkefryd.
 
 ## Ikke deployet ennå (krever tilganger)
-- **butikk.garnly.no**: DNS-en er ikke satt opp. Panelet kjører i mellomtiden på
-  Supabase-domenet (se over), så butikkene kan brukes uten det.
+- **Panelet på Vercel + butikk.garnly.no**: krever Vercel-innlogging. Importer repoet
+  med Root Directory `panel`, framework «Other», ingen build-kommando. Deretter domenet
+  under Settings → Domains. Panelet kjører i mellomtiden på Supabase-domenet (se over).
 - **Validation Function**: `shopify app deploy` fra `shopify-app/` (krever Shopify CLI-innlogging),
   deretter aktiveres valideringen i Shopify admin → Settings → Checkout.
 - **Ikon** `panel/icon.png` (512×512) for hjemskjerm på nettbrett.

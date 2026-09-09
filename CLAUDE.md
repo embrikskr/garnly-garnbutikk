@@ -21,8 +21,9 @@ Dette repoet er backend for Garnlys felles nettbutikk for lokale garnbutikker. L
 supabase/migrations/      001 schema, 002 cron, 003 exclude_from_sync, 004 inventory_activated,
                           005 pos_catalog, 006 cron pos-catalog, 007 product_aliases, 008 store_panel
 supabase/seed/            product_aliases.sql (varer uten brukbar EAN, kjøres etter første sync-products)
-panel/                    butikkpanelet (statisk side; bakes inn i panel-funksjonen med
-                          `deno task build-panel`, som må kjøres etter hver endring)
+panel/                    butikkpanelet (statisk side). Kjøres nå av panel-funksjonen, som har
+                          filene bakt inn: kjør `deno task build-panel` etter hver endring.
+                          Skal over på Vercel (rot `panel/`), se panel/README.md
 supabase/functions/
   _shared/adapters/       PosAdapter-grensesnitt + duell.ts, mystore.ts, csv.ts
   _shared/shopify.ts      GraphQL-klient (inventory, fulfillment orders, webhooks)

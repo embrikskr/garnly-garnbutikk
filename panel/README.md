@@ -13,31 +13,41 @@ sanntid, og de svarer med Godta eller Avslå. Ingen e-post per ordre.
   All logikk (live lagersjekk mot kassa, flytting av fulfillment order i Shopify,
   slipp av hold, fraktbooking) skjer på serveren. Panelet er bare skallet.
 
-## Sett opp
+## Hvor det kjører
 
-1. Fyll inn `SUPABASE_ANON_KEY` i `config.js` (Supabase → Project settings → API).
-2. Legg til et `icon.png` på 512×512 i denne mappen, ellers faller ikonet tilbake
-   på nettleserens standard når butikken legger panelet på hjemskjermen.
-3. Deploy mappen som en statisk side:
+Panelet kjøres midlertidig av Edge Function `panel`, som har filene bakt inn:
 
-   **Cloudflare Pages**
-   ```bash
-   npx wrangler pages deploy panel --project-name garnly-butikkpanel
-   ```
+**https://zesaeleooiptrpjzqhxe.supabase.co/functions/v1/panel**
 
-   **Vercel**
-   ```bash
-   npx vercel deploy panel --prod
-   ```
+Det er en mellomløsning. Supabase krever et betalt tillegg for eget domene på
+funksjoner, så `butikk.garnly.no` kan ikke peke hit. Panelet skal over på Vercel,
+der domenet er gratis og resten av frontendene allerede ligger.
 
-4. Pek `butikk.garnly.no` mot prosjektet (CNAME i DNS).
-5. Sett `PANEL_ORIGIN=https://butikk.garnly.no` som secret på Supabase, slik at
-   CORS i `offer-respond` slipper gjennom bare den adressen:
-   ```bash
-   supabase secrets set PANEL_ORIGIN=https://butikk.garnly.no
-   ```
+### Flytt til Vercel
+
+1. Vercel → Add New → Project → importer `embrikskr/garnly-garnbutikk`.
+2. **Root Directory: `panel`**. Framework Preset: Other. Ingen build-kommando.
+   `panel/vercel.json` setter allerede `outputDirectory` til `.`, som er det som
+   hindrer feilen «No Output Directory named public».
+3. Deploy. Legg så til `butikk.garnly.no` under Settings → Domains, og sett CNAME-en
+   Vercel oppgir.
+4. Si fra om adressen, så settes `PANEL_ORIGIN` og `panel`-funksjonen fjernes.
+   To kopier av panelet som kan komme i utakt er verre enn én.
+
+Endrer du noe her, kjør `deno task build-panel` og deploy `panel`-funksjonen på
+nytt så lenge den er i bruk. Etter flyttingen til Vercel deployer Git-pushen selv.
+
+### Ikon
+
+Legg et `icon.png` på 512×512 i denne mappen, ellers faller ikonet tilbake på
+nettleserens standard når butikken legger panelet på hjemskjermen.
 
 ## Gi en butikk tilgang
+
+Strikkefryd og Garnkilden har allerede hver sin bruker, koblet i `store_users`.
+Passordene er delt med Embrik direkte og bør byttes av butikkene selv.
+
+For en ny butikk:
 
 1. Supabase → Authentication → Users → Add user. E-post og passord til butikken.
 2. Koble brukeren til butikken:
