@@ -35,13 +35,22 @@ let knownOfferIds = new Set();
 let firstLoad = true;
 let soundOn = localStorage.getItem("garnly.sound") !== "off";
 let busy = new Set();
+let started = false;
+let queueSig = null;
+let assignedSig = null;
 
 // ---------------------------------------------------------------- oppstart
 
+// Auth-hendelser kommer flere ganger (INITIAL_SESSION, SIGNED_IN, TOKEN_REFRESHED),
+// og getSession() under svarer i tillegg. start() må derfor tåle å bli kalt om igjen:
+// gjorde den ikke det, hopet det seg opp en visibilitychange-lytter per kall, og køen
+// ble tegnet på nytt like mange ganger ved hvert tabbytte.
 sb.auth.onAuthStateChange((_event, session) => {
   if (session) start();
   else showLogin();
 });
+
+document.addEventListener("visibilitychange", () => { if (!document.hidden && started) refresh(); });
 
 sb.auth.getSession().then(({ data }) => (data.session ? start() : showLogin()));
 
@@ -80,6 +89,8 @@ el.soundToggle.addEventListener("click", () => {
 });
 
 async function start() {
+  if (started) return;
+  started = true;
   el.login.hidden = true;
   el.app.hidden = false;
   el.soundToggle.textContent = soundOn ? "🔔" : "🔕";
@@ -117,11 +128,12 @@ async function start() {
   clearInterval(tickTimer);
   tickTimer = setInterval(tickDeadlines, 1000);
 
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
   keepAwake();
 }
 
 function teardown() {
+  started = false;
+  queueSig = assignedSig = null;
   if (channel) { sb.removeChannel(channel); channel = null; }
   clearInterval(pollTimer); clearInterval(tickTimer);
 }
@@ -170,7 +182,10 @@ async function refresh() {
 
 function renderQueue(rows, freshIds) {
   el.queueEmpty.hidden = rows.length > 0;
-  el.queue.innerHTML = rows.map((r) => {
+  // Bare bytt ut nodene når innholdet faktisk er endret. Skjer det midt mellom
+  // museknapp ned og opp, forsvinner klikket sporløst: knappen brukeren trykket på
+  // finnes ikke lenger når museknappen slippes, og click-hendelsen uteblir.
+  const html = rows.map((r) => {
     const level = deadlineLevel(r.deadline_at);
     const cls = freshIds.includes(r.offer_id) ? "card card--new" : `card card--${level}`;
     return `<article class="${cls}" data-offer="${r.offer_id}" data-deadline="${r.deadline_at ?? ""}">
@@ -186,11 +201,14 @@ function renderQueue(rows, freshIds) {
       </div>
     </article>`;
   }).join("");
+  if (html === queueSig) return;
+  queueSig = html;
+  el.queue.innerHTML = html;
 }
 
 function renderAssigned(rows) {
   el.assignedEmpty.hidden = rows.length > 0;
-  el.assigned.innerHTML = rows.map((r) => `
+  const html = rows.map((r) => `
     <article class="card card--packing">
       <div class="card__head">
         <span class="card__order">${esc(r.order_name ?? "Ordre")}</span>
@@ -200,6 +218,9 @@ function renderAssigned(rows) {
       <p class="addr">${esc(r.ship_name ?? "")}<br>${esc(r.ship_address1 ?? "")}${r.ship_address2 ? "<br>" + esc(r.ship_address2) : ""}<br>${esc(r.ship_zip ?? "")} ${esc(r.ship_city ?? "")}</p>
       ${r.tracking_number ? `<p class="track">Sporing: ${r.tracking_url ? `<a href="${esc(r.tracking_url)}" target="_blank" rel="noopener">${esc(r.tracking_number)}</a>` : esc(r.tracking_number)}</p>` : ""}
     </article>`).join("");
+  if (html === assignedSig) return;
+  assignedSig = html;
+  el.assigned.innerHTML = html;
 }
 
 function lineItems(items) {
@@ -216,7 +237,11 @@ el.queue.addEventListener("click", async (e) => {
   const action = btn.dataset.act;
   if (action === "decline" && !confirm("Avslå denne ordren? Den går videre til neste butikk.")) return;
   card.querySelectorAll("button").forEach((b) => (b.disabled = true));
-  await respond(offerId, action);
+  const ok = await respond(offerId, action);
+  // Gikk det galt, må knappene tilbake: uten ny opptegning ville kortet blitt
+  // liggende med nedtonede knapper som ikke lar seg trykke på.
+  if (!ok) card.querySelectorAll("button").forEach((b) => (b.disabled = false));
+  else queueSig = null;
   await refresh();
 });
 
@@ -244,6 +269,7 @@ async function respond(offerId, action, quiet = false) {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
       body: JSON.stringify({ offer_id: offerId, action }),
+      signal: AbortSignal.timeout(20000),
     });
     const body = await res.json().catch(() => ({}));
     if (!quiet) toast(body.message || (res.ok ? "Sendt." : "Noe gikk galt."), body.ok ? "" : "error");
