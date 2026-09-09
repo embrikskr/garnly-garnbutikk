@@ -83,6 +83,45 @@ faktisk serveres derfra, RLS gir hver av dem kun egne rader, panel-viewene svare
 
 Innloggingene ligger utenfor repoet. Passordene bør byttes av butikkene selv.
 
+### Testordre kjørt ende til ende (09.09, 13:30)
+
+Ordre #1001 og #1002 lagt inn som utkastordre markert betalt. Gratis, krever ingen
+betalingsleverandør, og utløser `orders/paid` som rutingen lytter på. Rutingsappen
+har bevisst ikke rett til å opprette ordrer, så de ble lagt inn via Shopify-koblingen.
+
+Verifisert: webhook mottatt, ordre satt på hold, gruppe planlagt, tilbud sendt til
+Strikkefryd med riktig frist (3 timer, innenfor åpningstid), avslag går videre og
+eskalerer når ingen andre har varen, aktivt avslag gir ikke nedvekting
+(`timeout_streak` = 0), aksept flytter fulfillment order og slipper holdet, og
+kansellering i Shopify rydder opp i basen.
+
+Fire feil funnet og rettet underveis, alle slike som bare vises i drift:
+
+1. **`hidden` virket ikke på innloggingsskjermen.** `.login` setter `display:grid`,
+   som slår nettleserens eget stilsett. Innloggingen ble liggende over panelet etter
+   vellykket innlogging, så det så ut som ingenting skjedde. Panelet var ubrukelig.
+2. **Panelet svelget klikkene.** `refresh()` byttet ut hele køen med `innerHTML`
+   hvert kall, også uten endring. Traff det mellom museknapp ned og opp, forsvant
+   klikket sporløst. Skjedde hele tiden fordi `start()` ble kalt på nytt ved hver
+   auth-hendelse og hopet opp `visibilitychange`-lyttere.
+3. **Sanntidssjekken av lager hentet hele katalogen.** `fetchStockFor` kan ikke
+   spørre om enkeltvarer i noen adapter: 5262 rader for Strikkefryd i sider på 50
+   med 550 ms pause, over ett minutt. Godta tidde ut. Sjekken har nå 8 sekunders
+   frist og godtar ellers på synket lager (maks 15 min gammelt), med logg i audit.
+4. **`fulfillmentOrderMove` krasjet aksepten.** Shopify hadde allerede tildelt
+   ordren til Strikkefryds location, og avviser flytting til samme sted:
+   «Cannot move to the current origin location». Nå sjekkes gjeldende location
+   først, og feilen tåles om to butikker svarer tett i tid.
+
+### Gjenstår på sanntidssjekken
+
+Den hopper i praksis over hver gang, fordi ingen av adapterne kan slå opp enkelte
+strekkoder. Mystore gjenkjenner `filter[ean][path]`/`[value]`, men avviste
+operatorene som ble prøvd (`eq`, `equals`, `like`, `in`, `contains`) før
+ratebegrensningen slo inn; `=` og `==` rakk ikke å bli testet. Duell har ingen
+verifisert vei. Får man dette på plass, blir Godta også raskt: aksepten bruker nå
+11 sekunder, hvorav 8 er fristen som løper ut.
+
 ### Feil funnet ved verifisering: 254 varer var usynlige i butikken
 
 Strikkefryd hadde 1742 varer med lager i basen, men bare 1488 aktivert i Shopify.

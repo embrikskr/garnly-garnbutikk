@@ -247,13 +247,28 @@ export async function releaseHold(foId: string) {
 }
 
 /** Flytter hele (eller deler av) en fulfillment order til en location. Returnerer ny FO-id. */
+/**
+ * Flytter en fulfillment order til butikkens location.
+ *
+ * Shopify har som regel allerede tildelt en location ved ordreopprettelse, og velger
+ * gjerne nettopp den butikken som har varen. Er det butikken som godtar, avviser
+ * Shopify flyttingen med «Cannot move to the current origin location», og aksepten
+ * krasjet. Vi sjekker derfor hvor den ligger først, og tåler feilen om den likevel
+ * oppstår (to butikker kan svare tett i tid).
+ */
 export async function moveFulfillmentOrder(foId: string, locationId: string, lineItems?: Array<{ id: string; quantity: number }>): Promise<string> {
+  const Q = `query Where($id: ID!) { fulfillmentOrder(id: $id) { id assignedLocation { location { id } } } }`;
+  const cur = await gql(Q, { id: foId });
+  if (cur?.fulfillmentOrder?.assignedLocation?.location?.id === locationId) return foId;
+
   const M = `mutation Move($id: ID!, $newLocationId: ID!, $fulfillmentOrderLineItems: [FulfillmentOrderLineItemInput!]) {
     fulfillmentOrderMove(id: $id, newLocationId: $newLocationId, fulfillmentOrderLineItems: $fulfillmentOrderLineItems) {
       movedFulfillmentOrder { id } originalFulfillmentOrder { id } remainingFulfillmentOrder { id } userErrors { field message } } }`;
   const res = await gql(M, { id: foId, newLocationId: locationId, fulfillmentOrderLineItems: lineItems ?? null });
+  const errs: Array<{ message?: string }> = res.fulfillmentOrderMove?.userErrors ?? [];
+  if (errs.some((e) => /current origin location/i.test(e.message ?? ""))) return foId;
   assertNoUserErrors(res, "fulfillmentOrderMove");
-  return res.fulfillmentOrderMove.movedFulfillmentOrder.id;
+  return res.fulfillmentOrderMove.movedFulfillmentOrder?.id ?? foId;
 }
 
 /** Splitter ut gitte linjer i egen fulfillment order. Returnerer { newId, remainingId }. */
