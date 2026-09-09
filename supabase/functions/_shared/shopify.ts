@@ -112,6 +112,28 @@ export async function setAvailableQuantities(changes: QtyChange[], reason = "cor
   }
 }
 
+/**
+ * Slår på lagersporing (inventoryItem.tracked) for varianter som mangler det.
+ * Uten sporing selger Shopify ubegrenset uansett hva vi skriver til locations.
+ * variantsByProduct: productId -> variant-id-er som er untracked.
+ */
+export async function ensureVariantsTracked(variantsByProduct: Map<string, string[]>) {
+  const M = `mutation Track($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+    productVariantsBulkUpdate(productId: $productId, variants: $variants) { userErrors { field message } } }`;
+  let n = 0;
+  for (const [productId, variantIds] of variantsByProduct) {
+    for (let i = 0; i < variantIds.length; i += 100) {
+      const res = await gql(M, {
+        productId,
+        variants: variantIds.slice(i, i + 100).map((id) => ({ id, inventoryItem: { tracked: true } })),
+      });
+      assertNoUserErrors(res, "productVariantsBulkUpdate(tracked)");
+      n += Math.min(100, variantIds.length - i);
+    }
+  }
+  return n;
+}
+
 /** Slår på lagersporing (inventoryItem.tracked) – kreves før lager kan settes. Idempotent. */
 export async function enableTracking(inventoryItemIds: string[]) {
   const M = `mutation Track($id: ID!) {

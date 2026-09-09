@@ -7,7 +7,7 @@
  *   variant-title "4372 Dyp Burgunder" (hvis farger er varianter) → color_code=4372, color_name=Dyp Burgunder
  */
 import { adminClient, json, requireInternalSecret } from "../_shared/db.ts";
-import { iterateVariants } from "../_shared/shopify.ts";
+import { ensureVariantsTracked, iterateVariants } from "../_shared/shopify.ts";
 import { normalizeEan } from "../_shared/adapters/types.ts";
 
 Deno.serve(async (req) => {
@@ -17,6 +17,7 @@ Deno.serve(async (req) => {
   let seen = 0, upserted = 0, withEan = 0;
   const rows: Record<string, unknown>[] = [];
   const seenVariantIds: string[] = [];
+  const untracked = new Map<string, string[]>();
 
   for await (const v of iterateVariants()) {
     seen++;
@@ -25,6 +26,7 @@ Deno.serve(async (req) => {
     const ean = normalizeEan(v.barcode);
     if (ean) withEan++;
     seenVariantIds.push(v.id);
+    if (!v.inventoryItem.tracked) untracked.set(v.product.id, [...(untracked.get(v.product.id) ?? []), v.id]);
     rows.push({
       shopify_variant_id: v.id,
       shopify_product_id: v.product.id,
@@ -45,7 +47,9 @@ Deno.serve(async (req) => {
   if (seenVariantIds.length) {
     await db.from("products").update({ active: false }).not("shopify_variant_id", "in", `(${seenVariantIds.map((s) => `"${s}"`).join(",")})`);
   }
-  return json({ seen, upserted, with_ean: withEan, without_ean: rows.length - withEan });
+  // Lagersporing må være på for at antall per location skal styre salg (§4)
+  const tracked = await ensureVariantsTracked(untracked);
+  return json({ seen, upserted, with_ean: withEan, without_ean: rows.length - withEan, tracking_enabled: tracked });
 });
 
 export function parseName(vendor: string | null, productTitle: string, variantTitle: string) {

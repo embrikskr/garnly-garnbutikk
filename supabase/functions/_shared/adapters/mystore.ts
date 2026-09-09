@@ -17,6 +17,7 @@
  * Produkter MED varianter: lageret ligger på variantene, produktets quantity ignoreres.
  * Produkter UTEN varianter: produktets quantity brukes.
  * Inaktive produkter (status 0) og deaktiverte varianter hoppes over.
+ * external_id (for product_aliases) = "v:<variant-id>" for varianter, "p:<product-id>" for produkter uten varianter.
  */
 import type { StockLine, StoreRow } from "../types.ts";
 import { AdapterError, normalizeEan, type PosAdapter, sleep } from "./types.ts";
@@ -106,6 +107,7 @@ export const mystoreAdapter: PosAdapter = {
         sku: v.attributes.sku ? String(v.attributes.sku) : null,
         name: parent ? nameOf(parent.attributes) : null,
         qty: qtyOf(v.attributes),
+        external_id: `v:${v.id}`,
       });
     }
     for (const p of products) {
@@ -115,6 +117,7 @@ export const mystoreAdapter: PosAdapter = {
         sku: p.attributes.sku ? String(p.attributes.sku) : null,
         name: nameOf(p.attributes),
         qty: qtyOf(p.attributes),
+        external_id: `p:${p.id}`,
       });
     }
     return out;

@@ -45,6 +45,13 @@ export async function notifyStoreOffer(store: StoreRow, orderName: string, items
 &nbsp; <a href="${links.decline}" style="color:#5F0B09;padding:12px 24px;display:inline-block">Avslå</a></p>
 <p style="color:#666">Svarer dere ikke innen fristen, går ordren videre til neste butikk.</p>`;
 
+  // Butikkene svarer normalt i butikkpanelet (butikk.garnly.no). Varsel per tilbud
+  // er derfor av som standard, og slås bare på for butikker uten nettbrett.
+  if (!store.notify_offers) {
+    console.log(`[panel] tilbud til ${store.name} for ${orderName}, ingen e-post/SMS (notify_offers = false)`);
+    return;
+  }
+
   const tasks: Promise<void>[] = [];
   if ((store.notify_channel === "email" || store.notify_channel === "both") && store.contact_email) tasks.push(sendEmail(store.contact_email, subject, html, text));
   if ((store.notify_channel === "sms" || store.notify_channel === "both") && store.contact_phone) {

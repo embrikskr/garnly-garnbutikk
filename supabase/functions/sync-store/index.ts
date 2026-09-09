@@ -75,7 +75,10 @@ async function syncOne(store: StoreRow, dryRun: boolean) {
       products.push(...(data ?? []));
       if (!data || data.length < 1000) break;
     }
-    const { matched, unmatched } = matchLines(lines, products);
+    // Alias: kassesystemets egen id → Garnly-produkt, for varer uten brukbar EAN (007).
+    const { data: aliasRows } = await db.from("product_aliases").select("external_id, product_id").eq("store_id", store.id);
+    const aliases = new Map<string, string>((aliasRows ?? []).map((a: { external_id: string; product_id: string }) => [a.external_id, a.product_id]));
+    const { matched, unmatched } = matchLines(lines, products, aliases);
 
     // Slå sammen duplikater (samme produkt kan komme flere ganger, f.eks. flere avdelinger)
     const qtyByProduct = new Map<string, number>();
@@ -118,8 +121,10 @@ async function syncOne(store: StoreRow, dryRun: boolean) {
     if (unmatched.length) {
       const byKey = new Map<string, { store_id: string; ean: string; sku: string; name: string | null; qty: number; last_seen: string }>();
       for (const u of unmatched) {
-        if (!u.ean && !u.sku) continue;
-        const ean = u.ean ?? "", sku = u.sku ?? "";
+        // external_id som reserve: uten den blir Duell-varer uten EAN usynlige i umatchet-lista,
+        // og da har man ingenting å lage alias fra.
+        if (!u.ean && !u.sku && !u.external_id) continue;
+        const ean = u.ean ?? "", sku = u.sku ?? u.external_id ?? "";
         const key = `${ean}${sku}`;
         const prev = byKey.get(key);
         if (prev) prev.qty += u.qty;

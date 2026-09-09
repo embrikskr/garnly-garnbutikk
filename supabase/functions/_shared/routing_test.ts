@@ -109,3 +109,27 @@ Deno.test("normName", () => {
   assertEquals(normName("Lun Merino – Hvit"), "lun merino hvit");
   assertEquals(normName("  Alpakka  Følgetråd - Storm Blue!"), "alpakka følgetråd storm blue");
 });
+
+Deno.test("matching: alias slår SKU og navn, men ikke EAN", () => {
+  const products = [
+    P({ id: "cc501", name: "Cardiff Cashmere Classic – 501 Neve" }),
+    P({ id: "x", ean: "5744003423439", name: "Isager Palet – Blush" }),
+  ];
+  const aliases = new Map([["1052167", "cc501"], ["v:114413", "cc501"]]);
+  const { matched, unmatched } = matchLines([
+    { ean: null, sku: "1052167", name: "Cashmere Classic 501", qty: 9, external_id: "1052167" },
+    { ean: "7000001016607", sku: null, name: "Cardiff Cashmere Classic 501 Neve", qty: 3, external_id: "v:114413" },
+    { ean: "5744003423439", sku: null, name: "Palet - Blush", qty: 15, external_id: "202001" },
+    { ean: null, sku: "999", name: "Ukjent", qty: 1, external_id: "999" },
+  ], products, aliases);
+  assertEquals(matched.map((m) => m.product.id), ["cc501", "cc501", "x"]);
+  assertEquals(unmatched.length, 1);
+});
+
+Deno.test("normalizeEan: GTIN-14 med ledende null = EAN-13, korte interne koder forkastes", async () => {
+  const { normalizeEan } = await import("./adapters/types.ts");
+  assertEquals(normalizeEan("05744003423439"), "5744003423439");
+  assertEquals(normalizeEan("5744003423439"), "5744003423439");
+  assertEquals(normalizeEan("18379"), null);
+  assertEquals(normalizeEan(""), null);
+});

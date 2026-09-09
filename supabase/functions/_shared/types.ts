@@ -11,6 +11,8 @@ export interface StoreRow {
   contact_email: string | null;
   contact_phone: string | null;
   notify_channel: "email" | "sms" | "both";
+  /** Varsel per tilbud. Av som standard, butikkene svarer i butikkpanelet. */
+  notify_offers: boolean;
   business_hours: Record<string, [string, string] | null>;
   offer_ttl_hours: number;
   safety_stock: number;
@@ -47,6 +49,8 @@ export interface StockLine {
   sku: string | null;
   name: string | null;
   qty: number;
+  /** Kassesystemets egen nøkkel (Duell product_number, Mystore "v:<id>"/"p:<id>"). Brukes av product_aliases. */
+  external_id?: string | null;
 }
 
 export interface LineItem {
