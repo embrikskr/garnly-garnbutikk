@@ -16,3 +16,6 @@ verify_jwt = false
 verify_jwt = false
 [functions.pos-catalog]
 verify_jwt = false
+
+[functions.panel]
+verify_jwt = false

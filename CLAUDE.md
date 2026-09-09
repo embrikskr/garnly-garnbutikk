@@ -5,7 +5,7 @@ Dette repoet er backend for Garnlys felles nettbutikk for lokale garnbutikker. L
 ## Hva systemet gjør
 
 1. **Lagersynk**: leser lager fra partnerbutikkenes kassesystemer (Duell, Mystore, CSV) hvert 15. minutt, matcher mot Garnlys produkter på EAN → alias (`product_aliases`) → SKU → navn, og skriver antall til butikkens *location* i Garnlys Shopify (`kycbgs-yy.myshopify.com`).
-2. **Ordreruting**: når en kunde betaler i Shopify, settes ordren på hold, og den tilbys én butikk om gangen (round-robin på `last_assigned_at`). Butikken svarer i **butikkpanelet** (`panel/`, ligger på butikk.garnly.no) innen en frist (i åpningstid). Ved aksept flyttes fulfillment order til butikkens location og frakt bookes.
+2. **Ordreruting**: når en kunde betaler i Shopify, settes ordren på hold, og den tilbys én butikk om gangen (round-robin på `last_assigned_at`). Butikken svarer i **butikkpanelet** (`panel/`, servert av `panel`-funksjonen) innen en frist (i åpningstid). Ved aksept flyttes fulfillment order til butikkens location og frakt bookes.
 3. **Butikkpanel**: en side butikken har oppe på nettbrettet. Sanntid via Supabase Realtime på `offers`, innlogging med Supabase Auth, tilgang styrt av `store_users` + RLS. E-post per tilbud er AV som standard (`stores.notify_offers`); det skalerer ikke når en butikk får titalls ordrer om dagen.
 4. **Regler som aldri brytes**: hele antallet av én varelinje kommer fra samme butikk (garnparti). Hele ordren fra én butikk foretrekkes; kan splittes per varelinje hvis ingen har alt. Aktivt avslag straffes ikke; timeout gir 24 t nedvekting (maks 3).
 
@@ -21,7 +21,8 @@ Dette repoet er backend for Garnlys felles nettbutikk for lokale garnbutikker. L
 supabase/migrations/      001 schema, 002 cron, 003 exclude_from_sync, 004 inventory_activated,
                           005 pos_catalog, 006 cron pos-catalog, 007 product_aliases, 008 store_panel
 supabase/seed/            product_aliases.sql (varer uten brukbar EAN, kjøres etter første sync-products)
-panel/                    butikkpanelet (statisk side, deployes til butikk.garnly.no)
+panel/                    butikkpanelet (statisk side; bakes inn i panel-funksjonen med
+                          `deno task build-panel`, som må kjøres etter hver endring)
 supabase/functions/
   _shared/adapters/       PosAdapter-grensesnitt + duell.ts, mystore.ts, csv.ts
   _shared/shopify.ts      GraphQL-klient (inventory, fulfillment orders, webhooks)
@@ -37,6 +38,7 @@ supabase/functions/
   order-cancelled/        webhook orders/cancelled
   pos-webhook/            Mystore products/update → trigger synk
   pos-catalog/            daglig cron: Duells product/list → pos_catalog (strekkoder)
+  panel/                  serverer butikkpanelet (statiske filer fra deno task build-panel)
 scripts/                  set-barcodes.ts, import-products.ts, backfill-store-inventory.ts, enable-tracking.ts
 dashboard/                Next.js admin-dashboard (Vercel): oversikt, ordrer, umatchet, lager, synk
 shopify-app/              Shopify Function: kassevalidering «ett parti fra én butikk» (§7)

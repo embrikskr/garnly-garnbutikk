@@ -63,13 +63,25 @@ tallene på tvers av butikkene.
 Strikkefryd gikk samtidig fra 1565 til 1845 matchede rader, etter alias-seeden og
 de 1513 nye variantene fra 05.09.
 
-### Varsling har ingen mottaker ennå
+### Butikkpanelet er live
 
-Migrasjon 008 setter `notify_offers` til false, fordi butikkene skal svare i
-panelet. Panelet er ikke deployet (krever Cloudflare Pages), og `RESEND_API_KEY`
-er tom. Et tilbud ville altså ikke nådd noen. `notify_offers` er derfor satt til
-**true** på begge butikker inntil panelet er ute. Ingen ordrer har kommet ennå,
-så ingenting er gått tapt. Sett den tilbake til false når panelet er live.
+**https://zesaeleooiptrpjzqhxe.supabase.co/functions/v1/panel**
+
+Embrik vil ikke ha e-post til butikkene, bare panelet. `notify_offers` står derfor
+på false på begge butikker, og verken Resend- eller Twilio-nøkkel er satt. Panelet
+er eneste kanal.
+
+Cloudflare Pages ble droppet: Supabase Storage serverer HTML som `text/plain` av
+sikkerhetsgrunner, og Pages krever en innlogging vi ikke har. Panelet serveres i
+stedet av en `panel`-funksjon som har filene bakt inn (`deno task build-panel`).
+Det gir samme origin som API-et, så `PANEL_ORIGIN` og CORS blir triviell.
+
+Verifisert: begge butikker logger inn, RLS gir hver av dem kun egne rader
+(`stores` returnerer én butikk per bruker), alle tre panel-views svarer 200, og
+CORS-preflight mot `offer-respond` slipper gjennom nøyaktig dette origin.
+`v_panel_queue` eksponerer ikke `raw_order` – kun postnummer og sted av kundedata.
+
+Innloggingene ligger utenfor repoet. Passordene bør byttes av butikkene selv.
 
 ### Feil funnet ved verifisering: 254 varer var usynlige i butikken
 
@@ -164,10 +176,8 @@ men radene bør merkes som avbrutt etter en tidsfrist.
 3. Frakt for Garnkilden: samme åpne valg som for Strikkefryd.
 
 ## Ikke deployet ennå (krever tilganger)
-- **Butikkpanelet** (`panel/`): `npx wrangler pages deploy panel --project-name garnly-butikkpanel`
-  krever Cloudflare-innlogging. anon-nøkkelen er lagt inn i `panel/config.js`. Etterpå:
-  `supabase secrets set PANEL_ORIGIN=https://butikk.garnly.no`, CNAME, og en bruker per butikk
-  i Supabase Auth + rad i `store_users`.
+- **butikk.garnly.no**: DNS-en er ikke satt opp. Panelet kjører i mellomtiden på
+  Supabase-domenet (se over), så butikkene kan brukes uten det.
 - **Validation Function**: `shopify app deploy` fra `shopify-app/` (krever Shopify CLI-innlogging),
   deretter aktiveres valideringen i Shopify admin → Settings → Checkout.
 - **Ikon** `panel/icon.png` (512×512) for hjemskjerm på nettbrett.
