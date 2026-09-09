@@ -36,9 +36,10 @@ Vercel oppgir, og oppdater `PANEL_ORIGIN`.
 `icon.png` og `favicon.ico` genereres av `python3 scripts/make-panel-icon.py`
 (krever Pillow). Ikke rediger dem for hånd – endre skriptet og kjør det på nytt.
 
-Faviconen tegnes på nytt per størrelse, ikke nedskalert fra 512: spiralen har tre
-omdreininger på hjemskjermikonet og halvannen i fanen, fordi den tynne varianten
-blir en grå klump på 16 piksler.
+Motivet er en «G» i husfargene. Et garnnøste ble prøvd først, men ble uleselig i
+fanen: som spiral en grå klump, som kryssende ellipser mest et atom. Faviconen
+tegnes på nytt per størrelse i stedet for å skaleres ned fra 512, og med litt
+større bokstav, siden det er mindre luft å gå på i en fane.
 
 ## Gi en butikk tilgang
 
