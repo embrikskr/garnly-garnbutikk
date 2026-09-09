@@ -19,16 +19,30 @@ import { makeNextOffer, refreshOrderStatus } from "../_shared/offers.ts";
 import { bookShipment } from "../_shared/shipping/index.ts";
 import type { LineItem, StoreRow } from "../_shared/types.ts";
 
-const CORS = {
-  "Access-Control-Allow-Origin": Deno.env.get("PANEL_ORIGIN") ?? "*",
-  "Access-Control-Allow-Headers": "authorization, content-type, x-cron-secret",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Max-Age": "86400",
-};
+/**
+ * PANEL_ORIGIN kan være flere adresser, kommaseparert: panelet ligger på én kanonisk
+ * URL, men Vercel gir hver deploy sin egen, og åpner man panelet derfra blir origin
+ * en annen. Da blokkerer nettleseren svaret, og butikken ser bare «fikk ikke kontakt».
+ * Vi speiler tilbake origin når den står på lista, ellers den første oppføringen.
+ */
+const ALLOWED = (Deno.env.get("PANEL_ORIGIN") ?? "*").split(",").map((s) => s.trim()).filter(Boolean);
+
+function cors(req: Request): Record<string, string> {
+  const origin = req.headers.get("origin") ?? "";
+  const allow = ALLOWED.includes("*") ? "*" : ALLOWED.includes(origin) ? origin : ALLOWED[0];
+  return {
+    "Access-Control-Allow-Origin": allow,
+    "Access-Control-Allow-Headers": "authorization, content-type, x-cron-secret",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Max-Age": "86400",
+    "Vary": "Origin",
+  };
+}
 
 type Outcome = { ok: boolean; title: string; message: string; code?: string };
 
 Deno.serve(async (req) => {
+  const CORS = cors(req);
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
 
   const url = new URL(req.url);

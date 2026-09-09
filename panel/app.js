@@ -269,13 +269,19 @@ async function respond(offerId, action, quiet = false) {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
       body: JSON.stringify({ offer_id: offerId, action }),
-      signal: AbortSignal.timeout(20000),
+      // AbortSignal.timeout mangler i eldre nettlesere (Safari under 16). Uten
+      // sjekken kaster selve oppsettet, og det ser ut som nettverksfeil.
+      signal: typeof AbortSignal?.timeout === "function" ? AbortSignal.timeout(20000) : undefined,
     });
     const body = await res.json().catch(() => ({}));
     if (!quiet) toast(body.message || (res.ok ? "Sendt." : "Noe gikk galt."), body.ok ? "" : "error");
     return Boolean(body.ok);
   } catch (err) {
-    if (!quiet) toast("Fikk ikke kontakt med Garnly. Prøv igjen.", "error");
+    // Ikke skjul årsaken: CORS-blokkering, avbrutt kall og nedlagt nett gir alle
+    // samme unntak her, og uten teksten er de umulige å skille fra hverandre.
+    console.error("[offer-respond]", err);
+    const grunn = err?.name === "TimeoutError" ? "Svaret tok for lang tid." : String(err?.message ?? err);
+    if (!quiet) toast(`Fikk ikke kontakt med Garnly: ${grunn}`, "error");
     return false;
   } finally {
     busy.delete(offerId);
