@@ -61,7 +61,16 @@ async function processOrder(orderGid: string) {
     const vid = n.lineItem.variant?.id;
     const pid = vid ? byVariant.get(vid) : undefined;
     if (!pid) { unknown.push(n.lineItem.title); continue; }
-    lines.push({ line_item_id: n.id, variant_id: vid!, product_id: pid, qty: n.remainingQuantity, title: n.lineItem.title });
+    // Beløpet på Shopify-linja gjelder hele linja. Vi ruter ofte bare en del av den
+    // (remainingQuantity), så andelen regnes ut fra antallet vi faktisk ruter.
+    const helLinje = Number(n.lineItem.discountedTotalSet?.shopMoney?.amount ?? 0);
+    const helMva = (n.lineItem.taxLines ?? []).reduce((sum, t) => sum + Number(t.priceSet?.shopMoney?.amount ?? 0), 0);
+    const andel = n.lineItem.quantity > 0 ? n.remainingQuantity / n.lineItem.quantity : 0;
+    lines.push({
+      line_item_id: n.id, variant_id: vid!, product_id: pid, qty: n.remainingQuantity, title: n.lineItem.title,
+      amount_inc_vat: Math.round(helLinje * andel * 100) / 100,
+      vat_amount: Math.round(helMva * andel * 100) / 100,
+    });
   }
 
   const { data: ro } = await db.from("routing_orders").insert({
@@ -69,6 +78,10 @@ async function processOrder(orderGid: string) {
     shopify_order_name: order.name,
     shopify_fulfillment_order_id: fo.id,
     customer: { email: order.email, ...(order.shippingAddress ?? {}) },
+    currency: order.currencyCode,
+    total_inc_vat: Number(order.currentTotalPriceSet?.shopMoney?.amount ?? 0),
+    shipping_inc_vat: Number(order.totalShippingPriceSet?.shopMoney?.amount ?? 0),
+    vat_amount: Number(order.currentTotalTaxSet?.shopMoney?.amount ?? 0),
     raw_order: order,
   }).select().single();
   await audit("routing_order", ro.id, "created", { order: order.name, lines: lines.length, unknown });
@@ -102,6 +115,8 @@ async function processOrder(orderGid: string) {
     const g = groups[i];
     const { data: row } = await db.from("routing_groups").insert({
       routing_order_id: ro.id, group_no: i + 1, line_items: g.line_items, shopify_fulfillment_order_id: groupFoIds[i],
+      gross_inc_vat: sumBelop(g.line_items, "amount_inc_vat"),
+      vat_amount: sumBelop(g.line_items, "vat_amount"),
     }).select().single();
     await db.from("offers").insert(g.candidates.map((storeId, idx) => ({ routing_group_id: row.id, store_id: storeId, sequence_no: idx + 1, status: "pending" })));
     await audit("routing_group", row.id, "planned", { candidates: g.candidates, lines: g.line_items.length, split: groups.length > 1 });
@@ -111,7 +126,14 @@ async function processOrder(orderGid: string) {
   if (uncovered.length) {
     const { data: row } = await db.from("routing_groups").insert({
       routing_order_id: ro.id, group_no: groups.length + 1, line_items: uncovered, shopify_fulfillment_order_id: remainingFoId, status: "escalated",
+      gross_inc_vat: sumBelop(uncovered, "amount_inc_vat"),
+      vat_amount: sumBelop(uncovered, "vat_amount"),
     }).select().single();
     await escalateGroup({ ...row, routing_orders: { shopify_order_name: order.name } }, "Ingen butikk har hele antallet av disse linjene");
   }
+}
+
+/** Summerer et beløpsfelt over varelinjene i en gruppe. Grunnlaget for oppgjøret. */
+function sumBelop(items: LineItem[], felt: "amount_inc_vat" | "vat_amount"): number {
+  return Math.round(items.reduce((sum, i) => sum + (i[felt] ?? 0), 0) * 100) / 100;
 }

@@ -207,10 +207,17 @@ export async function setStockByStoreMetafields(entries: Array<{ variantId: stri
 // Ordre og fulfillment orders
 // ---------------------------------------------------------------------------
 
+/** Beløp fra Shopify kommer som streng. Alt er inkl. mva (shop.taxesIncluded = true). */
+interface Money { shopMoney: { amount: string } }
+
 export interface ShopifyOrder {
   id: string;
   name: string;
   email: string | null;
+  currencyCode: string;
+  currentTotalPriceSet: Money;
+  currentTotalTaxSet: Money;
+  totalShippingPriceSet: Money;
   shippingAddress: {
     name: string; address1: string; address2: string | null; zip: string; city: string;
     country: string; countryCodeV2: string; phone: string | null;
@@ -223,7 +230,12 @@ export interface ShopifyOrder {
       lineItems: {
         nodes: Array<{
           id: string; remainingQuantity: number; totalQuantity: number;
-          lineItem: { id: string; title: string; quantity: number; variant: { id: string; barcode: string | null; sku: string | null; inventoryItem: { id: string } } | null };
+          lineItem: {
+            id: string; title: string; quantity: number;
+            variant: { id: string; barcode: string | null; sku: string | null; inventoryItem: { id: string } } | null;
+            discountedTotalSet: Money;
+            taxLines: Array<{ priceSet: Money }>;
+          };
         }>;
       };
     }>;
@@ -231,11 +243,19 @@ export interface ShopifyOrder {
 }
 
 export async function getOrder(orderId: string): Promise<ShopifyOrder> {
-  const Q = `query Order($id: ID!) { order(id: $id) { id name email
+  // Beløpene er nødvendige for oppgjøret med butikkene. Prisene inkluderer mva
+  // (shop.taxesIncluded = true), så discountedTotalSet er linjesummen inkl. mva etter
+  // rabatt. current*-feltene tar hensyn til senere endringer og refusjoner.
+  const Q = `query Order($id: ID!) { order(id: $id) { id name email currencyCode
+    currentTotalPriceSet { shopMoney { amount } }
+    currentTotalTaxSet { shopMoney { amount } }
+    totalShippingPriceSet { shopMoney { amount } }
     shippingAddress { name address1 address2 zip city country countryCodeV2 phone }
     fulfillmentOrders(first: 10) { nodes { id status assignedLocation { location { id } }
       lineItems(first: 50) { nodes { id remainingQuantity totalQuantity
-        lineItem { id title quantity variant { id barcode sku inventoryItem { id } } } } } } } } }`;
+        lineItem { id title quantity variant { id barcode sku inventoryItem { id } }
+          discountedTotalSet { shopMoney { amount } }
+          taxLines { priceSet { shopMoney { amount } } } } } } } } } }`;
   const res = await gql(Q, { id: orderId });
   if (!res.order) throw new ShopifyError(`Ordre ${orderId} finnes ikke`);
   return res.order;

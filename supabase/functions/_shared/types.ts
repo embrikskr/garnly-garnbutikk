@@ -59,6 +59,10 @@ export interface LineItem {
   product_id: string; // Garnly products.id
   qty: number;
   title: string;
+  /** Linjesum inkl. mva etter rabatt, i butikkens valuta. Grunnlag for oppgjør. */
+  amount_inc_vat?: number;
+  /** Mva-beløpet i linjesummen over. */
+  vat_amount?: number;
 }
 
 export interface RoutingGroupRow {
