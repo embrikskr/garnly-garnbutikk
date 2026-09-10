@@ -18,9 +18,14 @@ allerede sto i drift, og migrasjonene 003–008 er kjørt.
 Tre ting sto i veien, alle løst:
 
 1. **WAF.** `api.kasseservice.no` blokkerer datasenter-IP-er. Kallene rutes nå
-   gjennom en tinyproxy på en Oracle Always Free-maskin (79.76.60.202) som Duell
-   har hvitelistet. `DUELL_PROXY_URL` i function-secrets. Gratis, fast IP,
-   dekker alle Duell-butikker – ikke én proxy per butikk.
+   gjennom en tinyproxy på en Oracle Always Free-maskin (79.76.60.202).
+   `DUELL_PROXY_URL` i function-secrets. Gratis, fast IP, dekker alle
+   Duell-butikker – ikke én proxy per butikk.
+
+   **Duell bekreftet hvitelisting av 79.76.60.202 den 10.09.2026.** Den IP-en er
+   dermed en del av avtalen, ikke bare et teknisk valg. Byttes proxyen ut, eller
+   får maskinen ny IP, stopper Garnkilden-synken til Duell har hvitelistet den nye
+   adressen. Si fra til dem før en eventuell flytting, ikke etter.
 2. **Sideblading.** Duell kapper sider til 100 rader uansett hva `length` sier.
    Adapteren flyttet `start` med ønsket sidestørrelse (500) og hoppet dermed over
    fire av fem rader: Garnkilden ga 700 av 3345 rader. Retter man dette, leses
