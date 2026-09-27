@@ -18,6 +18,7 @@ Deno.serve(async (req) => {
   const rows: Record<string, unknown>[] = [];
   const seenVariantIds: string[] = [];
   const untracked = new Map<string, string[]>();
+  const garnpakkeVarianter: string[] = [];
 
   for await (const v of iterateVariants()) {
     seen++;
@@ -26,7 +27,18 @@ Deno.serve(async (req) => {
     const ean = normalizeEan(v.barcode);
     if (ean) withEan++;
     seenVariantIds.push(v.id);
-    if (!v.inventoryItem.tracked) untracked.set(v.product.id, [...(untracked.get(v.product.id) ?? []), v.id]);
+    // Garnpakker skal ALDRI få lagersporing. De settes sammen av garn butikken alt har,
+    // så rutingen avgjør om de kan lages – ikke et lagertall. Slår vi på sporing, står de
+    // med null og vises som utsolgt.
+    //
+    // Unntaket henger på Shopify-data (productType/tag), ikke på exclude_from_sync eller
+    // navnemønster. Ved flyttingen 27.09 fikk produktene nye id-er og nye norske navn, og
+    // et unntak basert på «Yarn kit%» ville stilltiende sluttet å virke. Dette overlever
+    // neste flytting.
+    if (erGarnpakke(v.product)) garnpakkeVarianter.push(v.id);
+    else if (!v.inventoryItem.tracked) {
+      untracked.set(v.product.id, [...(untracked.get(v.product.id) ?? []), v.id]);
+    }
     rows.push({
       shopify_variant_id: v.id,
       shopify_product_id: v.product.id,
@@ -43,13 +55,24 @@ Deno.serve(async (req) => {
     if (error) return json({ error: error.message, at: i }, 500);
     upserted += data?.length ?? 0;
   }
+  // Garnpakker skal heller ikke ha lager skrevet fra kassesystemene. Ved flyttingen
+  // fikk de nye rader, og unntaket fra 003 (som traff «Yarn kit%») gjelder ikke lenger.
+  // Settes bare til true, aldri til false: manuelle unntak på andre produkter skal stå.
+  let ekskludert = 0;
+  for (let i = 0; i < garnpakkeVarianter.length; i += 200) {
+    const { error, data } = await db.from("products").update({ exclude_from_sync: true })
+      .in("shopify_variant_id", garnpakkeVarianter.slice(i, i + 200)).select("id");
+    if (error) return json({ error: error.message, at: "garnpakke-unntak" }, 500);
+    ekskludert += data?.length ?? 0;
+  }
+
   // Varianter som er borte fra Shopify deaktiveres
   if (seenVariantIds.length) {
     await db.from("products").update({ active: false }).not("shopify_variant_id", "in", `(${seenVariantIds.map((s) => `"${s}"`).join(",")})`);
   }
   // Lagersporing må være på for at antall per location skal styre salg (§4)
   const tracked = await ensureVariantsTracked(untracked);
-  return json({ seen, upserted, with_ean: withEan, without_ean: rows.length - withEan, tracking_enabled: tracked });
+  return json({ seen, upserted, with_ean: withEan, without_ean: rows.length - withEan, tracking_enabled: tracked, garnpakker_unntatt: ekskludert });
 });
 
 export function parseName(vendor: string | null, productTitle: string, variantTitle: string) {
@@ -69,4 +92,10 @@ export function parseName(vendor: string | null, productTitle: string, variantTi
     if (cm) { colorCode = cm[1]; colorName = cm[2].trim(); }
   }
   return { brand, yarn, colorCode, colorName };
+}
+
+/** Garnpakke? Kjennes på productType eller tag i Shopify, ikke på navn. */
+function erGarnpakke(product: { productType?: string | null; tags?: string[] | null }): boolean {
+  if ((product.productType ?? "").trim().toLowerCase() === "garnpakke") return true;
+  return (product.tags ?? []).some((t) => t.trim().toLowerCase() === "garnpakke");
 }

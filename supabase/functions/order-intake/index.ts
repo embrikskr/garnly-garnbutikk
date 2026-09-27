@@ -48,7 +48,6 @@ async function processOrder(orderGid: string) {
   const fos = order.fulfillmentOrders.nodes.filter((fo) => ["OPEN", "IN_PROGRESS", "ON_HOLD", "SCHEDULED"].includes(fo.status));
   if (fos.length === 0) { console.log("Ingen åpne fulfillment orders:", order.name); return; }
   const fo = fos[0];
-  await holdFulfillmentOrder(fo.id, "Garnly ordreruting pågår");
 
   // Varelinjer → Garnly-produkter
   const variantIds = fo.lineItems.nodes.map((n) => n.lineItem.variant?.id).filter(Boolean) as string[];
@@ -57,7 +56,11 @@ async function processOrder(orderGid: string) {
 
   const lines: LineItem[] = [];
   const unknown: string[] = [];
+  let gavekort = 0;
   for (const n of fo.lineItems.nodes) {
+    // Gavekort har ingen butikk å rutes til og finnes ikke i products. Uten dette
+    // havnet de i `unknown`, og en ren gavekortordre eskalerte til manuell håndtering.
+    if (n.lineItem.variant?.product?.isGiftCard) { gavekort++; continue; }
     const vid = n.lineItem.variant?.id;
     const pid = vid ? byVariant.get(vid) : undefined;
     if (!pid) { unknown.push(n.lineItem.title); continue; }
@@ -73,6 +76,16 @@ async function processOrder(orderGid: string) {
     });
   }
 
+  // Bare gavekort: ingenting å rute, og ingen grunn til å holde ordren. Shopify
+  // leverer gavekortet selv. Holdes den, blir den liggende og venter på oss for alltid.
+  if (lines.length === 0 && unknown.length === 0 && gavekort > 0) {
+    console.log(`[order-intake] ${order.name}: bare gavekort (${gavekort}), hopper over`);
+    return;
+  }
+
+  // Først nå vet vi at ordren skal rutes eller eskaleres. Da er holdet riktig.
+  await holdFulfillmentOrder(fo.id, "Garnly ordreruting pågår");
+
   const { data: ro } = await db.from("routing_orders").insert({
     shopify_order_id: order.id,
     shopify_order_name: order.name,
@@ -84,7 +97,7 @@ async function processOrder(orderGid: string) {
     vat_amount: Number(order.currentTotalTaxSet?.shopMoney?.amount ?? 0),
     raw_order: order,
   }).select().single();
-  await audit("routing_order", ro.id, "created", { order: order.name, lines: lines.length, unknown });
+  await audit("routing_order", ro.id, "created", { order: order.name, lines: lines.length, unknown, gavekort });
 
   if (unknown.length || lines.length === 0) {
     const { data: g } = await db.from("routing_groups").insert({ routing_order_id: ro.id, group_no: 1, line_items: lines, shopify_fulfillment_order_id: fo.id, status: "escalated" }).select().single();

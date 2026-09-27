@@ -174,7 +174,8 @@ export async function activateInventoryAtLocation(inventoryItemIds: string[], lo
 export async function* iterateVariants() {
   const Q = `query($after: String) { productVariants(first: 250, after: $after) {
     pageInfo { hasNextPage endCursor }
-    nodes { id sku barcode title inventoryItem { id tracked } product { id title vendor status } } } }`;
+    nodes { id sku barcode title inventoryItem { id tracked }
+      product { id title vendor status productType tags } } } }`;
   let after: string | null = null;
   while (true) {
     const res: any = await gql(Q, { after });
@@ -232,7 +233,10 @@ export interface ShopifyOrder {
           id: string; remainingQuantity: number; totalQuantity: number;
           lineItem: {
             id: string; title: string; quantity: number;
-            variant: { id: string; barcode: string | null; sku: string | null; inventoryItem: { id: string } } | null;
+            variant: {
+              id: string; barcode: string | null; sku: string | null; inventoryItem: { id: string };
+              product: { id: string; isGiftCard: boolean } | null;
+            } | null;
             discountedTotalSet: Money;
             taxLines: Array<{ priceSet: Money }>;
           };
@@ -253,7 +257,7 @@ export async function getOrder(orderId: string): Promise<ShopifyOrder> {
     shippingAddress { name address1 address2 zip city country countryCodeV2 phone }
     fulfillmentOrders(first: 10) { nodes { id status assignedLocation { location { id } }
       lineItems(first: 50) { nodes { id remainingQuantity totalQuantity
-        lineItem { id title quantity variant { id barcode sku inventoryItem { id } }
+        lineItem { id title quantity variant { id barcode sku inventoryItem { id } product { id isGiftCard } }
           discountedTotalSet { shopMoney { amount } }
           taxLines { priceSet { shopMoney { amount } } } } } } } } } }`;
   const res = await gql(Q, { id: orderId });
