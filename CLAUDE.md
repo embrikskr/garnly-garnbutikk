@@ -4,7 +4,7 @@ Dette repoet er backend for Garnlys felles nettbutikk for lokale garnbutikker. L
 
 ## Hva systemet gjør
 
-1. **Lagersynk**: leser lager fra partnerbutikkenes kassesystemer (Duell, Mystore, CSV) hvert 15. minutt, matcher mot Garnlys produkter på EAN → alias (`product_aliases`) → SKU → navn, og skriver antall til butikkens *location* i Garnlys Shopify (`kycbgs-yy.myshopify.com`).
+1. **Lagersynk**: leser lager fra partnerbutikkenes kassesystemer (Duell, Mystore, CSV) hvert 15. minutt, matcher mot Garnlys produkter på EAN → alias (`product_aliases`) → SKU → navn, og skriver antall til butikkens *location* i Garnlys Shopify (`fhxr10-gu.myshopify.com`).
 2. **Ordreruting**: når en kunde betaler i Shopify, settes ordren på hold, og den tilbys én butikk om gangen (round-robin på `last_assigned_at`). Butikken svarer i **butikkpanelet** (`panel/`, garnly-butikkpanel.vercel.app) innen en frist (i åpningstid). Ved aksept flyttes fulfillment order til butikkens location og frakt bookes.
 3. **Butikkpanel**: en side butikken har oppe på nettbrettet. Sanntid via Supabase Realtime på `offers`, innlogging med Supabase Auth, tilgang styrt av `store_users` + RLS. E-post per tilbud er AV som standard (`stores.notify_offers`); det skalerer ikke når en butikk får titalls ordrer om dagen.
 4. **Regler som aldri brytes**: hele antallet av én varelinje kommer fra samme butikk (garnparti). Hele ordren fra én butikk foretrekkes; kan splittes per varelinje hvis ingen har alt. Aktivt avslag straffes ikke; timeout gir 24 t nedvekting (maks 3).

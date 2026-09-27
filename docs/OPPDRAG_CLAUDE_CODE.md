@@ -10,7 +10,7 @@ Functions, butikkpanelet og webhookene.
 
 ## 1. Hvor vi står
 
-**Shopify (kycbgs-yy.myshopify.com) er live.** Butikken er publisert, uten
+**Shopify (fhxr10-gu.myshopify.com) er live.** Butikken er publisert, uten
 passord, og kan kjøpes fra. Ingen ordrer har kommet ennå.
 
 | Ting | Verdi |

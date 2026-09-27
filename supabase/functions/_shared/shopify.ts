@@ -1,7 +1,7 @@
 /**
  * Shopify Admin GraphQL-klient. Alle operasjoner er validert mot Admin API 2025-07-skjemaet.
  *
- * Env: SHOPIFY_SHOP (kycbgs-yy.myshopify.com), SHOPIFY_API_VERSION, og én av:
+ * Env: SHOPIFY_SHOP (fhxr10-gu.myshopify.com), SHOPIFY_API_VERSION, og én av:
  *   - SHOPIFY_CLIENT_ID + SHOPIFY_CLIENT_SECRET (Dev Dashboard-app i egen organisasjon;
  *     token hentes med client credentials-grant og fornyes automatisk – utløper etter 24 t)
  *   - SHOPIFY_ADMIN_TOKEN (fast token fra en eldre admin-opprettet custom app)

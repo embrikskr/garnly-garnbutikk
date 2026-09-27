@@ -1,6 +1,58 @@
 # Status – garnly-garnbutikk
 
-Oppdatert: 2026-09-09
+Oppdatert: 2026-09-27
+
+## Flyttet til ny Shopify-butikk (27.09.2026)
+
+Garnly byttet Shopify-butikk: **`kycbgs-yy` → `fhxr10-gu.myshopify.com`**.
+Produktene fikk nye id-er, og lokasjonene er nye:
+
+| Location | GID |
+|---|---|
+| Strikkefryd (Mjøndalen) | `gid://shopify/Location/94717476924` |
+| Garnkilden (Stavanger) | `gid://shopify/Location/94717509692` |
+
+Backenden er flyttet over og verifisert ende-til-ende:
+
+- **Secrets** byttet til den nye appen (client credentials-grant, som før).
+  `SHOPIFY_WEBHOOK_SECRET` satt til appens client secret.
+  `SHOPIFY_ADMIN_TOKEN` står tom – ellers ville den overstyrt grant-en.
+- **Webhooks** opprettet på nytt på API 2026-07:
+  ORDERS_PAID → `order-intake`, ORDERS_CANCELLED → `order-cancelled`.
+  Den nye butikken hadde null webhooks før dette.
+- **Alle 8 Edge Functions** deployet på nytt.
+- **`sync-products`** kjørt: 5195 varianter speilet (3391 med EAN),
+  `tracking_enabled: 0`, `garnpakker_unntatt: 23`. 2546 produkter synkes.
+- **Lager skrevet** med `backfill-store-inventory` for begge butikker
+  (Strikkefryd 1741 varer, Garnkilden 1150) + metafelt `garnly.stock_by_store`.
+
+### Garnpakker unntas nå på Shopify-data, ikke på navn
+
+Unntaket fra 003 traff `brand = 'Garnly' and name like 'Yarn kit%'`. Etter
+flyttingen heter pakkene «Garnpakke – …» med nye id-er, så det unntaket sluttet
+stilltiende å virke. `sync-products` kjenner dem nå igjen på `productType` eller
+tag `garnpakke` i Shopify, og setter `exclude_from_sync` selv. Det overlever
+neste flytting. Gavekort hoppes over i `order-intake` på
+`variant.product.isGiftCard`; en ordre med bare gavekort settes ikke på hold.
+
+### Fellen som var lett å gå i
+
+Etter flyttingen sto Shopify på 0 i lager overalt, mens `inventory` i basen
+allerede hadde riktige tall. `sync-store` skriver bare **differanser**, så den så
+ingen endring og ville aldri rørt Shopify – butikken ville stått tom for alltid
+uten en eneste feilmelding. Derfor engangs-backfill. Samme grunn til at
+`sync_runs` så friske ut på gamle credentials: `rows_changed` var 0, så Shopify
+ble aldri kontaktet. Verifisert ved å sette ett lagertall feil med vilje og se
+synken skrive riktig tall tilbake til Shopify.
+
+### Åpent
+
+- **`RESEND_API_KEY` er tom.** Ingen driftsvarsler sendes – heller ikke varselet
+  etter tre feilede synker på rad. Går synken ned, er det ingen som får beskjed.
+- Den nye butikken har fortsatt en tredje location, «Shop location», som
+  fullfører nettordrer. Den står på 0 i alt, så den tar ikke salg, men den bør
+  ryddes vekk når flyttingen er satt.
+- Garnpakkene er merket `dummy-content` i Shopify.
 
 ## Nå (09.09.2026, kveld)
 
