@@ -2,6 +2,38 @@
 
 Oppdatert: 2026-09-27
 
+## Synkefrekvens ryddet (27.09.2026)
+
+**Produktsynken kjørte ikke automatisk.** `sync-products` har alltid vært manuell – filhodet
+sa «eller daglig via cron», men jobben fantes ikke. Cron hadde bare `sync-stores`,
+`timeout-sweeper`, `pos-catalog` og opprydding. Et nytt garn lagt inn i Shopify fikk dermed
+ingen rad i `products`, kassalinjene for varen havnet i `unmatched_items`, og det ble aldri
+skrevet lager: varen så utsolgt ut selv med fulle hyller. Migrasjon 012 legger den inn
+kl. 03:40 UTC, etter `pos-catalog`.
+
+**Lagersynken gikk hvert 20. minutt, ikke hvert 15.** To ting, begge i `_shared/schedule.ts`:
+
+1. `last_sync_at` ble satt på nytt når synken var *ferdig*. Avstanden til neste synk ble
+   dermed 15 min pluss kjøretiden. Garnkilden (~45 s) traff 15 min, Strikkefryd (~130 s)
+   drev til 20. Stempelet settes nå bare ved start, som er riktig anker.
+2. Stempelet settes aldri presis på cron-tikket – utsending og oppstart tar sekunder, og
+   butikkene synkes sekvensielt, så butikk nummer to venter på nummer én. Uten slakk havner
+   15-minutters-merket rett etter et tikk, og butikken må vente på det neste. `graceMin`
+   (2 min) trekkes derfor fra terskelen.
+
+Slakken må være større enn forsinkelsen på stempelet. Det er grunnen til at punkt 1 måtte
+fikses og ikke bare kompenseres for: en kjøring på 130 s ville dratt forsinkelsen over
+enhver fornuftig slakk. Begge grensene er testet i `schedule_test.ts`.
+
+**Natt: hver time mellom 22 og 08** i stedet for hvert 15. minutt – butikkene er stengt og
+kassene står stille. Vinduet er i lokal tid (Europe/Oslo), ikke UTC, så sommertid følger med;
+pg_cron kjører i UTC og kan ikke uttrykke det, derfor ligger avgjørelsen i koden.
+`NIGHT_SYNC_INTERVAL_MIN=0` slår av nattsynken helt.
+
+Verifisert i drift: Garnkilden gikk fra 20,1 til 15,0 min rett etter deploy, og nattgatingen
+er kjørt ende-til-ende (svarte `{"started":0,"skipped":"natt"}` med vinduet satt til hele
+døgnet, deretter tilbakestilt).
+
 ## Flyttet til ny Shopify-butikk (27.09.2026)
 
 Garnly byttet Shopify-butikk: **`kycbgs-yy` → `fhxr10-gu.myshopify.com`**.

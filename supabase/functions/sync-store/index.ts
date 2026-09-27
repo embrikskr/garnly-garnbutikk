@@ -13,8 +13,7 @@ import { getAdapter } from "../_shared/adapters/index.ts";
 import { activateInventoryAtLocation, enableTracking, setOnHandQuantities, setStockByStoreMetafields } from "../_shared/shopify.ts";
 import type { ProductRow, StoreRow } from "../_shared/types.ts";
 import { matchLines } from "../_shared/matching.ts";
-
-const SYNC_INTERVAL_MIN = Number(Deno.env.get("SYNC_INTERVAL_MIN") ?? 15);
+import { dueCutoff, isDue, scheduleFromEnv } from "../_shared/schedule.ts";
 
 Deno.serve(async (req) => {
   const unauthorized = requireInternalSecret(req);
@@ -27,9 +26,14 @@ Deno.serve(async (req) => {
     const { data } = await db.from("stores").select("*").eq("id", body.store_id).single();
     if (data) stores = [data];
   } else {
+    // Hvor ofte det synkes avgjøres i schedule.ts: sjeldnere om natten (lokal tid, så
+    // sommertid følger med), og med slakk så 15-minutters-merket ikke havner mellom to
+    // cron-tikk. Se filhodet der.
+    const schedule = scheduleFromEnv();
+    const cutoff = dueCutoff(new Date(), schedule);
+    if (!cutoff) return json({ started: 0, skipped: "natt", night_interval_min: schedule.nightIntervalMin });
     const { data } = await db.from("stores").select("*").eq("active", true).in("pos_system", ["duell", "mystore", "csv"]);
-    const cutoff = Date.now() - SYNC_INTERVAL_MIN * 60 * 1000;
-    stores = (data ?? []).filter((s: StoreRow) => !s.last_sync_at || new Date(s.last_sync_at).getTime() < cutoff);
+    stores = (data ?? []).filter((s: StoreRow) => isDue(s.last_sync_at, cutoff));
   }
 
   const work = (async () => {
@@ -201,14 +205,20 @@ async function syncOne(store: StoreRow, dryRun: boolean) {
       await setStockByStoreMetafields([...byVariant].map(([variantId, stockByLocation]) => ({ variantId, stockByLocation })));
     }
 
-    await db.from("stores").update({ last_sync_at: now, last_sync_status: "ok", last_sync_rows: lines.length, consecutive_sync_failures: 0 }).eq("id", store.id);
+    // last_sync_at settes IKKE her. Den ble satt da synken startet (claim over), og det er
+    // riktig anker for frekvensen: flytter vi den til slutten, blir avstanden til neste synk
+    // 15 min PLUSS kjøretiden. Strikkefryd bruker ~130 s, og drev dermed til 20 min mens
+    // Garnkilden på ~45 s traff 15. Målt 27.09.2026.
+    await db.from("stores").update({ last_sync_status: "ok", last_sync_rows: lines.length, consecutive_sync_failures: 0 }).eq("id", store.id);
     await db.from("sync_runs").update({ finished_at: now, status: "ok", rows_read: lines.length, rows_matched: matched.length, rows_changed: changes.length }).eq("id", runId);
     return { store: store.name, rows: lines.length, matched: matched.length, unmatched: unmatched.length, changed: changes.length, shopify_written: shopifyWritten, dry_run: dryRun };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error(`[sync ${store.name}]`, msg);
     const failures = store.consecutive_sync_failures + 1;
-    await db.from("stores").update({ last_sync_at: new Date().toISOString(), last_sync_status: "error: " + msg.slice(0, 200), consecutive_sync_failures: failures }).eq("id", store.id);
+    // Samme her: claim-tidspunktet står. En synk som feiler raskt skal ikke prøves igjen
+    // umiddelbart, og en som feiler seint skal ikke skyve neste forsøk ekstra langt ut.
+    await db.from("stores").update({ last_sync_status: "error: " + msg.slice(0, 200), consecutive_sync_failures: failures }).eq("id", store.id);
     await db.from("sync_runs").update({ finished_at: new Date().toISOString(), status: "error", error: msg }).eq("id", runId);
     await audit("store", store.id, "sync_failed", { error: msg, failures });
     if (failures === 3) {

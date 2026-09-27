@@ -1,0 +1,14 @@
+-- Daglig produktsynk, kl. 03:40 UTC – etter pos-catalog (03:15) og før butikkene åpner.
+--
+-- sync-products har alltid vært manuell. Filhodet sa «eller daglig via cron», men jobben ble
+-- aldri opprettet: cron hadde bare sync-stores, timeout-sweeper, pos-catalog og opprydding.
+--
+-- Konsekvensen er stille og alvorlig. Et nytt garn lagt inn i Shopify får ingen rad i
+-- products. Kassesystemets linjer for varen havner da i unmatched_items, det skrives aldri
+-- lager til noen location, og kunden ser «utsolgt» selv om begge butikkene har fulle hyller.
+-- Er lagersporing av på varianten, går det motsatt vei: Shopify selger den uten tak.
+-- Ingen av tilfellene gir en feilmelding.
+--
+-- sync-products slår samtidig på lagersporing på nye varianter og setter exclude_from_sync
+-- på garnpakker, så begge de tingene holder seg ved like av seg selv når sortimentet vokser.
+select cron.schedule('sync-products', '40 3 * * *', $$ select call_edge_function('sync-products') $$);
