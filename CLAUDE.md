@@ -5,7 +5,7 @@ Dette repoet er backend for Garnlys felles nettbutikk for lokale garnbutikker. L
 ## Hva systemet gjør
 
 1. **Lagersynk**: leser lager fra partnerbutikkenes kassesystemer (Duell, Mystore, CSV) hvert 15. minutt på dagtid og hver time mellom 22 og 08 (lokal tid, `_shared/schedule.ts`), matcher mot Garnlys produkter på EAN → alias (`product_aliases`) → SKU → navn, og skriver antall til butikkens *location* i Garnlys Shopify (`fhxr10-gu.myshopify.com`).
-2. **Ordreruting**: når en kunde betaler i Shopify, settes ordren på hold, og den tilbys én butikk om gangen (round-robin på `last_assigned_at`). Butikken svarer i **butikkpanelet** (`panel/`, garnly-butikkpanel.vercel.app) innen en frist (i åpningstid). Ved aksept flyttes fulfillment order til butikkens location og frakt bookes.
+2. **Ordreruting**: når en kunde betaler i Shopify, settes ordren på hold, og den tilbys én butikk om gangen (round-robin på `last_assigned_at`). Butikken svarer i **butikkpanelet** (`panel/`, garnly-butikkpanel.vercel.app) innen en frist (i åpningstid). Ved aksept flyttes fulfillment order til butikkens location. **Backenden fulfiller aldri selv** – frakt går via CargonizerConnect (Logistra) i Shopify, og `fulfilled_at` hentes derfra.
 3. **Butikkpanel**: en side butikken har oppe på nettbrettet. Sanntid via Supabase Realtime på `offers`, innlogging med Supabase Auth, tilgang styrt av `store_users` + RLS. E-post per tilbud er AV som standard (`stores.notify_offers`); det skalerer ikke når en butikk får titalls ordrer om dagen.
 4. **Regler som aldri brytes**: hele antallet av én varelinje kommer fra samme butikk (garnparti). Hele ordren fra én butikk foretrekkes; kan splittes per varelinje hvis ingen har alt. Aktivt avslag straffes ikke; timeout gir 24 t nedvekting (maks 3).
 
@@ -21,7 +21,7 @@ Dette repoet er backend for Garnlys felles nettbutikk for lokale garnbutikker. L
 supabase/migrations/      001 schema, 002 cron, 003 exclude_from_sync, 004 inventory_activated,
                           005 pos_catalog, 006 cron pos-catalog, 007 product_aliases, 008 store_panel,
                           009 group_resplit, 010 oppgjor, 011 rls, 012 cron sync-products,
-                          013 pos_deduction
+                          013 pos_deduction, 014 fulfillment fra Shopify
 supabase/seed/            product_aliases.sql (varer uten brukbar EAN, kjøres etter første sync-products)
 panel/                    butikkpanelet (statisk side, Vercel med rot `panel/`).
                           garnly-butikkpanel.vercel.app – deployes av git push
@@ -32,6 +32,8 @@ supabase/functions/
   _shared/matching.ts     REN logikk: matchLines (EAN → alias → SKU → navn)
   _shared/schedule.ts     REN logikk: når en butikk er due (nattintervall + grace)
   _shared/inventory.ts    REN logikk: salgbart antall (buffer + ventende kassauttrekk)
+  _shared/fulfillment.ts  REN logikk: kobler Shopify-sendinger til grupper
+  _shared/fulfillment_sync.ts  henter fulfilled_at fra Shopify (webhook + backstop)
   _shared/offers.ts       makeNextOffer, escalateGroup, refreshOrderStatus
   _shared/shipping/       bookShipment + shipmondo.ts
   sync-store/             cron: kassesystem → inventory → Shopify (+ metafelt garnly.stock_by_store)
@@ -40,6 +42,7 @@ supabase/functions/
   offer-respond/          svar fra panelet (POST + bruker-JWT), engangslenke (GET) og internt kall
   timeout-sweeper/        cron hvert minutt
   order-cancelled/        webhook orders/cancelled
+  fulfillment-webhook/    webhook fulfillments/create → fulfilled_at (CargonizerConnect fulfiller)
   pos-webhook/            Mystore products/update → trigger synk
   pos-catalog/            daglig cron: Duells product/list → pos_catalog (strekkoder)
 scripts/                  set-barcodes.ts, import-products.ts, backfill-store-inventory.ts, enable-tracking.ts

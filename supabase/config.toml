@@ -16,3 +16,5 @@ verify_jwt = false
 verify_jwt = false
 [functions.pos-catalog]
 verify_jwt = false
+[functions.fulfillment-webhook]
+verify_jwt = false

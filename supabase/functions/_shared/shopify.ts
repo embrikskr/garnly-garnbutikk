@@ -338,6 +338,12 @@ export async function splitFulfillmentOrder(foId: string, lineItems: Array<{ id:
   return { newId: s.fulfillmentOrder.id as string, remainingId: s.remainingFulfillmentOrder?.id as string | undefined };
 }
 
+/**
+ * IKKE I BRUK. Garnly fulfiller aldri selv – frakt går via CargonizerConnect (Logistra) i
+ * Shopify, og den appen fulfiller ordren med sporingsnummer. Fulfiller vi også, får ordren
+ * to sendinger og kunden to sporingsnumre. Beholdt for referanse; tas den i bruk igjen, må
+ * fulfillment-webhook og inventory-regnestykket vurderes på nytt.
+ */
 export async function createFulfillment(foId: string, tracking?: { number: string; url?: string; company?: string }) {
   const M = `mutation Fulfill($fulfillment: FulfillmentInput!) {
     fulfillmentCreate(fulfillment: $fulfillment) { fulfillment { id status } userErrors { field message } } }`;
@@ -350,6 +356,51 @@ export async function createFulfillment(foId: string, tracking?: { number: strin
   });
   assertNoUserErrors(res, "fulfillmentCreate");
   return res.fulfillmentCreate.fulfillment.id as string;
+}
+
+export interface ShopifyFulfillment {
+  id: string;
+  createdAt: string;
+  status: string;
+  locationId: string | null;
+  variantIds: string[];
+}
+
+/**
+ * Fulfillments på en ordre, slik Shopify ser dem.
+ *
+ * Garnly oppretter ikke fulfillments selv – butikken lager sendingen i CargonizerConnect,
+ * og den appen fulfiller ordren i Shopify. Vi må derfor spørre Shopify om hva som faktisk
+ * har skjedd, ikke anta det ut fra våre egne handlinger.
+ *
+ * Vi leser på ordrenivå og ikke på fulfillment order: en FO kan bli splittet eller slått
+ * sammen av Shopify underveis, og da peker vår lagrede id på noe som ikke finnes lenger.
+ * Ordren står.
+ */
+export async function getOrderFulfillments(orderGid: string): Promise<ShopifyFulfillment[]> {
+  const Q = `query OrderFulfillments($id: ID!) {
+    order(id: $id) {
+      id
+      fulfillments(first: 20) {
+        id
+        createdAt
+        status
+        location { id }
+        fulfillmentLineItems(first: 100) { nodes { quantity lineItem { id variant { id } } } }
+      }
+    }
+  }`;
+  const res = await gql(Q, { id: orderGid });
+  const nodes = res?.order?.fulfillments ?? [];
+  return nodes.map((f: any) => ({
+    id: f.id,
+    createdAt: f.createdAt,
+    status: f.status,
+    locationId: f.location?.id ?? null,
+    variantIds: (f.fulfillmentLineItems?.nodes ?? [])
+      .map((n: any) => n.lineItem?.variant?.id)
+      .filter(Boolean) as string[],
+  }));
 }
 
 // ---------------------------------------------------------------------------

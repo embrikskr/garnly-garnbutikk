@@ -14,7 +14,7 @@
 import { adminClient, audit, html, json } from "../_shared/db.ts";
 import { hashToken } from "../_shared/tokens.ts";
 import { getAdapter } from "../_shared/adapters/index.ts";
-import { createFulfillment, moveFulfillmentOrder, releaseHold } from "../_shared/shopify.ts";
+import { moveFulfillmentOrder, releaseHold } from "../_shared/shopify.ts";
 import { makeNextOffer, refreshOrderStatus } from "../_shared/offers.ts";
 import { bookShipment } from "../_shared/shipping/index.ts";
 import type { LineItem, StoreRow } from "../_shared/types.ts";
@@ -220,12 +220,10 @@ async function applyResponse(offer: any, action: "accept" | "decline", byUser?: 
         tracking_url: shipment.trackingUrl,
         shipment_id: shipment.id,
       }).eq("id", group.id);
-      await createFulfillment(movedFoId, { number: shipment.trackingNumber, url: shipment.trackingUrl, company: shipment.carrier });
-      // Fra nå har Shopify selv trukket ned on_hand, mens butikkens kasse fortsatt teller
-      // varene. Differansen trekkes fra i sync-store til butikken bekrefter uttrekket.
-      // Settes først her, etter at fulfillment faktisk er opprettet: gjør vi det tidligere,
-      // trekker vi fra en vare Shopify ennå holder som committed, og trekker dobbelt.
-      await db.from("routing_groups").update({ fulfilled_at: new Date().toISOString() }).eq("id", group.id);
+      // Backenden fulfiller ALDRI selv. Frakt går via CargonizerConnect (Logistra) i Shopify:
+      // butikken lager sendingen der, og appen fulfiller ordren med sporingsnummer.
+      // Fulfiller vi også, får ordren to sendinger og kunden to sporingsnumre.
+      // fulfilled_at settes av `fulfillment-webhook` når Shopify sier fra.
       labelUrl = shipment.labelUrl ?? null;
       shipMsg = labelUrl ? " Fraktetiketten er klar." : " Fraktetiketten er sendt til printeren deres.";
     } else {

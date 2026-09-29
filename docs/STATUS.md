@@ -2,6 +2,58 @@
 
 Oppdatert: 2026-09-29
 
+## Fulfillment eies av CargonizerConnect (29.09.2026)
+
+**Backenden fulfiller ikke lenger.** Frakt går via CargonizerConnect (Logistra) i Shopify:
+butikken lager sendingen der, og appen fulfiller ordren med sporingsnummer.
+`SHIPPING_PROVIDER` skal bli stående på `none`, og `createFulfillment` kalles ikke lenger fra
+`offer-respond` (funksjonen står igjen i `shopify.ts`, merket ubrukt).
+
+Det river ut grunnlaget for `fulfilled_at` slik det ble satt 29.09 tidligere på dagen. Uten
+et nytt grunnlag blir feltet aldri satt, kassauttrekket fra 013 slår aldri inn – og i det
+CargonizerConnect fulfiller, faller `committed` bort i Shopify og hullet er tilbake.
+
+Nytt grunnlag, med Shopify som fasit:
+
+- **Webhook `fulfillments/create`** → `fulfillment-webhook`. Registrert på API 2026-07.
+- **Backstop i `timeout-sweeper`**: grupper som er tildelt, usendt og eldre enn en time
+  spørres mot Shopify, høyst hvert kvarter per gruppe (`fulfillment_checked_at`), maks 20
+  per sveip. Overlever en tapt webhook.
+- Begge går gjennom `reconcileFulfilledAt` i `_shared/fulfillment_sync.ts`, så det er én
+  kodevei og ikke to.
+
+**Vi leser ikke tallene ut av webhook-payloaden.** Den bruker REST-id-er for *ordrelinjer*,
+mens `routing_groups.line_items[].line_item_id` er id-en til en *fulfillment order-linje*.
+De to lar seg ikke sammenligne. Webhooken brukes derfor bare som varsel, og så spør vi
+Shopify. Vi leser på ordrenivå og ikke på fulfillment order: en FO kan bli splittet eller
+slått sammen underveis, og da peker vår lagrede id på noe som ikke finnes lenger.
+
+Matchingen fra sending til gruppe ligger ren i `_shared/fulfillment.ts`: location først (hver
+butikk har sin egen), varianter som skille når to grupper ligger hos samme butikk. Finner den
+ingenting å gå etter, står gruppen umerket – en feilmerket gruppe ville holdt igjen lager for
+varer som ikke er sendt. Backstoppen prøver igjen.
+
+### Studio Ull AS (Oslo)
+
+`gid://shopify/Location/94717182012` er Halvors Cargonizer-avsender, ikke en butikk, og står
+med 0 på lager. Den påvirker ikke rutingen: `order-intake` ruter på vårt eget lager, der
+locationen ikke finnes, og `offer-respond` flytter alltid fulfillment orderen til butikkens
+egen location ved aksept. `order-intake` logger nå hvilken location Shopify tildelte, så vi
+ser om den blir valgt ofte. **Anbefalt:** slå av «fulfill online orders» på den i Shopify, så
+den aldri kan bli valgt i det hele tatt.
+
+### Ryddet
+
+De 23 inaktive «Yarn kit»-radene fra den gamle butikken er slettet (migrasjon 014). Ingenting
+pekte på dem. 5203 produkter igjen, 2546 synkes, 23 ekskluderte garnpakker.
+
+### Ikke verifisert ende-til-ende
+
+Den nye butikken har **null ordrer**, og appen mangler `write_draft_orders`, så testordren
+lot seg ikke lage. Verifisert så langt: webhooken er registrert, endepunktet avviser ugyldig
+signatur (401), sveipet kjører begge nye veier uten feil, og matchingen har syv tester.
+Selve kjeden fulfillment → webhook → `fulfilled_at` → `on_hand` gjenstår.
+
 ## Dobbelttelling av lager lukket (29.09.2026)
 
 Garnly-salg trekkes ikke automatisk i butikkens kasse. Butikken slår dem ut manuelt, av og

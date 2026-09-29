@@ -5,9 +5,17 @@
  */
 import { adminClient, audit, json, requireInternalSecret } from "../_shared/db.ts";
 import { makeNextOffer } from "../_shared/offers.ts";
+import { reconcileFulfilledAt } from "../_shared/fulfillment_sync.ts";
 
 /** Hvor lenge en sendt ordre får stå uten at kassauttrekket er bekreftet. */
 const KASSA_PURRE_TIMER = 24;
+
+/** Backstop: hvor gammel en utildelt fulfillment må være før vi spør Shopify selv. */
+const FULFILLMENT_BACKSTOP_MIN = 60;
+/** Hvor ofte samme gruppe spørres på nytt. */
+const FULFILLMENT_RECHECK_MIN = 15;
+/** Tak på antall grupper per sveip, så et etterslep ikke sprenger API-budsjettet. */
+const FULFILLMENT_BACKSTOP_BATCH = 20;
 
 Deno.serve(async (req) => {
   const unauthorized = requireInternalSecret(req);
@@ -26,9 +34,47 @@ Deno.serve(async (req) => {
     touchedGroups.add(o.routing_group_id);
   }
   for (const g of touchedGroups) await makeNextOffer(g);
+  const merket = await etterslepFulfillment(db);
   const purret = await purrKassauttrekk(db, now);
-  return json({ expired: touchedGroups.size, kassa_purret: purret });
+  return json({ expired: touchedGroups.size, fulfilled_merket: merket, kassa_purret: purret });
 });
+
+/**
+ * Backstop for tapte `fulfillments/create`-webhooks.
+ *
+ * Fulfillment-tidspunktet er det som får sync-store til å holde igjen varer kassa ennå ikke
+ * har trukket fra. Går webhooken tapt, står tidspunktet tomt, og da selger vi garn som
+ * allerede er sendt. En webhook er ikke en garanti, så vi spør Shopify selv også.
+ *
+ * Bare ordrer eldre enn en time, og hver gruppe spørres høyst hvert kvarter
+ * (`fulfillment_checked_at`). Ellers ville dette sveipet, som går hvert minutt, spurt Shopify
+ * om de samme ordrene 1440 ganger i døgnet.
+ */
+async function etterslepFulfillment(db: ReturnType<typeof adminClient>): Promise<number> {
+  const eldreEnn = new Date(Date.now() - FULFILLMENT_BACKSTOP_MIN * 60 * 1000).toISOString();
+  const sjekketFør = new Date(Date.now() - FULFILLMENT_RECHECK_MIN * 60 * 1000).toISOString();
+
+  const { data: kandidater } = await db
+    .from("routing_groups")
+    .select("routing_order_id")
+    .eq("status", "assigned")
+    .is("fulfilled_at", null)
+    .lt("assigned_at", eldreEnn)
+    .or(`fulfillment_checked_at.is.null,fulfillment_checked_at.lt.${sjekketFør}`)
+    .limit(FULFILLMENT_BACKSTOP_BATCH);
+
+  const ordrer = [...new Set((kandidater ?? []).map((g: { routing_order_id: string }) => g.routing_order_id))];
+  let merket = 0;
+  for (const id of ordrer) {
+    try {
+      merket += await reconcileFulfilledAt(id);
+    } catch (e) {
+      // En ordre som feiler skal ikke stoppe resten av sveipet.
+      console.error("[fulfillment-backstop]", id, e instanceof Error ? e.message : e);
+    }
+  }
+  return merket;
+}
 
 /**
  * Purring på kassauttrekk.

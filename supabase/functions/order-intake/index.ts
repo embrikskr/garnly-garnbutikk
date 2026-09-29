@@ -97,7 +97,18 @@ async function processOrder(orderGid: string) {
     vat_amount: Number(order.currentTotalTaxSet?.shopMoney?.amount ?? 0),
     raw_order: order,
   }).select().single();
-  await audit("routing_order", ro.id, "created", { order: order.name, lines: lines.length, unknown, gavekort });
+  // Hvilken location Shopify tildelte ordren av seg selv. Den betyr ingenting for rutingen –
+  // offer-respond flytter alltid fulfillment orderen til butikkens egen location ved aksept –
+  // men den er verdt å ha i loggen. «Studio Ull AS (Oslo)» er Halvors Cargonizer-avsender og
+  // ikke en butikk, og den står med 0 på lager; blir den tildelt ofte, vil vi vite det.
+  const startLocation = fo.assignedLocation?.location?.id ?? null;
+  await audit("routing_order", ro.id, "created", {
+    order: order.name,
+    lines: lines.length,
+    unknown,
+    gavekort,
+    shopify_location: startLocation,
+  });
 
   if (unknown.length || lines.length === 0) {
     const { data: g } = await db.from("routing_groups").insert({ routing_order_id: ro.id, group_no: 1, line_items: lines, shopify_fulfillment_order_id: fo.id, status: "escalated" }).select().single();
