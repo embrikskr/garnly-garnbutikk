@@ -171,7 +171,33 @@ async function syncOne(store: StoreRow, dryRun: boolean) {
       if (qty > 0 && product) stranded.push({ product, qty });
     }
     if (stranded.length) console.log(`[sync] ${store.name}: ${stranded.length} varer med lager manglet aktivering, tas nå`);
-    const work = [...changes, ...stranded];
+
+    // Varer som nettopp er sendt eller slått ut i kassa skrives ALLTID, uavhengig av diff.
+    //
+    // Diffen over sammenligner mot vår egen forrige utregning, ikke mot Shopify. Endrer
+    // Shopify on_hand selv – ved fulfillment, retur med restock eller manuell retting – og
+    // vårt nye tall havner tilfeldigvis likt med det forrige, skrives ingenting og Shopify
+    // blir stående feil. Reprodusert 29.09: #1002 ble sendt og slått ut i kassa mellom to
+    // synker uten at kassetallet endret seg; synken regnet 55 = forrige 55 og hoppet over,
+    // og Shopify ble stående på 52.
+    //
+    // Dette dekker de tilstandsskiftene vi selv kjenner til. Returer med restock og manuelle
+    // endringer i Shopify-admin fanges av den nattlige avstemmingen (reconcile-inventory).
+    const { data: recent, error: recentErr } = await db.from("v_pos_recent_transitions").select("product_id").eq("store_id", store.id);
+    if (recentErr) throw new Error("v_pos_recent_transitions select: " + recentErr.message);
+    const alt = new Set([...changed, ...stranded.map((s) => s.product.id)]);
+    const transitions: Array<{ product: ProductRow; qty: number }> = [];
+    for (const r of (recent ?? []) as Array<{ product_id: string }>) {
+      if (alt.has(r.product_id)) continue;
+      const product = productById.get(r.product_id);
+      if (!product) continue;
+      const raw = qtyByProduct.get(r.product_id) ?? 0;
+      transitions.push({ product, qty: sellableQty(raw, store.safety_stock, pendingByProduct.get(r.product_id) ?? 0) });
+      alt.add(r.product_id);
+    }
+    if (transitions.length) console.log(`[sync] ${store.name}: ${transitions.length} varer nettopp sendt/slått ut i kassa, skrives uansett diff`);
+
+    const work = [...changes, ...stranded, ...transitions];
 
     // Shopify
     let shopifyWritten = 0;

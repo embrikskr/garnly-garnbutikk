@@ -22,7 +22,7 @@ Deno.serve(async (req) => {
     if (g.status === "routing" || g.status === "escalated") {
       await db.from("offers").update({ status: "cancelled" }).eq("routing_group_id", g.id).in("status", ["pending", "offered"]);
       await db.from("routing_groups").update({ status: "cancelled" }).eq("id", g.id);
-    } else if (g.status === "assigned") {
+    } else if (g.status === "assigned" || g.status === "fulfilled") {
       // Butikken har allerede fått ordren: varsle dem
       const { data: store } = await db.from("stores").select("name, contact_email").eq("id", g.assigned_store_id).single();
       const { sendEmail, notifyOps } = await import("../_shared/notify.ts");

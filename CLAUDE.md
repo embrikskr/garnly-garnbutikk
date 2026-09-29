@@ -21,7 +21,8 @@ Dette repoet er backend for Garnlys felles nettbutikk for lokale garnbutikker. L
 supabase/migrations/      001 schema, 002 cron, 003 exclude_from_sync, 004 inventory_activated,
                           005 pos_catalog, 006 cron pos-catalog, 007 product_aliases, 008 store_panel,
                           009 group_resplit, 010 oppgjor, 011 rls, 012 cron sync-products,
-                          013 pos_deduction, 014 fulfillment fra Shopify
+                          013 pos_deduction, 014 fulfillment fra Shopify,
+                          015 group_fulfilled, 016 lager-avstemming, 017 cron reconcile
 supabase/seed/            product_aliases.sql (varer uten brukbar EAN, kjøres etter første sync-products)
 panel/                    butikkpanelet (statisk side, Vercel med rot `panel/`).
                           garnly-butikkpanel.vercel.app – deployes av git push
@@ -45,6 +46,7 @@ supabase/functions/
   fulfillment-webhook/    webhook fulfillments/create → fulfilled_at (CargonizerConnect fulfiller)
   pos-webhook/            Mystore products/update → trigger synk
   pos-catalog/            daglig cron: Duells product/list → pos_catalog (strekkoder)
+  reconcile-inventory/    nattlig cron: leser on_hand fra Shopify og retter avvik
 scripts/                  set-barcodes.ts, import-products.ts, backfill-store-inventory.ts, enable-tracking.ts
 dashboard/                Next.js admin-dashboard (Vercel): oversikt, ordrer, umatchet, lager, synk
 shopify-app/              Shopify Function: kassevalidering «ett parti fra én butikk» (§7)

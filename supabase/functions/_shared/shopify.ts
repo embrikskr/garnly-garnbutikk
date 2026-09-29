@@ -358,6 +358,40 @@ export async function createFulfillment(foId: string, tracking?: { number: strin
   return res.fulfillmentCreate.fulfillment.id as string;
 }
 
+/**
+ * Alt lager Shopify har på én location, som inventoryItemId → on_hand.
+ *
+ * Brukes av den nattlige avstemmingen. sync-store sammenligner mot sin egen forrige
+ * utregning og ser derfor ikke endringer Shopify gjør på egen hånd: fulfillment, retur med
+ * restock, manuell retting i admin. Her leser vi fasiten i stedet.
+ */
+export async function getOnHandByLocation(locationId: string): Promise<Map<string, number>> {
+  const Q = `query LocationLevels($id: ID!, $after: String) {
+    location(id: $id) {
+      id
+      inventoryLevels(first: 250, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        nodes { item { id } quantities(names: ["on_hand"]) { name quantity } }
+      }
+    }
+  }`;
+  const ut = new Map<string, number>();
+  let after: string | null = null;
+  for (let side = 0; side < 200; side++) {
+    const res: any = await gql(Q, { id: locationId, after });
+    const conn = res?.location?.inventoryLevels;
+    if (!conn) break;
+    for (const n of conn.nodes ?? []) {
+      const id = n?.item?.id;
+      const q = (n?.quantities ?? []).find((x: any) => x.name === "on_hand")?.quantity;
+      if (id && typeof q === "number") ut.set(id, q);
+    }
+    if (!conn.pageInfo?.hasNextPage) break;
+    after = conn.pageInfo.endCursor;
+  }
+  return ut;
+}
+
 export interface ShopifyFulfillment {
   id: string;
   createdAt: string;

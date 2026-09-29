@@ -63,8 +63,10 @@ export async function reconcileFulfilledAt(routingOrderId: string): Promise<numb
   let merket = 0;
   for (const [groupId, createdAt] of treff) {
     // Betinget: en webhook og backstoppen kan treffe samtidig, og da skal tidspunktet stå.
+    // Status følger med: uten den ville gruppen blitt liggende som 'assigned' og vist i
+    // panelets pakkeliste for alltid.
     const { data: upd } = await db.from("routing_groups")
-      .update({ fulfilled_at: createdAt })
+      .update({ fulfilled_at: createdAt, status: "fulfilled" })
       .eq("id", groupId).is("fulfilled_at", null).select("id");
     if (!upd?.length) continue;
     await audit("routing_group", groupId, "fulfilled", { at: createdAt, order: order.shopify_order_name });

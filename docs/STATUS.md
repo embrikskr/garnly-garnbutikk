@@ -2,6 +2,60 @@
 
 Oppdatert: 2026-09-29
 
+## Lagerdrift mot Shopify lukket (29.09.2026, kveld)
+
+Testen av hele flyten avdekket at **`sync-store` sammenlignet mot sin egen forrige utregning,
+ikke mot Shopify**. Endrer Shopify `on_hand` selv – fulfillment, retur med restock, manuell
+retting i admin – og vårt nye tall havner tilfeldigvis likt med det forrige, skrives
+ingenting og Shopify blir stående feil. Uten en eneste feilmelding.
+
+Reprodusert: #1002 (Alpakka Ull 6081, Strikkefryd) ble sendt og slått ut i kassa mellom to
+synker uten at kassetallet endret seg. Synken regnet 55 = forrige 55 og hoppet over. Shopify
+ble stående på 52.
+
+To lag, fordi de fanger ulike ting:
+
+1. **`v_pos_recent_transitions`** – produkter i grupper som ble sendt eller slått ut i kassa
+   siste døgn skrives alltid, uavhengig av diff. Dekker tilstandsskiftene vi selv kjenner til.
+2. **`reconcile-inventory`** – nattlig kl. 02:20 UTC. Leser `on_hand` per location fra Shopify
+   og retter alle avvik mot `inventory.qty`. Dekker resten: returer med restock og manuelle
+   endringer i admin. Stopper og varsler ved over 1000 avvik, for da er noe grunnleggende galt.
+
+Begge verifisert ved å innføre drift med vilje (satte Shopify til 48 mot basens 55):
+avstemmingen rapporterte `deviations: 1` og rettet til 55; `sync-store` rettet den samme
+driften med `rows_changed: 0`, altså uten at diffen så noe.
+
+### Gruppestatus `fulfilled`
+
+En sendt gruppe sto igjen som `assigned` og lå i panelets pakkeliste for alltid. Ny status
+`fulfilled` settes sammen med `fulfilled_at`. **Alle views som filtrerte på `assigned` måtte
+med:** `v_pos_pending_deduction`, `v_panel_assigned`, `v_panel_stats` og `v_store_settlement`.
+Glemt ett av dem ville enten kassauttrekket eller oppgjøret forsvunnet stille. Det samme
+gjaldt `refreshOrderStatus`, purringen i `timeout-sweeper` og `order-cancelled`.
+
+Panelet viser sendte ordrer med merket «Sendt» til kassauttrekket er bekreftet, og slipper
+dem så. `v_panel_stats` har ny teller `awaiting_pos`.
+
+### Tidlig kassauttrekk
+
+Trykker butikken «Slått ut i kassa» FØR sendingen er opprettet, har kassa trukket fra mens
+Shopify fortsatt holder varene som `committed`. `v_pos_pending_deduction` legger nå antallet
+tilbake i det tilfellet, så vi ikke trekker dobbelt. Det er ikke et sjeldent tilfelle:
+butikken slår ofte ut i kassa når de plukker.
+
+### Arkivert
+
+Grupper fra den gamle Shopify-butikken har status `archived`. To av dem sto som `assigned` og
+talte med i oppgjøret som ordrer uten beløp – Strikkefryd viste 3 ordrer der bare 1 var ekte.
+Nå 1 ordre, 255 kr.
+
+### Testordrene #1001–#1003 er IKKE kansellert
+
+Shopify melder `cancelledAt: null` på alle tre. `orders/cancelled`-webhooken har derfor ikke
+feilet; det kom ingenting å levere. #1001 og #1003 ligger fortsatt ON_HOLD med åpne tilbud til
+Garnkilden, og `timeout-sweeper` vil la dem gå videre når fristen ryker. #1002 er FULFILLED og
+teller i oppgjøret.
+
 ## Fulfillment eies av CargonizerConnect (29.09.2026)
 
 **Backenden fulfiller ikke lenger.** Frakt går via CargonizerConnect (Logistra) i Shopify:

@@ -81,13 +81,15 @@ export async function refreshOrderStatus(orderId: string) {
   const db = adminClient();
   const { data: groups } = await db.from("routing_groups").select("status").eq("routing_order_id", orderId);
   // 'resplit' er historikk: gruppa er erstattet av delgrupper og skal verken telle
-  // som åpen eller som eskalert.
-  const st = (groups ?? []).map((g: { status: string }) => g.status).filter((s) => s !== "resplit");
+  // som åpen eller som eskalert. 'archived' er rader fra den gamle Shopify-butikken.
+  const st = (groups ?? []).map((g: { status: string }) => g.status).filter((s) => s !== "resplit" && s !== "archived");
+  // En sendt gruppe ('fulfilled') er like tildelt som en som fortsatt skal pakkes.
+  const tildelt = (s: string) => s === "assigned" || s === "fulfilled";
   let status: string;
   if (st.every((s) => s === "cancelled")) status = "cancelled";
-  else if (st.every((s) => s === "assigned")) status = "assigned";
+  else if (st.every(tildelt)) status = "assigned";
   else if (st.some((s) => s === "escalated")) status = "escalated";
-  else if (st.some((s) => s === "assigned")) status = "partially_assigned";
+  else if (st.some(tildelt)) status = "partially_assigned";
   else status = "routing";
   await db.from("routing_orders").update({ status }).eq("id", orderId);
 }

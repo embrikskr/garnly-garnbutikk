@@ -89,7 +89,7 @@ async function purrKassauttrekk(db: ReturnType<typeof adminClient>, now: string)
   const { data: forfalt } = await db
     .from("routing_groups")
     .select("id, assigned_store_id, line_items, fulfilled_at, routing_orders(shopify_order_name), stores:assigned_store_id(name, contact_email)")
-    .eq("status", "assigned")
+    .in("status", ["assigned", "fulfilled"])
     .is("pos_deducted_at", null)
     .is("pos_reminder_sent_at", null)
     .not("fulfilled_at", "is", null)

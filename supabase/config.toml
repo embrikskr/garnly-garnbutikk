@@ -18,3 +18,5 @@ verify_jwt = false
 verify_jwt = false
 [functions.fulfillment-webhook]
 verify_jwt = false
+[functions.reconcile-inventory]
+verify_jwt = false

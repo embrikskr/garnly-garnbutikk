@@ -71,7 +71,7 @@ export interface RoutingGroupRow {
   group_no: number;
   line_items: LineItem[];
   shopify_fulfillment_order_id: string | null;
-  status: "routing" | "assigned" | "escalated" | "cancelled";
+  status: "routing" | "assigned" | "fulfilled" | "escalated" | "cancelled" | "resplit" | "archived";
   assigned_store_id: string | null;
 }
 

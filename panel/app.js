@@ -172,6 +172,8 @@ async function refresh() {
   renderAssigned(assigned.data ?? []);
 
   el.statQueue.textContent = stats.data?.queue ?? rows.length;
+  // «Å pakke» teller bare ordrer som ennå ikke er sendt. Sendte ordrer som venter på at
+  // butikken bekrefter kassauttrekket telles for seg – de skal ikke pakkes en gang til.
   el.statPack.textContent = stats.data?.to_pack ?? (assigned.data?.length ?? 0);
   el.statToday.textContent = stats.data?.assigned_today ?? 0;
   document.title = rows.length ? `(${rows.length}) Garnly butikkpanel` : "Garnly butikkpanel";
@@ -211,7 +213,7 @@ function renderAssigned(rows) {
   const html = rows.map((r) => `
     <article class="card card--packing${etterlyst(r) ? " card--reminder" : ""}" data-group="${r.group_id}">
       <div class="card__head">
-        <span class="card__order">${esc(r.order_name ?? "Ordre")}</span>
+        <span class="card__order">${esc(r.order_name ?? "Ordre")}${r.group_status === "fulfilled" ? ' <span class="merke">Sendt</span>' : ""}</span>
         <span class="card__meta">${r.assigned_at ? klokke(r.assigned_at) : ""}</span>
       </div>
       <ul class="lines">${lineItems(r.line_items)}</ul>
