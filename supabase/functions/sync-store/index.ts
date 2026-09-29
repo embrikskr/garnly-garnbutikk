@@ -13,6 +13,7 @@ import { getAdapter } from "../_shared/adapters/index.ts";
 import { activateInventoryAtLocation, enableTracking, setOnHandQuantities, setStockByStoreMetafields } from "../_shared/shopify.ts";
 import type { ProductRow, StoreRow } from "../_shared/types.ts";
 import { matchLines } from "../_shared/matching.ts";
+import { sellableQty } from "../_shared/inventory.ts";
 import { dueCutoff, isDue, scheduleFromEnv } from "../_shared/schedule.ts";
 
 Deno.serve(async (req) => {
@@ -99,6 +100,21 @@ async function syncOne(store: StoreRow, dryRun: boolean) {
     const prevMap = new Map(prev.map((r) => [r.product_id, r.qty]));
     const activatedSet = new Set(prev.filter((r) => r.shopify_activated).map((r) => r.product_id));
 
+    // Garnly-salg butikkens kasse ennå ikke har trukket fra. Se inventory.ts for hvorfor.
+    // Endringer her slår gjennom i diffen under, fordi de inngår i qty: bekrefter butikken
+    // et uttrekk, går tallet opp igjen og varen skrives til Shopify uten at kassa endret seg.
+    const pendingByProduct = new Map<string, number>();
+    for (let from = 0;; from += 1000) {
+      const { data, error } = await db.from("v_pos_pending_deduction").select("product_id, qty").eq("store_id", store.id).range(from, from + 999);
+      if (error) throw new Error("v_pos_pending_deduction select: " + error.message);
+      for (const r of (data ?? []) as Array<{ product_id: string; qty: number }>) {
+        pendingByProduct.set(r.product_id, (pendingByProduct.get(r.product_id) ?? 0) + Number(r.qty));
+      }
+      if (!data || data.length < 1000) break;
+    }
+    const ventende = [...pendingByProduct.values()].reduce((a, b) => a + b, 0);
+    if (ventende) console.log(`[sync] ${store.name}: trekker fra ${ventende} enheter som venter på uttrekk i kassa`);
+
     const upserts: Array<{ store_id: string; product_id: string; qty_raw: number; qty: number; synced_at: string }> = [];
     const changes: Array<{ product: ProductRow; qty: number }> = [];
     const now = new Date().toISOString();
@@ -108,7 +124,7 @@ async function syncOne(store: StoreRow, dryRun: boolean) {
     for (const p of products ?? []) if (!qtyByProduct.has(p.id)) qtyByProduct.set(p.id, 0);
 
     for (const [productId, raw] of qtyByProduct) {
-      const qty = Math.max(0, raw - store.safety_stock);
+      const qty = sellableQty(raw, store.safety_stock, pendingByProduct.get(productId) ?? 0);
       upserts.push({ store_id: store.id, product_id: productId, qty_raw: raw, qty, synced_at: now });
       if (prevMap.get(productId) !== qty) changes.push({ product: productById.get(productId)!, qty });
     }
@@ -150,7 +166,7 @@ async function syncOne(store: StoreRow, dryRun: boolean) {
     const stranded: Array<{ product: ProductRow; qty: number }> = [];
     for (const [productId, raw] of qtyByProduct) {
       if (changed.has(productId) || activatedSet.has(productId)) continue;
-      const qty = Math.max(0, raw - store.safety_stock);
+      const qty = sellableQty(raw, store.safety_stock, pendingByProduct.get(productId) ?? 0);
       const product = productById.get(productId);
       if (qty > 0 && product) stranded.push({ product, qty });
     }

@@ -151,6 +151,13 @@ button { font: inherit; }
 .addr { color: var(--ink-soft); font-size: 15px; }
 .track a { color: var(--wine); }
 
+/* Kassauttrekk. Pakkekortet har bare én knapp, så den skal ha hele bredden. */
+.card--packing .card__actions { grid-template-columns: 1fr; }
+.card--reminder { border-left-color: var(--amber); }
+.kassa { font-size: 15px; margin: 0; }
+.kassa--ok { color: var(--green); }
+.kassa--purre { color: var(--amber); font-weight: 600; }
+
 /* ---------------------------------------------------------------- toast */
 .toast {
   position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);

@@ -20,7 +20,8 @@ Dette repoet er backend for Garnlys felles nettbutikk for lokale garnbutikker. L
 ```
 supabase/migrations/      001 schema, 002 cron, 003 exclude_from_sync, 004 inventory_activated,
                           005 pos_catalog, 006 cron pos-catalog, 007 product_aliases, 008 store_panel,
-                          009 group_resplit, 010 oppgjor, 011 rls, 012 cron sync-products
+                          009 group_resplit, 010 oppgjor, 011 rls, 012 cron sync-products,
+                          013 pos_deduction
 supabase/seed/            product_aliases.sql (varer uten brukbar EAN, kjøres etter første sync-products)
 panel/                    butikkpanelet (statisk side, Vercel med rot `panel/`).
                           garnly-butikkpanel.vercel.app – deployes av git push
@@ -30,6 +31,7 @@ supabase/functions/
   _shared/routing.ts      REN logikk: planGroups (splitt), deadlineWithinBusinessHours
   _shared/matching.ts     REN logikk: matchLines (EAN → alias → SKU → navn)
   _shared/schedule.ts     REN logikk: når en butikk er due (nattintervall + grace)
+  _shared/inventory.ts    REN logikk: salgbart antall (buffer + ventende kassauttrekk)
   _shared/offers.ts       makeNextOffer, escalateGroup, refreshOrderStatus
   _shared/shipping/       bookShipment + shipmondo.ts
   sync-store/             cron: kassesystem → inventory → Shopify (+ metafelt garnly.stock_by_store)

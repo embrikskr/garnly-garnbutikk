@@ -221,6 +221,11 @@ async function applyResponse(offer: any, action: "accept" | "decline", byUser?: 
         shipment_id: shipment.id,
       }).eq("id", group.id);
       await createFulfillment(movedFoId, { number: shipment.trackingNumber, url: shipment.trackingUrl, company: shipment.carrier });
+      // Fra nå har Shopify selv trukket ned on_hand, mens butikkens kasse fortsatt teller
+      // varene. Differansen trekkes fra i sync-store til butikken bekrefter uttrekket.
+      // Settes først her, etter at fulfillment faktisk er opprettet: gjør vi det tidligere,
+      // trekker vi fra en vare Shopify ennå holder som committed, og trekker dobbelt.
+      await db.from("routing_groups").update({ fulfilled_at: new Date().toISOString() }).eq("id", group.id);
       labelUrl = shipment.labelUrl ?? null;
       shipMsg = labelUrl ? " Fraktetiketten er klar." : " Fraktetiketten er sendt til printeren deres.";
     } else {

@@ -209,7 +209,7 @@ function renderQueue(rows, freshIds) {
 function renderAssigned(rows) {
   el.assignedEmpty.hidden = rows.length > 0;
   const html = rows.map((r) => `
-    <article class="card card--packing">
+    <article class="card card--packing${etterlyst(r) ? " card--reminder" : ""}" data-group="${r.group_id}">
       <div class="card__head">
         <span class="card__order">${esc(r.order_name ?? "Ordre")}</span>
         <span class="card__meta">${r.assigned_at ? klokke(r.assigned_at) : ""}</span>
@@ -217,10 +217,32 @@ function renderAssigned(rows) {
       <ul class="lines">${lineItems(r.line_items)}</ul>
       <p class="addr">${esc(r.ship_name ?? "")}<br>${esc(r.ship_address1 ?? "")}${r.ship_address2 ? "<br>" + esc(r.ship_address2) : ""}<br>${esc(r.ship_zip ?? "")} ${esc(r.ship_city ?? "")}</p>
       ${r.tracking_number ? `<p class="track">Sporing: ${r.tracking_url ? `<a href="${esc(r.tracking_url)}" target="_blank" rel="noopener">${esc(r.tracking_number)}</a>` : esc(r.tracking_number)}</p>` : ""}
+      ${kassaStatus(r)}
     </article>`).join("");
   if (html === assignedSig) return;
   assignedSig = html;
   el.assigned.innerHTML = html;
+}
+
+/**
+ * Garnly-salg trekkes ikke automatisk i kassa. Til butikken bekrefter uttrekket, viser
+ * Garnly færre på lager enn kassa sier – ellers ville vi solgt garn som alt er sendt.
+ */
+function kassaStatus(r) {
+  if (r.pos_deducted_at) {
+    return `<p class="kassa kassa--ok">Slått ut i kassa ${klokke(r.pos_deducted_at)}</p>`;
+  }
+  const purre = etterlyst(r);
+  return `<div class="card__actions">
+      <button class="btn btn--secondary" data-act="deducted">Slått ut i kassa</button>
+    </div>
+    ${purre ? `<p class="kassa kassa--purre">Sendt for over et døgn siden. Til dette er slått ut i kassa, holder Garnly igjen varene på lageret.</p>` : ""}`;
+}
+
+/** Sendt for mer enn 24 t siden uten at uttrekket er bekreftet. */
+function etterlyst(r) {
+  if (r.pos_deducted_at || !r.fulfilled_at) return false;
+  return Date.now() - new Date(r.fulfilled_at).getTime() > 24 * 3600 * 1000;
 }
 
 function lineItems(items) {
@@ -243,6 +265,31 @@ el.queue.addEventListener("click", async (e) => {
   if (!ok) card.querySelectorAll("button").forEach((b) => (b.disabled = false));
   else queueSig = null;
   await refresh();
+});
+
+// «Slått ut i kassa». Går via en RPC og ikke rett på tabellen: panelet skal ikke ha
+// skriverett på routing_groups, og RPC-en sjekker selv at gruppen hører til butikken.
+el.assigned.addEventListener("click", async (e) => {
+  const btn = e.target.closest('button[data-act="deducted"]');
+  if (!btn) return;
+  const card = btn.closest("[data-group]");
+  const groupId = card?.dataset.group;
+  if (!groupId || busy.has(groupId)) return;
+  busy.add(groupId);
+  btn.disabled = true;
+  try {
+    const { error } = await sb.rpc("mark_pos_deducted", { p_group_id: groupId });
+    if (error) throw new Error(error.message);
+    toast("Registrert. Lageret oppdateres ved neste synk.");
+    assignedSig = null;
+    await refresh();
+  } catch (err) {
+    console.error("[mark_pos_deducted]", err);
+    toast(`Fikk ikke registrert uttrekket: ${String(err?.message ?? err)}`, "error");
+    btn.disabled = false;
+  } finally {
+    busy.delete(groupId);
+  }
 });
 
 el.acceptAll.addEventListener("click", async () => {

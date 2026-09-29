@@ -1,6 +1,41 @@
 # Status – garnly-garnbutikk
 
-Oppdatert: 2026-09-27
+Oppdatert: 2026-09-29
+
+## Dobbelttelling av lager lukket (29.09.2026)
+
+Garnly-salg trekkes ikke automatisk i butikkens kasse. Butikken slår dem ut manuelt, av og
+til dager etter at ordren er sendt. Shopifys `committed` dekker bare tiden **før**
+fulfillment: i det fulfillment opprettes trekker Shopify selv ned `on_hand`, og neste synk
+skriver kassetallet rett over igjen. Varen blir salgbar to ganger.
+
+- `routing_groups.fulfilled_at` settes når `createFulfillment` faktisk har gått gjennom.
+- `routing_groups.pos_deducted_at` settes av butikken via knappen «Slått ut i kassa» i
+  panelet, som går gjennom RPC-en `mark_pos_deducted` (security definer, avgrenset av
+  `current_store_ids()` – panelet har ingen skriverett på tabellen).
+- `v_pos_pending_deduction` summerer linjene som er sendt, men ikke bekreftet uttrekt.
+- `sync-store` trekker dem fra: `sellableQty(kassetall, safety_stock, ventende)`.
+  Summen inngår i `qty`, så diffen fanger endringer i ventende uttrekk selv når kassetallet
+  står stille.
+- `timeout-sweeper` purrer én gang per ordre etter 24 t (`pos_reminder_sent_at`).
+
+**Bare fulfillede linjer trekkes fra.** En tildelt, men usendt ordre står fortsatt som
+`committed` i Shopify og trekkes fra `available` der. Trakk vi den fra her også, ville vi
+trukket dobbelt og vist for lite på lager.
+
+**Vi skriver fortsatt `on_hand`, ikke `available`.** Det opprinnelige forslaget var å skrive
+`available` og trekke fra alle åpne linjer. Det går opp regnestykket, men bare så lenge hver
+eneste `committed` i Shopify svarer til en Garnly-linje vi følger med på. En ordre som aldri
+kom gjennom `order-intake`, en manuelt opprettet ordre, en umatchet varelinje – hver av dem
+ville blåst opp `on_hand` permanent, stille. `on_hand` er det kassa faktisk måler, og
+Shopify regner `available` selv.
+
+Verifisert mot ekte data 29.09: Peer Gynt 1012 Natur hos Garnkilden, kassetall 21, ordre på
+10 fulfillet uten bekreftet uttrekk → `on_hand` 11. Bekreftet uttrekk → `on_hand` 21 igjen,
+med `rows_changed: 1` selv om kassetallet aldri endret seg. RPC-en avviser kall uten
+butikktilgang.
+
+**Retningen på feilen er valgt:** glemt knapp gir for lite på lager, aldri oversalg.
 
 ## Synkefrekvens ryddet (27.09.2026)
 
