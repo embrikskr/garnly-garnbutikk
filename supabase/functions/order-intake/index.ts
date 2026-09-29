@@ -12,6 +12,7 @@
 import { adminClient, audit, json } from "../_shared/db.ts";
 import { getOrder, holdFulfillmentOrder, splitHeldFulfillmentOrder, verifyShopifyHmac } from "../_shared/shopify.ts";
 import { planGroups } from "../_shared/routing.ts";
+import { erTestordre } from "../_shared/testorder.ts";
 import { escalateGroup, makeNextOffer } from "../_shared/offers.ts";
 import type { LineItem } from "../_shared/types.ts";
 
@@ -92,6 +93,8 @@ async function processOrder(orderGid: string) {
     shopify_fulfillment_order_id: fo.id,
     customer: { email: order.email, ...(order.shippingAddress ?? {}) },
     currency: order.currencyCode,
+    // Testordrer rutes og pakkes som ekte, men holdes utenfor oppgjør og panelstatistikk.
+    is_test: erTestordre(order.tags, order.test),
     total_inc_vat: Number(order.currentTotalPriceSet?.shopMoney?.amount ?? 0),
     shipping_inc_vat: Number(order.totalShippingPriceSet?.shopMoney?.amount ?? 0),
     vat_amount: Number(order.currentTotalTaxSet?.shopMoney?.amount ?? 0),

@@ -1,6 +1,29 @@
 # Status – garnly-garnbutikk
 
-Oppdatert: 2026-09-29
+Oppdatert: 2026-09-30
+
+## Testordrer holdes utenfor oppgjøret (30.09.2026)
+
+`routing_orders.is_test` settes i `order-intake` fra Shopify-taggen «TEST» eller Shopifys eget
+`test`-flagg (testbetaling gjennom Bogus Gateway). Testordrer rutes og pakkes som ekte ordrer
+– det er poenget med å teste – men holdes utenfor `v_store_settlement` og alle tellerne i
+`v_panel_stats`. Kortene vises fortsatt i panelet, så butikken pakker og bekrefter
+kassauttrekk som vanlig.
+
+To signaler, fordi taggen krever at noen husker den og `test`-flagget bare settes ved
+testbetaling. Regelen ligger ren i `_shared/testorder.ts`.
+
+**Taggen matches på hele tagen, ikke delstreng.** «testgarn» og «Bestilt til testing» er
+produktinformasjon; matchet vi på delstreng, ville ekte salg falt ut av oppgjøret.
+
+#1002 (29.09) er merket. Den er sendt og kan ikke kanselleres i Shopify uten å avbryte
+distribusjonen, og lageret er allerede riktig på 55 – den skal altså ikke refunderes.
+Strikkefryds oppgjør gikk fra 255 kr til 0. Verifisert ved å slå flagget av og på: med
+`is_test = false` kommer raden tilbake med 255 kr, så det er ekskluderingen som virker og ikke
+et brudd i viewet.
+
+#1001 og #1003 er kansellert i Shopify (22:22:37Z og 22:23:23Z), og `orders/cancelled`-webhooken
+lukket gruppene. Alle tre har taggen «TEST» i Shopify.
 
 ## Lagerdrift mot Shopify lukket (29.09.2026, kveld)
 

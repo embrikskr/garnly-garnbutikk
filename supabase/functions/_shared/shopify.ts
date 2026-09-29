@@ -216,6 +216,10 @@ export interface ShopifyOrder {
   name: string;
   email: string | null;
   currencyCode: string;
+  /** Shopify-tagger. «TEST» holder ordren utenfor oppgjøret, se _shared/testorder.ts. */
+  tags: string[];
+  /** Shopifys eget flagg for testbetalinger (Bogus Gateway). */
+  test: boolean;
   currentTotalPriceSet: Money;
   currentTotalTaxSet: Money;
   totalShippingPriceSet: Money;
@@ -250,7 +254,7 @@ export async function getOrder(orderId: string): Promise<ShopifyOrder> {
   // Beløpene er nødvendige for oppgjøret med butikkene. Prisene inkluderer mva
   // (shop.taxesIncluded = true), så discountedTotalSet er linjesummen inkl. mva etter
   // rabatt. current*-feltene tar hensyn til senere endringer og refusjoner.
-  const Q = `query Order($id: ID!) { order(id: $id) { id name email currencyCode
+  const Q = `query Order($id: ID!) { order(id: $id) { id name email currencyCode tags test
     currentTotalPriceSet { shopMoney { amount } }
     currentTotalTaxSet { shopMoney { amount } }
     totalShippingPriceSet { shopMoney { amount } }

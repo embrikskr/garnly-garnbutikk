@@ -22,7 +22,8 @@ supabase/migrations/      001 schema, 002 cron, 003 exclude_from_sync, 004 inven
                           005 pos_catalog, 006 cron pos-catalog, 007 product_aliases, 008 store_panel,
                           009 group_resplit, 010 oppgjor, 011 rls, 012 cron sync-products,
                           013 pos_deduction, 014 fulfillment fra Shopify,
-                          015 group_fulfilled, 016 lager-avstemming, 017 cron reconcile
+                          015 group_fulfilled, 016 lager-avstemming, 017 cron reconcile,
+                          018 testordrer
 supabase/seed/            product_aliases.sql (varer uten brukbar EAN, kjøres etter første sync-products)
 panel/                    butikkpanelet (statisk side, Vercel med rot `panel/`).
                           garnly-butikkpanel.vercel.app – deployes av git push
@@ -34,6 +35,7 @@ supabase/functions/
   _shared/schedule.ts     REN logikk: når en butikk er due (nattintervall + grace)
   _shared/inventory.ts    REN logikk: salgbart antall (buffer + ventende kassauttrekk)
   _shared/fulfillment.ts  REN logikk: kobler Shopify-sendinger til grupper
+  _shared/testorder.ts    REN logikk: er ordren en testordre (tag TEST / order.test)
   _shared/fulfillment_sync.ts  henter fulfilled_at fra Shopify (webhook + backstop)
   _shared/offers.ts       makeNextOffer, escalateGroup, refreshOrderStatus
   _shared/shipping/       bookShipment + shipmondo.ts
