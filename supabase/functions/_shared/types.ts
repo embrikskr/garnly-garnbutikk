@@ -58,7 +58,20 @@ export interface LineItem {
   variant_id: string;
   product_id: string; // Garnly products.id
   qty: number;
+  /** Shopifys produktnavn, f.eks. «Merinoull». */
   title: string;
+  // Feltene under ble lagt til 30.09.2026, etter at butikken sto med «Merinoull» på kortet
+  // og måtte gjette hvilket nøste av tretti. Valgfrie fordi ordrer rutet før den datoen
+  // ikke har dem – se _shared/lines.ts og backfill-lines.
+  /** Variantnavnet, f.eks. «8581 Dyp skoggrønn». Null for produkter uten varianter. */
+  variant_title?: string | null;
+  sku?: string | null;
+  /** Strekkoden butikken skanner i kassa. */
+  barcode?: string | null;
+  /** Variantbildet, ellers produktbildet. */
+  image_url?: string | null;
+  /** Bare garnpakker: hvilke garn og farger pakken består av (metafelt garnly.garn_innhold). */
+  kit_contents?: string[];
   /** Linjesum inkl. mva etter rabatt, i butikkens valuta. Grunnlag for oppgjør. */
   amount_inc_vat?: number;
   /** Mva-beløpet i linjesummen over. */

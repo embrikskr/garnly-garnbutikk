@@ -136,14 +136,34 @@ button { font: inherit; }
 .card__deadline[data-level="late"] { color: var(--red); }
 
 .lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.lines li {
-  display: flex; gap: 12px; align-items: baseline;
+
+/* Plukkelinja: bilde, antall, tekst. Antallet skal være det første øyet finner – butikken
+   står ved pakkebordet og skal se «2» uten å lete. */
+.linje {
+  display: grid; grid-template-columns: 48px auto 1fr; gap: 12px; align-items: center;
   padding: 10px 12px; background: #FBF8F3; border-radius: 10px;
 }
-.lines .qty {
-  font-weight: 700; min-width: 42px; text-align: center;
-  background: var(--cream-2); border-radius: 8px; padding: 2px 6px;
+.linje__bilde {
+  width: 48px; height: 48px; border-radius: 8px; object-fit: cover;
+  background: var(--cream-2); border: 1px solid var(--border);
 }
+.linje__bilde--tom { display: block; }
+.linje__qty {
+  font-size: 26px; font-weight: 700; line-height: 1; min-width: 44px; text-align: center;
+  background: var(--cream-2); border-radius: 8px; padding: 8px 6px;
+  font-variant-numeric: tabular-nums;
+}
+.linje__tekst { display: grid; gap: 3px; min-width: 0; }
+.linje__navn { font-weight: 600; }
+.linje__koder { font-size: 14px; color: var(--ink-soft); }
+.linje__ean {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px;
+}
+.linje__sku { margin-left: 4px; }
+/* Garnpakker har ingen strekkode – variantene er størrelser. Innholdet står her i stedet. */
+.linje__pakke { list-style: none; margin: 2px 0 0; padding: 0; display: grid; gap: 2px; font-size: 14px; color: var(--ink-soft); }
+.linje__pakke li::before { content: "• "; }
 .card__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .card__actions .btn { min-height: 60px; font-size: 18px; }
 @media (max-width: 480px) { .card__actions { grid-template-columns: 1fr; } }
@@ -195,6 +215,20 @@ button { font: inherit; }
 
 /* Etikettknappen står for seg selv over kassa-raden. */
 .card__actions--etikett { grid-template-columns: 1fr; }
+
+/* Liten ikonknapp – fraktetiketten. Den store knappen tok plassen til det butikken
+   faktisk skal trykke på, og etiketten hentes sjelden på nytt. Trykkflaten er fortsatt
+   40 × 40 px, som er nok på nettbrett. */
+.ikon {
+  appearance: none; background: transparent; border: 1px solid transparent; border-radius: 10px;
+  width: 40px; height: 40px; padding: 8px; margin-left: 8px; cursor: pointer; color: var(--ink-soft);
+  display: inline-flex; align-items: center; justify-content: center; vertical-align: middle;
+  -webkit-tap-highlight-color: transparent;
+}
+.ikon svg { width: 100%; height: 100%; fill: currentColor; }
+.ikon:hover { background: var(--cream-2); color: var(--wine); }
+.ikon:focus-visible { outline: 3px solid var(--wine); outline-offset: 1px; }
+.ikon[disabled] { opacity: .5; pointer-events: none; }
 
 /* ---------------------------------------------------------------- faner */
 .faner { display: flex; gap: 8px; padding: 0 20px; border-bottom: 1px solid var(--border); }

@@ -15,6 +15,7 @@ import { planGroups } from "../_shared/routing.ts";
 import { erTestordre } from "../_shared/testorder.ts";
 import { escalateGroup, makeNextOffer } from "../_shared/offers.ts";
 import type { LineItem } from "../_shared/types.ts";
+import { byggLinje } from "../_shared/lines.ts";
 
 Deno.serve(async (req) => {
   const raw = await req.text();
@@ -70,11 +71,14 @@ async function processOrder(orderGid: string) {
     const helLinje = Number(n.lineItem.discountedTotalSet?.shopMoney?.amount ?? 0);
     const helMva = (n.lineItem.taxLines ?? []).reduce((sum, t) => sum + Number(t.priceSet?.shopMoney?.amount ?? 0), 0);
     const andel = n.lineItem.quantity > 0 ? n.remainingQuantity / n.lineItem.quantity : 0;
-    lines.push({
-      line_item_id: n.id, variant_id: vid!, product_id: pid, qty: n.remainingQuantity, title: n.lineItem.title,
-      amount_inc_vat: Math.round(helLinje * andel * 100) / 100,
-      vat_amount: Math.round(helMva * andel * 100) / 100,
-    });
+    // Varianttittel, SKU, strekkode, bilde og garnpakkeinnhold følger med – butikken skal
+    // vite hva de plukker uten å slå det opp. Se _shared/lines.ts.
+    lines.push(byggLinje(
+      n,
+      pid,
+      Math.round(helLinje * andel * 100) / 100,
+      Math.round(helMva * andel * 100) / 100,
+    ));
   }
 
   // Bare gavekort: ingenting å rute, og ingen grunn til å holde ordren. Shopify

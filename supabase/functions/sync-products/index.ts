@@ -10,6 +10,7 @@ import { adminClient, json, requireInternalSecret } from "../_shared/db.ts";
 import { ensureVariantsTracked, iterateVariants } from "../_shared/shopify.ts";
 import { normalizeEan } from "../_shared/adapters/types.ts";
 import { gramFraShopify } from "../_shared/shipping/consignment.ts";
+import { erGarnpakke } from "../_shared/lines.ts";
 
 Deno.serve(async (req) => {
   const unauthorized = requireInternalSecret(req);
@@ -99,7 +100,3 @@ export function parseName(vendor: string | null, productTitle: string, variantTi
 }
 
 /** Garnpakke? Kjennes på productType eller tag i Shopify, ikke på navn. */
-function erGarnpakke(product: { productType?: string | null; tags?: string[] | null }): boolean {
-  if ((product.productType ?? "").trim().toLowerCase() === "garnpakke") return true;
-  return (product.tags ?? []).some((t) => t.trim().toLowerCase() === "garnpakke");
-}

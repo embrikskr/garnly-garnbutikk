@@ -2,6 +2,63 @@
 
 Oppdatert: 2026-09-30
 
+## Panelet etter test av #1005 (30.09.2026)
+
+Fem justeringer etter at flyten var kjørt for ekte:
+
+**Etiketten lastes ikke ned av seg selv.** De fleste butikkene har DirectPrint, og da er
+etiketten alt på vei til skriveren. For de uten skriver var en PDF som åpnet seg i en ny fane
+midt i pakkingen i veien. Nå vises bare en bekreftelse, og etiketten hentes fra ikonet.
+
+**Etikettknappen er blitt et ikon** med hjelpetekst «Skriv ut fraktetikett» – på pakkekortet,
+på kortene i «Tidligere ordrer» og i detaljruten. Den store knappen tok plassen til det
+butikken faktisk skal trykke på. Ikonet vises bare når det finnes en sending å hente.
+
+**Kortet forsvinner fra pakkelista med én gang** (024 fjerner 24-timersvinduet fra 023).
+Bekreftelsen sier hvor ordren ble av: «Sendt. Du finner den under Tidligere ordrer.»
+
+**Varelinjene viser hva som skal plukkes.** Kortet sa før bare «Merinoull», og butikken måtte
+gjette hvilket nøste av tretti. Nå står produkt og variant («Merinoull – 8581 Dyp
+skoggrønn»), antallet stort, strekkoden i monospace så den kan skannes, SKU, og et lite
+variantbilde. `line_items` lagrer feltene ved ordremottak (`_shared/lines.ts`).
+
+**Garnpakker viser innholdet.** De har verken strekkode eller variantbilde – variantene er
+størrelser (XS, S, M). Innholdet står i Shopify-metafeltet `garnly.garn_innhold`, én garnsort
+per linje. Det er **ikke** en Shopify-bundle: `productVariantComponents` er tomt, så
+metafeltet er eneste kilde.
+
+### Etterfylling
+
+`backfill-lines` henter feltene fra Shopify for ordrer som alt lå i panelet. Kjørt: 3 av 3
+grupper oppdatert, ingen feil. #1005 fikk «8581 Dyp skoggrønn», strekkode 7039560690720 og
+ekte bilde-URL. **Linjene matches på variant-id, ikke line_item_id** – deles en fulfillment
+order, får linjene nye id-er, mens variant-id-en står.
+
+### To forbehold
+
+- **Garnpakkens metafelt sier ikke eksakt antall per størrelse.** Det står «7–11 nøster etter
+  størrelse». Butikken ser hvilke garn og farger pakken består av, men ikke hvor mange nøster
+  størrelse M skal ha. Skal det bli presist, må Shopify ha antallet per variant.
+- **Bildene hentes med `variant.image` og `product.featuredImage`**, som Shopify har merket
+  deprecated til fordel for `media`. `media` krever `read_files`/`read_images`, som appen ikke
+  har. De gamle feltene krever bare `read_products` og virker i 2025-07. Byttes når scopene
+  utvides; til da er API-versjonen pinnet.
+
+### Verifisert i ekte Chromium, begge butikktyper
+
+Kjørt både for en butikk **med** og **uten** etikettskriver:
+
+- Ingen kall til `shipping-label` etter sending i noen av tilfellene (0 av 0).
+- Bekreftelsen er riktig for hver type: «Etiketten skrives ut …» mot «Sendt. Du finner den
+  under Tidligere ordrer.»
+- Ikonet har hjelpeteksten, og finnes ikke på kort uten sending.
+- Ikonet i «Tidligere ordrer» henter etiketten **uten** å åpne detaljruten.
+- Linjene: navn med variant, antall i 26 px, strekkode, SKU, bilde, og garnpakkens to
+  innholdslinjer. En linje uten de nye feltene (rutet før endringen) vises uten tomme felt.
+
+Testen ble kjørt mot koden med automatisk nedlasting tilbake først, og feilet da – den fanger
+altså feilen.
+
 ## «Slått ut og klar til sending» – butikken sender fra panelet (30.09.2026)
 
 Én knapp erstatter «Fulfill with CargonizerConnect» i Shopify og den gamle «Slått ut i

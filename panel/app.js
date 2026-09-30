@@ -231,7 +231,7 @@ function renderAssigned(rows) {
     <article class="card ${sendt ? "card--packing" : "card--klar"}${etterlyst(r) ? " card--reminder" : ""}" data-group="${r.group_id}">
       <div class="card__head">
         <span class="card__order">${esc(r.order_name ?? "Ordre")}${r.is_test ? ' <span class="merke">TEST</span>' : ""}${sendt ? ' <span class="merke">Sendt</span>' : ""}</span>
-        <span class="card__meta">${r.assigned_at ? klokke(r.assigned_at) : ""}</span>
+        <span class="card__meta">${r.assigned_at ? klokke(r.assigned_at) : ""}${r.shipped_at || r.fulfilled_at ? etikettIkon() : ""}</span>
       </div>
       <ul class="lines">${lineItems(r.line_items)}</ul>
       <p class="addr">${esc(r.ship_name ?? "")}<br>${esc(r.ship_address1 ?? "")}${r.ship_address2 ? "<br>" + esc(r.ship_address2) : ""}<br>${esc(r.ship_zip ?? "")} ${esc(r.ship_city ?? "")}</p>
@@ -259,11 +259,9 @@ function renderAssigned(rows) {
  * Etter sending: etiketten, så den kan skrives ut på nytt.
  */
 function handlinger(r, sendt) {
-  if (sendt) {
-    return `<div class="card__actions card__actions--etikett">
-      <button class="btn btn--secondary" data-act="etikett">Hent fraktetikett (PDF)</button>
-    </div>`;
-  }
+  // Sendte ordrer står bare her når kassauttrekket mangler (sendt utenfor panelet).
+  // Etiketten ligger som ikon i korthodet, ikke som knapp.
+  if (sendt) return "";
   const igjen = !!r.ship_error;
   return `<div class="card__actions card__actions--etikett">
       <button class="btn btn--primary" data-act="send">${igjen ? "Prøv igjen" : "Slått ut og klar til sending"}</button>
@@ -381,6 +379,7 @@ function renderHistorikk() {
       <div class="hist__topp">
         <span class="hist__ordre">${esc(r.order_name ?? "Ordre")}${r.is_test ? ' <span class="merke">TEST</span>' : ""}</span>
         <span class="hist__status hist__status--${r.status}">${STATUSTEKST[r.status] ?? r.status}</span>
+        ${r.kind === "tildelt" && r.status !== "kansellert" ? etikettIkon() : ""}
       </div>
       <div class="hist__bunn">
         <span>${r.ship_name ? esc(r.ship_name) : "&mdash;"}</span>
@@ -410,13 +409,13 @@ function apneDetalj(groupId) {
     <div class="card__head">
       <span class="card__order">${esc(r.order_name ?? "Ordre")}${r.is_test ? ' <span class="merke">TEST</span>' : ""}</span>
       <span class="hist__status hist__status--${r.status}">${STATUSTEKST[r.status] ?? r.status}</span>
+      ${kanHenteEtikett ? etikettIkon() : ""}
     </div>
     <ul class="lines">${lineItems(r.line_items)}</ul>
     ${adresse}
     ${pakkeboks(r)}
     ${r.tracking_number ? `<p class="track">Sporing: ${r.tracking_url ? `<a href="${esc(r.tracking_url)}" target="_blank" rel="noopener">${esc(r.tracking_number)}</a>` : esc(r.tracking_number)}</p>` : ""}
     ${tider.length ? `<dl class="tider">${tider.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>` : ""}
-    ${kanHenteEtikett ? `<div class="card__actions card__actions--etikett"><button class="btn btn--secondary" data-act="etikett">Hent fraktetikett (PDF)</button></div>` : ""}
     ${manglerUttrekk ? `<div class="card__actions card__actions--etikett"><button class="btn btn--primary" data-act="deducted">Slått ut i kassa</button></div>` : ""}
   `;
   el.detalj.dataset.group = groupId;
@@ -431,8 +430,46 @@ function tidspunkt(iso) {
   return new Date(iso).toLocaleString("nb-NO", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
+/**
+ * Varelinjene butikken skal plukke.
+ *
+ * Kortet viste før bare produktnavnet – «Merinoull» – og butikken måtte gjette hvilket nøste
+ * av tretti de skulle hente. Nå står varianten, strekkoden de skanner i kassa, SKU og et
+ * lite bilde. Garnpakker har verken strekkode eller variantbilde (variantene er størrelser),
+ * så der vises innholdet i pakken i stedet.
+ *
+ * Feltene kan mangle på ordrer rutet før 30.09.2026. Alt er derfor betinget.
+ */
 function lineItems(items) {
-  return (items ?? []).map((i) => `<li><span class="qty">${Number(i.qty)}</span><span>${esc(i.title ?? "")}</span></li>`).join("");
+  return (items ?? []).map((i) => {
+    const koder = [
+      i.barcode ? `<code class="linje__ean">${esc(i.barcode)}</code>` : "",
+      i.sku ? `<span class="linje__sku">SKU ${esc(i.sku)}</span>` : "",
+    ].filter(Boolean).join(" ");
+    const pakke = (i.kit_contents ?? []).length
+      ? `<ul class="linje__pakke">${i.kit_contents.map((k) => `<li>${esc(k)}</li>`).join("")}</ul>`
+      : "";
+    return `<li class="linje">
+      ${i.image_url
+        ? `<img class="linje__bilde" src="${esc(i.image_url)}" alt="" loading="lazy" decoding="async">`
+        : '<span class="linje__bilde linje__bilde--tom" aria-hidden="true"></span>'}
+      <span class="linje__qty">${Number(i.qty)}</span>
+      <div class="linje__tekst">
+        <span class="linje__navn">${esc(i.title ?? "")}${i.variant_title ? ` – ${esc(i.variant_title)}` : ""}</span>
+        ${koder ? `<span class="linje__koder">${koder}</span>` : ""}
+        ${pakke}
+      </div>
+    </li>`;
+  }).join("");
+}
+
+/** Liten ikonknapp for fraktetiketten. Samme markup på pakkekort og i tidligere ordrer. */
+function etikettIkon() {
+  return `<button class="ikon" data-act="etikett" title="Skriv ut fraktetikett" aria-label="Skriv ut fraktetikett">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M7 3h10v4H7z"/><path d="M5 7h14a2 2 0 0 1 2 2v6h-4v-2H7v2H3V9a2 2 0 0 1 2-2z"/><path d="M7 15h10v6H7z"/>
+    </svg>
+  </button>`;
 }
 
 // ---------------------------------------------------------------- svar
@@ -460,9 +497,13 @@ el.queue.addEventListener("click", async (e) => {
  * API-nøkkelen ligger på serveren – Cargonizers PDF-URL-er kan uansett ikke lenkes til direkte.
  */
 async function hentEtikett(btn, groupId) {
-  const original = btn.textContent;
+  // Ikonknappen har en SVG inni seg, ikke tekst. Skrev vi «Henter …» der, ville ikonet
+  // forsvinne og aldri komme tilbake om noe feilet.
+  const ikon = btn.classList.contains("ikon");
+  const original = ikon ? null : btn.textContent;
   btn.disabled = true;
-  btn.textContent = "Henter …";
+  btn.setAttribute("aria-busy", "true");
+  if (!ikon) btn.textContent = "Henter …";
   let url = null;
   try {
     const { data: { session } } = await sb.auth.getSession();
@@ -494,7 +535,8 @@ async function hentEtikett(btn, groupId) {
     toast(`Fikk ikke hentet etiketten: ${grunn}`, "error");
   } finally {
     btn.disabled = false;
-    btn.textContent = original;
+    btn.removeAttribute("aria-busy");
+    if (original !== null) btn.textContent = original;
     // Gi nettleseren tid til å åpne fila før vi frigjør den.
     if (url) setTimeout(() => URL.revokeObjectURL(url), 60000);
   }
@@ -575,10 +617,12 @@ async function sendOrdre(btn, groupId, kunUttrekk = false) {
     if (kunUttrekk) {
       toast("Kassauttrekket er registrert.");
     } else {
-      toast(svar.etikett === "skriver" ? "Sendt. Etiketten er sendt til skriveren." : "Sendt. Henter etiketten …");
-      // Etiketten hentes med samme knapp, mens klikket ennå «gjelder»: åpner vi den senere,
-      // blir den blokkert som popup.
-      if (svar.etikett !== "skriver") await hentEtikett(btn, groupId);
+      // Etiketten lastes IKKE ned av seg selv. Har butikken skriver, er den alt på vei dit.
+      // Har de ikke, skal de hente den når de vil – en PDF som åpner seg i en ny fane midt i
+      // pakkingen er i veien, og de fleste butikkene har skriver.
+      toast(svar.etikett === "skriver"
+        ? "Sendt. Etiketten skrives ut. Du finner ordren under Tidligere ordrer."
+        : "Sendt. Du finner den under Tidligere ordrer.");
     }
   } catch (err) {
     console.error("[ship-order]", err);
@@ -679,12 +723,20 @@ el.visFlere.addEventListener("click", () => {
   lastHistorikk();
 });
 
-el.historikk.addEventListener("click", (e) => {
+el.historikk.addEventListener("click", async (e) => {
   const kort = e.target.closest("[data-group]");
-  if (kort?.dataset.group) apneDetalj(kort.dataset.group);
+  if (!kort?.dataset.group) return;
+  // Etikettikonet ligger inne i kortet, som selv er klikkbart. Uten denne ville et trykk på
+  // ikonet både hentet etiketten og åpnet detaljruten oppå den.
+  const etikett = e.target.closest('button[data-act="etikett"]');
+  if (etikett) { await hentEtikett(etikett, kort.dataset.group); return; }
+  apneDetalj(kort.dataset.group);
 });
 el.historikk.addEventListener("keydown", (e) => {
   if (e.key !== "Enter" && e.key !== " ") return;
+  // Knapper inne i kortet lager sin egen click av Enter og mellomrom. Uten dette ville
+  // detaljruten åpnet seg i tillegg.
+  if (e.target.closest("button")) return;
   const kort = e.target.closest("[data-group]");
   if (!kort?.dataset.group) return;
   e.preventDefault();
