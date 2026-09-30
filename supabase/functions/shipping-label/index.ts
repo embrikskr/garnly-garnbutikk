@@ -15,20 +15,7 @@
  */
 import { adminClient, audit, json } from "../_shared/db.ts";
 import { finnConsignment, hentEtikett, SOKEVINDU_DAGER } from "../_shared/shipping/cargonizer.ts";
-
-const ALLOWED = (Deno.env.get("PANEL_ORIGIN") ?? "*").split(",").map((s) => s.trim()).filter(Boolean);
-
-function cors(req: Request): Record<string, string> {
-  const origin = req.headers.get("origin") ?? "";
-  const allow = ALLOWED.includes("*") ? "*" : ALLOWED.includes(origin) ? origin : ALLOWED[0];
-  return {
-    "Access-Control-Allow-Origin": allow,
-    "Access-Control-Allow-Headers": "authorization, content-type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Max-Age": "86400",
-    "Vary": "Origin",
-  };
-}
+import { cors } from "../_shared/cors.ts";
 
 Deno.serve(async (req) => {
   const CORS = cors(req);

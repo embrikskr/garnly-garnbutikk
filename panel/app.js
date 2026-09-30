@@ -29,6 +29,8 @@ const el = {
   historikk: $("historikk"), historikkEmpty: $("historikk-empty"), historikkPeriode: $("historikk-periode"),
   sok: $("sok"), visFlere: $("vis-flere"),
   detalj: $("ordre-detalj"), detaljInnhold: $("detalj-innhold"), detaljLukk: $("detalj-lukk"),
+  innstillinger: $("innstillinger"), innstillingerDialog: $("innstillinger-dialog"),
+  innstillingerLukk: $("innstillinger-lukk"), skriverValg: $("skriver-valg"), skriverLagre: $("skriver-lagre"),
 };
 
 /** Historikk: standardvindu, og hvor mye «Vis flere» utvider med. */
@@ -223,24 +225,66 @@ function renderQueue(rows, freshIds) {
 
 function renderAssigned(rows) {
   el.assignedEmpty.hidden = rows.length > 0;
-  const html = rows.map((r) => `
-    <article class="card card--packing${etterlyst(r) ? " card--reminder" : ""}" data-group="${r.group_id}">
+  const html = rows.map((r) => {
+    const sendt = !!r.fulfilled_at;
+    return `
+    <article class="card ${sendt ? "card--packing" : "card--klar"}${etterlyst(r) ? " card--reminder" : ""}" data-group="${r.group_id}">
       <div class="card__head">
-        <span class="card__order">${esc(r.order_name ?? "Ordre")}${r.group_status === "fulfilled" ? ' <span class="merke">Sendt</span>' : ""}</span>
+        <span class="card__order">${esc(r.order_name ?? "Ordre")}${r.is_test ? ' <span class="merke">TEST</span>' : ""}${sendt ? ' <span class="merke">Sendt</span>' : ""}</span>
         <span class="card__meta">${r.assigned_at ? klokke(r.assigned_at) : ""}</span>
       </div>
       <ul class="lines">${lineItems(r.line_items)}</ul>
       <p class="addr">${esc(r.ship_name ?? "")}<br>${esc(r.ship_address1 ?? "")}${r.ship_address2 ? "<br>" + esc(r.ship_address2) : ""}<br>${esc(r.ship_zip ?? "")} ${esc(r.ship_city ?? "")}</p>
+      ${pakkeboks(r)}
       ${r.tracking_number ? `<p class="track">Sporing: ${r.tracking_url ? `<a href="${esc(r.tracking_url)}" target="_blank" rel="noopener">${esc(r.tracking_number)}</a>` : esc(r.tracking_number)}</p>` : ""}
       ${fraktStatus(r)}
-      <div class="card__actions card__actions--etikett">
-        <button class="btn btn--secondary" data-act="etikett">Hent fraktetikett (PDF)</button>
-      </div>
-      ${kassaStatus(r)}
-    </article>`).join("");
+      ${feilboks(r)}
+      ${handlinger(r, sendt)}
+      ${sendt ? kassaStatus(r) : ""}
+    </article>`;
+  }).join("");
   if (html === assignedSig) return;
   assignedSig = html;
   el.assigned.innerHTML = html;
+}
+
+/**
+ * Knappene på kortet.
+ *
+ * Før sending: én stor knapp som gjør alt – kassauttrekk, sending i Cargonizer, fulfillment
+ * i Shopify og etiketten. Butikkene har ikke tilgang til Shopify-admin, så dette er eneste
+ * vei ut for ordren. Under den ligger reserveknappen for ordrer som alt er sendt på annen
+ * måte; den registrerer bare uttrekket.
+ *
+ * Etter sending: etiketten, så den kan skrives ut på nytt.
+ */
+function handlinger(r, sendt) {
+  if (sendt) {
+    return `<div class="card__actions card__actions--etikett">
+      <button class="btn btn--secondary" data-act="etikett">Hent fraktetikett (PDF)</button>
+    </div>`;
+  }
+  const igjen = !!r.ship_error;
+  return `<div class="card__actions card__actions--etikett">
+      <button class="btn btn--primary" data-act="send">${igjen ? "Prøv igjen" : "Slått ut og klar til sending"}</button>
+    </div>
+    <div class="card__actions card__actions--etikett">
+      <button class="btn btn--ghost btn--sm" data-act="kun-uttrekk">Sendt på annen måte – registrer bare kassauttrekk</button>
+    </div>`;
+}
+
+/** Feilen fra forrige forsøk, med det som faktisk ble gjort. */
+function feilboks(r) {
+  if (!r.ship_error) return "";
+  const hvor = { uttrekk: "kassauttrekket", sending: "fraktsendingen", fulfillment: "Shopify", etikett: "etiketten" };
+  return `<p class="feil" role="alert"><b>Stoppet på ${hvor[r.ship_step] ?? "et steg"}:</b> ${esc(r.ship_error)}</p>`;
+}
+
+/** Pakkeboksen sendingen går til. Butikken slipper å lure på hvor pakken havner. */
+function pakkeboks(r) {
+  const p = r.service_partner;
+  if (!p?.name) return "";
+  return `<p class="pakkeboks">Til ${esc(p.name)}${p.address1 ? ", " + esc(p.address1) : ""}${p.city ? ", " + esc(p.city) : ""}</p>`;
 }
 
 /**
@@ -369,6 +413,7 @@ function apneDetalj(groupId) {
     </div>
     <ul class="lines">${lineItems(r.line_items)}</ul>
     ${adresse}
+    ${pakkeboks(r)}
     ${r.tracking_number ? `<p class="track">Sporing: ${r.tracking_url ? `<a href="${esc(r.tracking_url)}" target="_blank" rel="noopener">${esc(r.tracking_number)}</a>` : esc(r.tracking_number)}</p>` : ""}
     ${tider.length ? `<dl class="tider">${tider.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>` : ""}
     ${kanHenteEtikett ? `<div class="card__actions card__actions--etikett"><button class="btn btn--secondary" data-act="etikett">Hent fraktetikett (PDF)</button></div>` : ""}
@@ -464,6 +509,12 @@ el.assigned.addEventListener("click", async (e) => {
     if (kort?.dataset.group) await hentEtikett(etikettBtn, kort.dataset.group);
     return;
   }
+  const sendBtn = e.target.closest('button[data-act="send"], button[data-act="kun-uttrekk"]');
+  if (sendBtn) {
+    const kort = sendBtn.closest("[data-group]");
+    if (kort?.dataset.group) await sendOrdre(sendBtn, kort.dataset.group, sendBtn.dataset.act === "kun-uttrekk");
+    return;
+  }
   const btn = e.target.closest('button[data-act="deducted"]');
   if (!btn) return;
   const card = btn.closest("[data-group]");
@@ -485,6 +536,118 @@ el.assigned.addEventListener("click", async (e) => {
     busy.delete(groupId);
   }
 });
+
+/**
+ * «Slått ut og klar til sending».
+ *
+ * Panelet gjør ingenting av dette selv. Alt – kassauttrekk, sending i Cargonizer, overføring
+ * til PostNord, fulfillment i Shopify og etiketten – ligger i ship-order på serveren. Her
+ * sender vi trykket og viser hva som skjedde.
+ *
+ * Svaret er 200 også når et steg feilet, med `utfort` som sier hva som gikk gjennom. Derfor
+ * leser vi `ok` og ikke HTTP-statusen: butikken skal se at uttrekket er registrert selv om
+ * fraktsendingen stoppet.
+ */
+async function sendOrdre(btn, groupId, kunUttrekk = false) {
+  if (busy.has(groupId)) return;
+  if (kunUttrekk && !confirm("Registrer bare kassauttrekket? Ordren blir ikke sendt herfra, og kunden får ingen sporing.")) return;
+  busy.add(groupId);
+  const kort = btn.closest("[data-group]");
+  kort?.querySelectorAll("button").forEach((b) => (b.disabled = true));
+  const original = btn.textContent;
+  btn.textContent = kunUttrekk ? "Registrerer …" : "Sender …";
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { showLogin(); return; }
+    const res = await fetch(`${CFG.SUPABASE_URL}/functions/v1/ship-order`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ group_id: groupId, kun_uttrekk: kunUttrekk }),
+      // Sendingen går innom Cargonizer og Shopify. 60 sekunder er rundhåndet, men et
+      // tidsavbrudd midt i ville sett ut som om ingenting skjedde – og noe har skjedd.
+      signal: typeof AbortSignal?.timeout === "function" ? AbortSignal.timeout(60000) : undefined,
+    });
+    const svar = await res.json().catch(() => ({}));
+    if (!svar.ok) {
+      toast(svar.melding || "Noe stoppet. Prøv igjen.", "error");
+      return;
+    }
+    if (kunUttrekk) {
+      toast("Kassauttrekket er registrert.");
+    } else {
+      toast(svar.etikett === "skriver" ? "Sendt. Etiketten er sendt til skriveren." : "Sendt. Henter etiketten …");
+      // Etiketten hentes med samme knapp, mens klikket ennå «gjelder»: åpner vi den senere,
+      // blir den blokkert som popup.
+      if (svar.etikett !== "skriver") await hentEtikett(btn, groupId);
+    }
+  } catch (err) {
+    console.error("[ship-order]", err);
+    const grunn = err?.name === "TimeoutError" ? "Svaret tok for lang tid. Sjekk kortet før du prøver igjen." : String(err?.message ?? err);
+    toast(`Fikk ikke sendt ordren: ${grunn}`, "error");
+  } finally {
+    busy.delete(groupId);
+    btn.textContent = original;
+    assignedSig = null;
+    await refresh();
+  }
+}
+
+// ---------------------------------------------------------------- innstillinger
+
+/**
+ * Etikettskriver.
+ *
+ * Lista over DirectPrint-skrivere hentes fra serveren – Cargonizer-nøkkelen skal ikke innom
+ * nettleseren. Serveren sjekker også at id-en vi lagrer finnes i lista.
+ */
+el.innstillinger.addEventListener("click", async () => {
+  el.skriverValg.disabled = true;
+  el.innstillingerDialog.showModal();
+  const svar = await kallPrintere({ action: "list" });
+  if (!svar) return;
+  tegnSkrivere(svar);
+});
+
+el.innstillingerLukk.addEventListener("click", () => el.innstillingerDialog.close());
+
+el.skriverLagre.addEventListener("click", async () => {
+  el.skriverLagre.disabled = true;
+  const svar = await kallPrintere({ action: "save", printer_id: el.skriverValg.value });
+  el.skriverLagre.disabled = false;
+  if (!svar) return;
+  tegnSkrivere(svar);
+  toast(svar.valgt ? `Etiketten sendes til ${svar.valgt_navn}.` : "Etiketten åpnes som PDF.");
+  el.innstillingerDialog.close();
+});
+
+function tegnSkrivere(svar) {
+  const valgt = svar.valgt ?? "";
+  el.skriverValg.innerHTML = ['<option value="">Ingen – skriv ut PDF selv</option>']
+    .concat((svar.printere ?? []).map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`))
+    .join("");
+  el.skriverValg.value = valgt;
+  el.skriverValg.disabled = false;
+}
+
+async function kallPrintere(body) {
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { showLogin(); return null; }
+    const res = await fetch(`${CFG.SUPABASE_URL}/functions/v1/label-printers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ ...body, store_id: storeId }),
+      signal: typeof AbortSignal?.timeout === "function" ? AbortSignal.timeout(30000) : undefined,
+    });
+    const svar = await res.json().catch(() => ({}));
+    if (!svar.ok) { toast(svar.melding || "Fikk ikke hentet skriverne.", "error"); return null; }
+    return svar;
+  } catch (err) {
+    console.error("[label-printers]", err);
+    toast(`Fikk ikke hentet skriverne: ${String(err?.message ?? err)}`, "error");
+    return null;
+  }
+}
 
 // ---------------------------------------------------------------- faner og historikk
 

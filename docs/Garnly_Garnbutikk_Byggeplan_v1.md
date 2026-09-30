@@ -199,9 +199,49 @@ Som i juli-dokumentet: avslag → neste kandidat uten straff. `timeout-sweeper` 
 
 ## 10. Frakt
 
-Uendret beslutning: butikken sender, Garnly eier avtalen, kunden betaler frakt. Booking via API i aksept-steget (Shipmondo `POST /shipments` med butikk som avsender), etikett auto-printes (Print Client, Essentials-plan) eller sendes på e-post.
+Uendret beslutning: butikken sender, Garnly eier avtalen, kunden betaler frakt.
 
-**Åpen signaturbeslutning fra juli, fortsatt åpen:** Shipmondo med Logistras Bring-avtale, eller Cargonizer direkte. Adapter-mønsteret brukes også her (`shipping/shipmondo.ts`, `shipping/cargonizer.ts`) så valget kan tas uten å låse koden.
+**Avklart 30.09.2026: Cargonizer (Logistra), booket av Garnly – ikke av CargonizerConnect.**
+Fraktvalget som sto åpent fra juli er tatt, og med det også *hvem* som booker.
+
+Veien dit gikk om et mellomsteg som ikke holdt. Først lot vi CargonizerConnect-appen i
+Shopify lage sendingen og fulfille ordren, mens Garnly bare leste resultatet. Ekte ordre
+#1004 viste to hull i det:
+
+1. **Butikkene har ikke tilgang til Shopify-admin.** De kunne ikke trykke «Fulfill with
+   CargonizerConnect», og ordren ble liggende til noen med admin-tilgang gjorde det for dem.
+   Å gi hver butikk Shopify-tilgang er ikke et alternativ: da ser de alle butikkers ordrer.
+2. **CargonizerConnect overfører ikke sendingen til transportøren.** Appen har bare
+   innstilling for automatisk overføring på «Home Small main shipment», ikke på pakkeboks.
+   Sendingen ble stående som «Usendt», PostNord fikk aldri EDI, og sporingsnummeret kunden
+   fikk i Shopify var dødt.
+
+Derfor gjør backenden det selv, fra butikkpanelet, på ett trykk («Slått ut og klar til
+sending», se `_shared/ship.ts`):
+
+1. kassauttrekket registreres (`mark_pos_deducted`, med butikkbrukerens egen JWT)
+2. sendingen opprettes i Cargonizer: `POST /consignments.xml` med butikkens avsender-ID,
+   butikkens transportavtale, produkt Parcel Locker (`postnord_mypack_small`), nærmeste
+   pakkeboks fra `/service_partners.xml`, vekt fra varene, SMS-varsling, og `transfer=true`
+3. sendings-id, sendingsnummer, sporingsnummer og sporingslenke lagres
+4. Shopify fulfilles med sporing (`fulfillmentCreate`, `notifyCustomer`)
+5. etiketten skrives ut på butikkens DirectPrint-skriver, eller åpnes som PDF i panelet
+
+Hvert steg tåler å kjøres på nytt: før vi lager en sending leter vi etter en som finnes, og
+før vi fulfiller spør vi Shopify om det gjenstår noe. Testordrer opprettes med
+`transfer=false`, så ingenting går til transportøren.
+
+Transportavtale og produkt ligger per butikk i `stores` (`shipping_transport_agreement`,
+`shipping_product`), ikke i koden: avtale-id-ene er ulike per butikk, og et transportørbytte
+skal ikke kreve ny utrulling.
+
+**Konsekvens som bør ses på:** produktet er det samme uansett hva kunden valgte i kassen.
+Velger kunden hjemlevering, sendes pakken likevel til pakkeboks. Så lenge butikken bare
+tilbyr én fraktmåte stemmer det, men fraktvalg i kassen må kobles til `shipping_product`
+før flere alternativer slås på.
+
+Adapter-mønsteret står (`shipping/cargonizer.ts`, `shipping/shipmondo.ts`), men Shipmondo er
+ikke i bruk.
 
 **Ny konsekvens av splitt (§8.2):** kunden betaler én frakt, men to etiketter bookes. Anbefaling: Garnly dekker den ekstra etiketten i pilot, og `split_rate` måles. Alternativ: trekkes fra provisjon på ordren. Policyvalg, ikke teknisk.
 

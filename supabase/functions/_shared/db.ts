@@ -12,6 +12,23 @@ export function adminClient(): SupabaseClient {
   return _client;
 }
 
+/**
+ * Klient som handler PÅ VEGNE AV den innloggede butikkbrukeren.
+ *
+ * Trengs når en Edge Function skal kalle en RPC som sjekker tilgang selv (mark_pos_deducted
+ * leser current_store_ids() av JWT-en). Service-role-klienten har ingen bruker, så den ville
+ * fått «ingen tilgang» – eller, verre, omgått sjekken hvis vi skrev den om.
+ */
+export function userClient(jwt: string): SupabaseClient {
+  const url = Deno.env.get("SUPABASE_URL");
+  const anon = Deno.env.get("SUPABASE_ANON_KEY");
+  if (!url || !anon) throw new Error("SUPABASE_URL / SUPABASE_ANON_KEY mangler");
+  return createClient(url, anon, {
+    global: { headers: { Authorization: `Bearer ${jwt}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
 export async function audit(entity: string, entityId: string | null, event: string, payload?: unknown) {
   const { error } = await adminClient().from("audit_log").insert({ entity, entity_id: entityId, event, payload: payload ?? null });
   if (error) console.error("audit_log insert feilet:", error.message);

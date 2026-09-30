@@ -174,7 +174,8 @@ export async function activateInventoryAtLocation(inventoryItemIds: string[], lo
 export async function* iterateVariants() {
   const Q = `query($after: String) { productVariants(first: 250, after: $after) {
     pageInfo { hasNextPage endCursor }
-    nodes { id sku barcode title inventoryItem { id tracked }
+    nodes { id sku barcode title
+      inventoryItem { id tracked measurement { weight { value unit } } }
       product { id title vendor status productType tags } } } }`;
   let after: string | null = null;
   while (true) {
@@ -343,23 +344,61 @@ export async function splitFulfillmentOrder(foId: string, lineItems: Array<{ id:
 }
 
 /**
- * IKKE I BRUK. Garnly fulfiller aldri selv – frakt går via CargonizerConnect (Logistra) i
- * Shopify, og den appen fulfiller ordren med sporingsnummer. Fulfiller vi også, får ordren
- * to sendinger og kunden to sporingsnumre. Beholdt for referanse; tas den i bruk igjen, må
- * fulfillment-webhook og inventory-regnestykket vurderes på nytt.
+ * Fulfiller hele fulfillment orderen, med sporing, og varsler kunden.
+ *
+ * Brukes av «Slått ut og klar til sending» i butikkpanelet (se _shared/ship.ts). Butikkene
+ * har ikke tilgang til Shopify-admin og kan derfor ikke trykke «Fulfill» selv; Garnly lager
+ * sendingen i Cargonizer og fulfiller her, med sporingsnummeret derfra.
+ *
+ * Hele fulfillment orderen fulfilles, uten å liste linjene: én gruppe = én fulfillment order
+ * etter oppdeling og flytting, og hele antallet av én varelinje kommer alltid fra samme
+ * butikk (garnpartiregelen). Lister vi linjene i tillegg, kan de komme i utakt med Shopify.
+ *
+ * Kalles denne to ganger, svarer Shopify med userError. Den som kaller sjekker derfor
+ * fulfillment orderens tilstand først – se getFulfillmentOrder.
  */
-export async function createFulfillment(foId: string, tracking?: { number: string; url?: string; company?: string }) {
+export async function createFulfillment(
+  foId: string,
+  tracking?: { number: string; url?: string; company?: string },
+  notifyCustomer = true,
+): Promise<{ id: string; createdAt: string | null; trackingNumber: string | null; trackingUrl: string | null }> {
   const M = `mutation Fulfill($fulfillment: FulfillmentInput!) {
-    fulfillmentCreate(fulfillment: $fulfillment) { fulfillment { id status } userErrors { field message } } }`;
+    fulfillmentCreate(fulfillment: $fulfillment) {
+      fulfillment { id status createdAt trackingInfo { number url company } }
+      userErrors { field message } } }`;
   const res = await gql(M, {
     fulfillment: {
       lineItemsByFulfillmentOrder: [{ fulfillmentOrderId: foId }],
-      notifyCustomer: true,
+      notifyCustomer,
       trackingInfo: tracking ? { number: tracking.number, url: tracking.url, company: tracking.company } : undefined,
     },
   });
   assertNoUserErrors(res, "fulfillmentCreate");
-  return res.fulfillmentCreate.fulfillment.id as string;
+  const f = res.fulfillmentCreate.fulfillment;
+  return {
+    id: f.id as string,
+    createdAt: f.createdAt ?? null,
+    trackingNumber: f.trackingInfo?.[0]?.number ?? null,
+    trackingUrl: f.trackingInfo?.[0]?.url ?? null,
+  };
+}
+
+/**
+ * Tilstanden til én fulfillment order, med hvor mye som gjenstår per linje.
+ *
+ * Brukes til å avgjøre om ordren alt er sendt før vi prøver å fulfille den. Uten denne ville
+ * et nytt trykk på «Prøv igjen» gitt kunden to sendinger.
+ */
+export async function getFulfillmentOrder(
+  foId: string,
+): Promise<{ id: string; status: string; remaining: number } | null> {
+  const Q = `query FoStatus($id: ID!) {
+    fulfillmentOrder(id: $id) { id status lineItems(first: 100) { nodes { id remainingQuantity } } } }`;
+  const res = await gql(Q, { id: foId });
+  const fo = res?.fulfillmentOrder;
+  if (!fo) return null;
+  const remaining = (fo.lineItems?.nodes ?? []).reduce((s: number, n: any) => s + (n.remainingQuantity ?? 0), 0);
+  return { id: fo.id, status: fo.status, remaining };
 }
 
 /**

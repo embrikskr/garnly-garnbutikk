@@ -3,6 +3,8 @@ import {
   type CargonizerConsignment,
   parseConsignments,
   parseErrors,
+  parsePrintere,
+  parseServicePartners,
   referanseVarianter,
   sokeord,
   transferBeslutning,
@@ -15,6 +17,7 @@ const c = (id: number, ref: string, state = "open"): CargonizerConsignment => ({
   state,
   trackingUrl: null,
   transferAt: null,
+  numberWithChecksum: null,
 });
 
 Deno.test("delstreng-treff forkastes – ellers går etiketten til feil kunde", () => {
@@ -156,4 +159,47 @@ Deno.test("flere feil, og svar uten feil", () => {
   assertEquals(parseErrors("<errors><error>A</error><error>B</error></errors>"), ["A", "B"]);
   assertEquals(parseErrors("<consignments/>"), []);
   assertEquals(parseErrors(""), []);
+});
+
+// ---------------------------------------------------------------- pakkebokser
+
+Deno.test("pakkebokser leses i rekkefølge, nærmeste først", () => {
+  // Ekte svar fra API-et 30.09.2026 for postnummer 7040.
+  const xml = `<results>
+    <errors></errors>
+    <location><country>NO</country><postcode>7040</postcode><city>Trondheim</city></location>
+    <service-partners>
+      <service-partner>
+        <number>6428833</number><customer-number/><name>Pakkeautomat Ladetorget</name>
+        <address1>Østmarkveien 2</address1><address2/><postcode>7040</postcode>
+        <city>TRONDHEIM</city><country>NO</country><distance unit="m">221</distance>
+      </service-partner>
+      <service-partner>
+        <number>6423511</number><name>Pakkeautomat Kiwi Lilleby</name>
+        <address1>Stjørdalsveien 2</address1><postcode>7066</postcode>
+        <city>TRONDHEIM</city><country>NO</country><distance unit="m">1020</distance>
+      </service-partner>
+    </service-partners>
+  </results>`;
+  const r = parseServicePartners(xml);
+  assertEquals(r.length, 2);
+  assertEquals(r[0].number, "6428833");
+  assertEquals(r[0].name, "Pakkeautomat Ladetorget");
+  assertEquals(r[0].address1, "Østmarkveien 2");
+  assertEquals(r[0].distanceM, 221);
+  assertEquals(r[1].number, "6423511");
+});
+
+Deno.test("ingen pakkebokser gir tom liste, ikke krasj", () => {
+  assertEquals(parseServicePartners("<results><service-partners/></results>"), []);
+  assertEquals(parseServicePartners("<results/>"), []);
+});
+
+Deno.test("skriverlista tåler at kontoen ikke har noen", () => {
+  // Ekte svar 30.09.2026 når det ikke finnes DirectPrint på kontoen.
+  assertEquals(parsePrintere('<?xml version="1.0" encoding="UTF-8"?><nil-classes type="array"/>'), []);
+  assertEquals(
+    parsePrintere('<printers type="array"><printer><id>123</id><name>Zebra pakkebord</name></printer></printers>'),
+    [{ id: "123", name: "Zebra pakkebord" }],
+  );
 });

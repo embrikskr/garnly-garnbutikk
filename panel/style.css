@@ -151,6 +151,20 @@ button { font: inherit; }
 .addr { color: var(--ink-soft); font-size: 15px; }
 .track a { color: var(--wine); }
 
+/* Ordren er godtatt, men ikke sendt: dette er kortet butikken jobber på. */
+.card--klar { border-left-color: var(--wine); }
+
+/* Hvor pakken havner. Butikken skal slippe å lure på hvilken pakkeboks kunden valgte. */
+.pakkeboks { font-size: 15px; margin: 0; color: var(--ink-soft); }
+
+/* Feilen fra forrige forsøk. Rød ramme og ikke bare rød tekst: den skal være umulig å
+   overse når butikken står med pakken og lurer på hvorfor det ikke gikk. */
+.feil {
+  margin: 0; padding: 12px 14px; border-radius: 12px; font-size: 15px;
+  background: #FBEDED; border: 1px solid var(--red); color: var(--red);
+}
+.feil b { display: block; }
+
 /* Kassauttrekk. Pakkekortet har bare én knapp, så den skal ha hele bredden. */
 .card--packing .card__actions { grid-template-columns: 1fr; }
 .card--reminder { border-left-color: var(--amber); }
@@ -227,6 +241,14 @@ button { font: inherit; }
 .detalj:not([open]) { display: none; }
 .detalj[open] { display: grid; }
 .detalj::backdrop { background: rgba(42, 37, 34, .45); }
+.detalj__tittel { margin: 0; font-size: 22px; }
+.felt { display: grid; gap: 6px; font-size: 15px; color: var(--ink-soft); }
+.felt select {
+  font: inherit; min-height: 52px; padding: 0 12px; color: var(--ink);
+  border: 1px solid var(--border); border-radius: 12px; background: var(--card);
+}
+.hjelp { margin: 0; font-size: 15px; color: var(--ink-soft); }
+
 .tider { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; font-size: 15px; }
 .tider dt { color: var(--ink-soft); }
 .tider dd { margin: 0; }

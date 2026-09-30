@@ -49,6 +49,7 @@
     <div class="topbar__right">
       <span id="conn" class="conn" title="Tilkobling">●</span>
       <button id="sound-toggle" class="btn btn--ghost" aria-pressed="true" title="Lyd av eller på">🔔</button>
+      <button id="innstillinger" class="btn btn--ghost" title="Innstillinger">⚙</button>
       <button id="logout" class="btn btn--ghost">Logg ut</button>
     </div>
   </header>
@@ -85,6 +86,24 @@
     <button id="vis-flere" class="btn btn--secondary btn--block" hidden>Vis flere</button>
   </main>
 </div>
+
+<!-- Butikkens innstillinger -->
+<dialog id="innstillinger-dialog" class="detalj">
+  <h2 class="detalj__tittel">Innstillinger</h2>
+  <label class="felt">Etikettskriver
+    <select id="skriver-valg">
+      <option value="">Ingen – skriv ut PDF selv</option>
+    </select>
+  </label>
+  <p id="skriver-hjelp" class="hjelp">
+    Har butikken en DirectPrint-skriver koblet til Cargonizer, sendes fraktetiketten rett dit
+    når dere trykker «Slått ut og klar til sending». Ellers åpnes den som PDF.
+  </p>
+  <div class="card__actions">
+    <button id="skriver-lagre" class="btn btn--primary">Lagre</button>
+    <button id="innstillinger-lukk" class="btn btn--secondary">Lukk</button>
+  </div>
+</dialog>
 
 <!-- Detaljer om én tidligere ordre -->
 <dialog id="ordre-detalj" class="detalj">

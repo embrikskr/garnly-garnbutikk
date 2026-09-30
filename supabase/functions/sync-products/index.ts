@@ -9,6 +9,7 @@
 import { adminClient, json, requireInternalSecret } from "../_shared/db.ts";
 import { ensureVariantsTracked, iterateVariants } from "../_shared/shopify.ts";
 import { normalizeEan } from "../_shared/adapters/types.ts";
+import { gramFraShopify } from "../_shared/shipping/consignment.ts";
 
 Deno.serve(async (req) => {
   const unauthorized = requireInternalSecret(req);
@@ -47,6 +48,9 @@ Deno.serve(async (req) => {
       sku: v.sku || null,
       name: v.title === "Default Title" ? v.product.title : `${v.product.title} – ${v.title}`,
       brand: parsed.brand, yarn_name: parsed.yarn, color_code: parsed.colorCode, color_name: parsed.colorName,
+      // Vekten brukes til fraktbestillingen i panelet. Er den ikke satt i Shopify, står
+      // kolonnen tom, og _shared/shipping/consignment.ts regner med en fallback per vare.
+      grams: gramFraShopify(v.inventoryItem?.measurement?.weight?.value, v.inventoryItem?.measurement?.weight?.unit),
       active: v.product.status === "ACTIVE",
     });
   }

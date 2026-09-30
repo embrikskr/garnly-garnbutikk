@@ -40,6 +40,8 @@ export interface CargonizerConsignment {
   trackingUrl: string | null;
   /** Satt når sendingen er overført. Tom til den er det. */
   transferAt: string | null;
+  /** Sendingsnummeret. Brukes som sporingsnummer når tracking-url mangler. */
+  numberWithChecksum: string | null;
 }
 
 /**
@@ -116,6 +118,7 @@ export function parseConsignments(xml: string): CargonizerConsignment[] {
       state: tekst(c.state),
       trackingUrl: tekst(c["tracking-url"]),
       transferAt: tekst(c["transfer-at"]),
+      numberWithChecksum: tekst(c["number-with-checksum"]) ?? tekst(c.number),
     }))
     .filter((c) => Number.isFinite(c.id) && c.id > 0);
 }
@@ -234,4 +237,126 @@ export async function overfoerConsignments(consignmentIds: number[], senderId: s
   const kropp = await res.text();
   const feil = parseErrors(kropp);
   throw new Error(`Cargonizer-overføring feilet: ${res.status} ${feil.length ? feil.join("; ") : kropp.slice(0, 200)}`);
+}
+
+// ---------------------------------------------------------------------------
+// Opprette sending, finne pakkeboks, skrive ut
+// ---------------------------------------------------------------------------
+
+export interface ServicePartnerRad {
+  number: string;
+  name: string;
+  address1: string;
+  postcode: string;
+  city: string;
+  country: string;
+  /** Meter fra mottakerens adresse. Lista kommer sortert, nærmeste først. */
+  distanceM: number | null;
+}
+
+/** Parser svaret fra /service_partners.xml. REN logikk. */
+export function parseServicePartners(xml: string): ServicePartnerRad[] {
+  const parser = new XMLParser({ ignoreAttributes: true, parseTagValue: false, trimValues: true });
+  const rot = parser.parse(xml)?.results?.["service-partners"]?.["service-partner"];
+  if (!rot) return [];
+  const liste = Array.isArray(rot) ? rot : [rot];
+  return liste
+    .map((p: Record<string, unknown>) => ({
+      number: String(p.number ?? "").trim(),
+      name: String(p.name ?? "").trim(),
+      address1: String(p.address1 ?? "").trim(),
+      postcode: String(p.postcode ?? "").trim(),
+      city: String(p.city ?? "").trim(),
+      country: String(p.country ?? "NO").trim(),
+      distanceM: Number.isFinite(Number(p.distance)) ? Number(p.distance) : null,
+    }))
+    .filter((p) => p.number && p.name);
+}
+
+/**
+ * Pakkeboksene nærmest mottakeren, nærmest først.
+ *
+ * `address` er med fordi postnummeret alene gir dårligere treff: Cargonizer sender adressen
+ * videre til PostNords egen «nearest by address»-tjeneste.
+ */
+export async function finnServicePartnere(
+  senderId: string,
+  opts: { transportAgreementId: string; product: string; postcode: string; country: string; address?: string | null; city?: string | null },
+): Promise<ServicePartnerRad[]> {
+  const url = new URL(`${BASE}/service_partners.xml`);
+  url.searchParams.set("transport_agreement_id", opts.transportAgreementId);
+  url.searchParams.set("product", opts.product);
+  url.searchParams.set("country", opts.country);
+  url.searchParams.set("postcode", opts.postcode);
+  if (opts.address) url.searchParams.set("address", opts.address);
+  if (opts.city) url.searchParams.set("city", opts.city);
+
+  const res = await fetch(url, { headers: headers(senderId) });
+  if (!res.ok) throw new Error(`Fant ingen pakkebokser: ${res.status} ${(await res.text()).slice(0, 200)}`);
+  return parseServicePartners(await res.text());
+}
+
+/**
+ * Oppretter sendingen. Kaster med Cargonizers egen feiltekst hvis noe mangler.
+ *
+ * Svaret er den ferdige sendingen, med id, sendingsnummer og sporingslenke.
+ */
+export async function opprettConsignment(xml: string, senderId: string): Promise<CargonizerConsignment> {
+  const res = await fetch(`${BASE}/consignments.xml`, {
+    method: "POST",
+    headers: { ...headers(senderId), "Content-Type": "application/xml" },
+    body: xml,
+  });
+  const kropp = await res.text();
+  if (!res.ok) {
+    const feil = parseErrors(kropp);
+    throw new Error(feil.length ? feil.join("; ") : `Cargonizer svarte ${res.status}: ${kropp.slice(0, 300)}`);
+  }
+  const laget = parseConsignments(kropp)[0];
+  if (!laget) {
+    // 200 uten sending i svaret: da har vi ikke noe å lagre, og må ikke late som det gikk bra.
+    const feil = parseErrors(kropp);
+    throw new Error(feil.length ? feil.join("; ") : `Cargonizer svarte uten sending: ${kropp.slice(0, 300)}`);
+  }
+  return laget;
+}
+
+export interface Printer {
+  id: string;
+  name: string;
+}
+
+/** Parser /printers.xml. REN logikk. */
+export function parsePrintere(xml: string): Printer[] {
+  const parser = new XMLParser({ ignoreAttributes: true, parseTagValue: false, trimValues: true });
+  const doc = parser.parse(xml);
+  const rot = doc?.printers?.printer ?? doc?.printer ?? null;
+  if (!rot) return [];
+  const liste = Array.isArray(rot) ? rot : [rot];
+  return liste
+    .map((p: Record<string, unknown>) => ({ id: String(p.id ?? "").trim(), name: String(p.name ?? "").trim() }))
+    .filter((p) => p.id);
+}
+
+/** DirectPrint-skriverne på kontoen. Krever nøkkel, men ikke avsender. */
+export async function hentPrintere(senderId: string): Promise<Printer[]> {
+  const res = await fetch(`${BASE}/printers.xml`, { headers: headers(senderId) });
+  if (!res.ok) throw new Error(`Fikk ikke hentet skrivere: ${res.status} ${(await res.text()).slice(0, 200)}`);
+  return parsePrintere(await res.text());
+}
+
+/** Sender etiketten til en DirectPrint-skriver. */
+export async function skrivUtEtikett(consignmentId: number, printerId: string, senderId: string): Promise<void> {
+  const url = new URL(`${BASE}/consignments/label_direct`);
+  url.searchParams.set("printer_id", printerId);
+  url.searchParams.append("consignment_ids[]", String(consignmentId));
+
+  const res = await fetch(url, { method: "POST", headers: headers(senderId), redirect: "manual" });
+  if (res.ok || res.status === 302) {
+    await res.body?.cancel();
+    return;
+  }
+  const kropp = await res.text();
+  const feil = parseErrors(kropp);
+  throw new Error(`Utskrift feilet: ${res.status} ${feil.length ? feil.join("; ") : kropp.slice(0, 200)}`);
 }

@@ -2,6 +2,75 @@
 
 Oppdatert: 2026-09-30
 
+## «Slått ut og klar til sending» – butikken sender fra panelet (30.09.2026)
+
+Én knapp erstatter «Fulfill with CargonizerConnect» i Shopify og den gamle «Slått ut i
+kassa»-knappen. Bakgrunnen er to hull ekte ordre #1004 avdekket:
+
+1. **Butikkene har ikke Shopify-tilgang**, så de kunne ikke fulfille selv. Å gi dem tilgang
+   er ikke et alternativ – da ser de alle butikkers ordrer.
+2. **CargonizerConnect overfører ikke sendingen.** Innstillingen for automatisk overføring
+   finnes bare på «Home Small main shipment», ikke på pakkeboks.
+
+Trykket går til `ship-order` → `_shared/ship.ts`, i denne rekkefølgen:
+
+1. `mark_pos_deducted` – kalt med **butikkbrukerens egen JWT**, så tilgangssjekken er den
+   samme som før. Service-role-klienten brukes bare der panelet ikke skal nå til.
+2. sending i Cargonizer: `POST /consignments.xml`, butikkens avsender og transportavtale,
+   produkt `postnord_mypack_small` (Parcel Locker), nærmeste pakkeboks fra
+   `/service_partners.xml`, vekt fra varene, `postnord_notification_sms`, `transfer=true`
+3. sendings-id, sendingsnummer, sporingsnummer og sporingslenke lagres
+4. `fulfillmentCreate` i Shopify med sporing og `notifyCustomer`
+5. etiketten: DirectPrint hvis butikken har valgt en skriver, ellers PDF i panelet
+
+### Hvert steg tåler å kjøres på nytt
+
+Før vi lager en sending: lagret sendings-id først, så oppslag på ordrenummeret, og først når
+ingen av delene gir treff lager vi en ny. Før vi fulfiller: Shopify spørres om det gjenstår
+noe på fulfillment orderen. Feiler et steg, står det som er gjort, feilen vises på kortet, og
+knappen blir til «Prøv igjen».
+
+**Feil funnet i egen kode under testen:** gjenbruksveien lagret ikke sendingen på nytt.
+Stoppet et forsøk mellom «sending laget» og «sending lagret», ville sendingsnummer og
+transportør blitt stående tomt for alltid. Nå lagres det på hver runde. Det retter også
+sendinger CargonizerConnect laget i overgangen.
+
+### Verifisert mot ekte API og ekte data
+
+- **XML-en godtas.** Sending 76296274 opprettet med `transfer=false`, referanse
+  GARNLY-XML-TEST. Etikett-PDF hentet: 20 kB, én side.
+- **#1004 (har sending fra før):** tre kjøringer på rad ga samme sending 76296163, ingen ny.
+  Sendingsnummer og transportør ble fylt inn av den rettede gjenbruksveien.
+- **#1002 (ingen sending):** sendingen ble opprettet, nærmeste pakkeboks til 7043 valgt
+  (Rema 1000 Møllenberg), og andre kjøring gjenbrukte den samme – ingen tredje sending.
+- **Testordre-regelen holder:** sending 76296275 for #1002 står med `state=open` og
+  `transfer-at` tom. Ingenting er sendt til PostNord.
+- **Sporingsnummeret** tas fra sporingslenken, ikke fra sendingsnummeret: for #1004 er
+  lenkens tall 70727320855841324, mens sendingsnummeret er 40170727320855841324. Det er
+  lenkens tall PostNord søker på.
+- **Vekt:** alle 2569 aktive varer har nå vekt fra Shopify (25–1400 g, snitt 52 g), hentet av
+  `sync-products`. Fallback per vare brukes bare hvis Shopify mangler vekten.
+- **Tilgang:** endepunktene svarer 401 uten token, 401 på ugyldig token, 400 uten `group_id`,
+  og CORS slipper bare panelets origin gjennom.
+- **Panelet i ekte Chromium:** kort uten sending viser «Slått ut og klar til sending» pluss
+  reserveknappen; kort med feil viser rød feilboks og «Prøv igjen»; sendt kort viser
+  pakkeboks, sporing, «Overført til PostNord» og etikettknappen. Innstillingsdialogen lister
+  skrivere og lagrer valget. Testen ble kjørt uten feilboksen først, og feilet da.
+
+### To ting som må ryddes
+
+- **Testsendinger i Cargonizer:** 76296274 (GARNLY-XML-TEST) og 76296275 (#1002). Ingen av
+  dem er overført til PostNord, men de bør slettes.
+- **Fraktvalg i kassen er ikke koblet.** Produktet er Parcel Locker uansett hva kunden valgte.
+  Så lenge det bare finnes én fraktmåte stemmer det, men velges hjemlevering senere, må
+  `stores.shipping_product` kobles til kundens valg først.
+
+### Kortet blir stående etter sending
+
+`v_panel_assigned` viser nå sendte ordrer i 24 timer. Den nye knappen registrerer
+kassauttrekket **først**, og uten dette ville kortet forsvunnet i samme sekund som butikken
+trykket – med etiketten og sporingen på.
+
 ## Sendinger overføres til transportøren automatisk (30.09.2026)
 
 CargonizerConnect lager sendingen og fulfiller ordren i Shopify, men **overfører den ikke**.
