@@ -59,3 +59,28 @@ Deno.test("eldste sending vinner når begge passer", () => {
   );
   assertEquals(r.get("G1"), "2026-09-29T09:00:00Z");
 });
+
+Deno.test("kansellert sending teller ikke", () => {
+  // En kansellert sending legger lageret tilbake i Shopify. Fester vi fulfilled_at til den,
+  // holder vi igjen varer som allerede er lagt tilbake. Sett på #1002 29.09: kansellert
+  // sending kl. 20:53, ny vellykket kl. 22:47.
+  const grupper = [g("G1", GARNKILDEN, ["v1"])];
+  const r = matchFulfillments(grupper, [
+    { id: "F1", createdAt: "2026-09-29T20:53:00Z", status: "CANCELLED", locationId: GARNKILDEN, variantIds: ["v1"] },
+    { id: "F2", createdAt: "2026-09-29T22:47:00Z", status: "SUCCESS", locationId: GARNKILDEN, variantIds: ["v1"] },
+  ]);
+  assertEquals(r.get("G1"), "2026-09-29T22:47:00Z");
+});
+
+Deno.test("bare kansellerte sendinger gir ingen treff", () => {
+  const r = matchFulfillments([g("G1", GARNKILDEN, ["v1"])], [
+    { id: "F1", createdAt: "2026-09-29T20:53:00Z", status: "CANCELLED", locationId: GARNKILDEN, variantIds: ["v1"] },
+  ]);
+  assertEquals(r.size, 0);
+});
+
+Deno.test("sending uten status regnes som gyldig", () => {
+  // Bakoverkompatibelt: et kall som ikke sender status skal ikke stilne.
+  const r = matchFulfillments([g("G1", GARNKILDEN, ["v1"])], [f("F1", "2026-09-29T10:00:00Z", GARNKILDEN, ["v1"])]);
+  assertEquals(r.get("G1"), "2026-09-29T10:00:00Z");
+});

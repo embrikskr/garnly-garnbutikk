@@ -57,7 +57,7 @@ export async function reconcileFulfilledAt(routingOrderId: string): Promise<numb
 
   const treff = matchFulfillments(
     grupper,
-    sendinger.map((f) => ({ id: f.id, createdAt: f.createdAt, locationId: f.locationId, variantIds: f.variantIds })),
+    sendinger.map((f) => ({ id: f.id, createdAt: f.createdAt, status: f.status, locationId: f.locationId, variantIds: f.variantIds })),
   );
 
   let merket = 0;

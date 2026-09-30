@@ -22,8 +22,23 @@ export interface GroupForMatch {
 export interface FulfillmentForMatch {
   id: string;
   createdAt: string;
+  /** Shopifys FulfillmentStatus: SUCCESS, PENDING, OPEN, CANCELLED, ERROR, FAILURE. */
+  status?: string | null;
   locationId: string | null;
   variantIds: string[];
+}
+
+/**
+ * Teller denne sendingen som sendt?
+ *
+ * En kansellert sending legger lageret tilbake i Shopify. Fester vi `fulfilled_at` til den,
+ * holder vi igjen varer Shopify allerede har lagt tilbake – og varen blir stående utilgjengelig
+ * for salg. Sett 29.09: #1002 hadde både en kansellert og en vellykket sending.
+ * Uten status regnes den som gyldig, så eldre kall ikke stilner.
+ */
+function teller(f: FulfillmentForMatch): boolean {
+  const st = (f.status ?? "").toUpperCase();
+  return st !== "CANCELLED" && st !== "ERROR" && st !== "FAILURE";
 }
 
 /**
@@ -44,7 +59,8 @@ export function matchFulfillments(
   const brukt = new Set<string>();
 
   // Eldste først, så en gruppe får tidspunktet for den første sendingen som dekker den.
-  const sortert = [...fulfillments].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  // Kansellerte og feilede sendinger holdes utenfor: de har lagt lageret tilbake i Shopify.
+  const sortert = fulfillments.filter(teller).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 
   for (const f of sortert) {
     if (brukt.has(f.id)) continue;
