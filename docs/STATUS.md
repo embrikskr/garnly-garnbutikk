@@ -2,6 +2,41 @@
 
 Oppdatert: 2026-09-30
 
+## «Tidligere ordrer» i panelet (30.09.2026)
+
+Når butikken trykket «Slått ut i kassa», forsvant ordren. Da fant de ikke igjen etiketten,
+sporingen eller innholdet – som er nettopp det de trenger når kunden ringer. Ny fane, med søk
+på ordrenummer og kundenavn, siste 30 dager og «Vis flere».
+
+`v_panel_history` har to slags rader: `tildelt` (full detalj) og `avslaatt`.
+
+**Avslåtte ordrer får ingen kundedata i det hele tatt.** Spesifikasjonen ba om «uten
+kundeadresse», men navnet er også kundedata, og butikken som avslo skal verken pakke eller
+sende. Nullingen skjer i SQL, ikke i panelet, der den kunne blitt borte i en opptegning.
+
+Verifisert ved å utgi seg for begge butikkbrukerne: Strikkefryd ser sine seks rader, de
+avslåtte uten navn og adresse; Garnkilden ser **null** rader av Strikkefryds.
+
+Søk går forbi datovinduet: leter butikken etter et ordrenummer, skal de finne det uansett
+alder, uten å måtte trykke «Vis flere» i blinde først.
+
+### Bekreftet
+
+- **Etikett for gamle ordrer virker.** `from=` testet mot ekte API helt tilbake til tre år
+  før sendingen – treff hele veien. Ingen øvre grense på spennet.
+- **Lagret consignment-id brukes direkte**, uten nytt søk. Testet med #1004s lagrede id
+  76296163: 20 kB PDF.
+- **CargonizerConnect skriver `#1004` – med firkant.** Toleransen for begge skrivemåter er
+  altså det som får oppslaget til å treffe. Uten den hadde det feilet.
+
+### Pakkeboks vises ikke, og kan ikke vises
+
+Den finnes ikke i dataene våre: Shopify gir kundens gateadresse. Den finnes heller ikke i
+Cargonizer-sendingen – `tod-code`, `tod-city` og `tod-postcode` er alle tomme på #1004, og
+mottakeradressen er hjemmeadressen. Med PostNord MyPack tildeler transportøren hentestedet
+senere og varsler kunden selv. Panelet viser derfor leveringsadressen og sporingslenken, som
+er der hentestedet dukker opp.
+
 ## Ekte ordre gjennom hele kjeden (30.09.2026, #1004)
 
 Strikkefryd, PostNord pakkeboks via CargonizerConnect. **«Hent fraktetikett (PDF)» virket på

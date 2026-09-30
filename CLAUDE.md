@@ -24,7 +24,7 @@ supabase/migrations/      001 schema, 002 cron, 003 exclude_from_sync, 004 inven
                           013 pos_deduction, 014 fulfillment fra Shopify,
                           015 group_fulfilled, 016 lager-avstemming, 017 cron reconcile,
                           018 testordrer, 019 cargonizer-etikett,
-                          020 mark_pos_deducted fulfilled
+                          020 mark_pos_deducted fulfilled, 021 panel-historikk
 supabase/seed/            product_aliases.sql (varer uten brukbar EAN, kjøres etter første sync-products)
 panel/                    butikkpanelet (statisk side, Vercel med rot `panel/`).
                           garnly-butikkpanel.vercel.app – deployes av git push

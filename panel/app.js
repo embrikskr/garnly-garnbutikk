@@ -24,7 +24,16 @@ const el = {
   statQueue: $("stat-queue"), statPack: $("stat-pack"), statToday: $("stat-today"),
   acceptAll: $("accept-all"), logout: $("logout"), toast: $("toast"),
   conn: $("conn"), soundToggle: $("sound-toggle"),
+  faneAktive: $("fane-aktive"), faneHistorikk: $("fane-historikk"),
+  visningAktive: $("visning-aktive"), visningHistorikk: $("visning-historikk"),
+  historikk: $("historikk"), historikkEmpty: $("historikk-empty"), historikkPeriode: $("historikk-periode"),
+  sok: $("sok"), visFlere: $("vis-flere"),
+  detalj: $("ordre-detalj"), detaljInnhold: $("detalj-innhold"), detaljLukk: $("detalj-lukk"),
 };
+
+/** Historikk: standardvindu, og hvor mye «Vis flere» utvider med. */
+const HISTORIKK_DAGER = 30;
+const HISTORIKK_SIDE = 25;
 
 let stores = [];
 let storeId = null;
@@ -38,6 +47,10 @@ let busy = new Set();
 let started = false;
 let queueSig = null;
 let assignedSig = null;
+let historikkDager = HISTORIKK_DAGER;
+let historikkGrense = HISTORIKK_SIDE;
+let historikkRader = [];
+let sokTimer = null;
 
 // ---------------------------------------------------------------- oppstart
 
@@ -250,6 +263,109 @@ function etterlyst(r) {
   return Date.now() - new Date(r.fulfilled_at).getTime() > 24 * 3600 * 1000;
 }
 
+// ---------------------------------------------------------------- tidligere ordrer
+
+/**
+ * «Tidligere ordrer».
+ *
+ * Når butikken har slått ut ordren i kassa, forsvinner den fra pakkelista. Herfra finner de
+ * den igjen: fraktetiketten, sporingen og hva som lå i pakken – det de trenger når kunden
+ * ringer, pakken må sendes på nytt, eller etiketten må skrives ut igjen.
+ *
+ * Avslåtte ordrer står uten kundedata. Det er viewet som nuller dem, ikke denne koden.
+ */
+const STATUSTEKST = {
+  sendt: "Sendt",
+  slatt_ut: "Slått ut i kassa",
+  kansellert: "Kansellert",
+  avslatt: "Avslått av oss",
+  til_pakking: "Til pakking",
+};
+
+async function lastHistorikk() {
+  if (!storeId) return;
+  const fra = new Date(Date.now() - historikkDager * 86400_000).toISOString();
+  const sok = el.sok.value.trim();
+
+  let q = sb.from("v_panel_history").select("*").eq("store_id", storeId);
+  // Søk går forbi datovinduet: leter butikken etter et ordrenummer, skal de finne det
+  // uansett hvor gammelt det er. Uten dette måtte de trykke «Vis flere» i blinde først.
+  if (sok) {
+    const m = sok.replace(/[%,()]/g, " ");
+    q = q.or(`order_name.ilike.%${m}%,ship_name.ilike.%${m}%`);
+  } else {
+    q = q.gte("order_created_at", fra);
+  }
+  const { data, error } = await q.order("order_created_at", { ascending: false }).limit(historikkGrense + 1);
+  if (error) {
+    console.error("[historikk]", error);
+    toast("Fikk ikke hentet tidligere ordrer.", "error");
+    return;
+  }
+  const rader = data ?? [];
+  // Vi ba om én ekstra for å vite om det finnes flere, men viser den ikke.
+  const flere = rader.length > historikkGrense;
+  historikkRader = flere ? rader.slice(0, historikkGrense) : rader;
+  el.visFlere.hidden = !flere;
+  el.historikkPeriode.textContent = sok ? `Søk: ${sok}` : `Siste ${historikkDager} dager`;
+  renderHistorikk();
+}
+
+function renderHistorikk() {
+  el.historikkEmpty.hidden = historikkRader.length > 0;
+  el.historikk.innerHTML = historikkRader.map((r) => `
+    <article class="hist" data-group="${r.group_id}" tabindex="0" role="button">
+      <div class="hist__topp">
+        <span class="hist__ordre">${esc(r.order_name ?? "Ordre")}${r.is_test ? ' <span class="merke">TEST</span>' : ""}</span>
+        <span class="hist__status hist__status--${r.status}">${STATUSTEKST[r.status] ?? r.status}</span>
+      </div>
+      <div class="hist__bunn">
+        <span>${r.ship_name ? esc(r.ship_name) : "&mdash;"}</span>
+        <span class="hist__dato">${dato(r.order_created_at)}</span>
+      </div>
+    </article>`).join("");
+}
+
+function apneDetalj(groupId) {
+  const r = historikkRader.find((x) => x.group_id === groupId);
+  if (!r) return;
+  const adresse = r.ship_address1
+    ? `<p class="addr">${esc(r.ship_name ?? "")}<br>${esc(r.ship_address1)}${r.ship_address2 ? "<br>" + esc(r.ship_address2) : ""}<br>${esc(r.ship_zip ?? "")} ${esc(r.ship_city ?? "")}${r.ship_country ? "<br>" + esc(r.ship_country) : ""}</p>`
+    : `<p class="addr">Ordren ble avslått, så vi viser ikke kundeopplysninger.</p>`;
+
+  const tider = [
+    r.assigned_at ? ["Godtatt", tidspunkt(r.assigned_at)] : null,
+    r.fulfilled_at ? ["Sendt", tidspunkt(r.fulfilled_at)] : null,
+    r.pos_deducted_at ? ["Slått ut i kassa", `${tidspunkt(r.pos_deducted_at)}${r.pos_deducted_by ? " – " + esc(r.pos_deducted_by) : ""}`] : null,
+  ].filter(Boolean);
+
+  const kanHenteEtikett = r.kind === "tildelt" && r.status !== "kansellert";
+  const manglerUttrekk = r.kind === "tildelt" && r.fulfilled_at && !r.pos_deducted_at;
+
+  el.detaljInnhold.innerHTML = `
+    <div class="card__head">
+      <span class="card__order">${esc(r.order_name ?? "Ordre")}${r.is_test ? ' <span class="merke">TEST</span>' : ""}</span>
+      <span class="hist__status hist__status--${r.status}">${STATUSTEKST[r.status] ?? r.status}</span>
+    </div>
+    <ul class="lines">${lineItems(r.line_items)}</ul>
+    ${adresse}
+    ${r.tracking_number ? `<p class="track">Sporing: ${r.tracking_url ? `<a href="${esc(r.tracking_url)}" target="_blank" rel="noopener">${esc(r.tracking_number)}</a>` : esc(r.tracking_number)}</p>` : ""}
+    ${tider.length ? `<dl class="tider">${tider.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>` : ""}
+    ${kanHenteEtikett ? `<div class="card__actions card__actions--etikett"><button class="btn btn--secondary" data-act="etikett">Hent fraktetikett (PDF)</button></div>` : ""}
+    ${manglerUttrekk ? `<div class="card__actions card__actions--etikett"><button class="btn btn--primary" data-act="deducted">Slått ut i kassa</button></div>` : ""}
+  `;
+  el.detalj.dataset.group = groupId;
+  el.detalj.showModal();
+}
+
+function dato(iso) {
+  return new Date(iso).toLocaleDateString("nb-NO", { day: "2-digit", month: "short" });
+}
+
+function tidspunkt(iso) {
+  return new Date(iso).toLocaleString("nb-NO", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
 function lineItems(items) {
   return (items ?? []).map((i) => `<li><span class="qty">${Number(i.qty)}</span><span>${esc(i.title ?? "")}</span></li>`).join("");
 }
@@ -347,6 +463,73 @@ el.assigned.addEventListener("click", async (e) => {
     btn.disabled = false;
   } finally {
     busy.delete(groupId);
+  }
+});
+
+// ---------------------------------------------------------------- faner og historikk
+
+function velgFane(historikk) {
+  el.visningAktive.hidden = historikk;
+  el.visningHistorikk.hidden = !historikk;
+  el.faneAktive.classList.toggle("fane--valgt", !historikk);
+  el.faneHistorikk.classList.toggle("fane--valgt", historikk);
+  el.faneAktive.setAttribute("aria-selected", String(!historikk));
+  el.faneHistorikk.setAttribute("aria-selected", String(historikk));
+  // Hentes først når fanen faktisk åpnes: butikken har panelet stående hele dagen, og
+  // historikken trenger ikke lastes på nytt hvert 20. sekund sammen med køen.
+  if (historikk) lastHistorikk();
+}
+
+el.faneAktive.addEventListener("click", () => velgFane(false));
+el.faneHistorikk.addEventListener("click", () => velgFane(true));
+
+el.sok.addEventListener("input", () => {
+  // Debounce: uten den ville hvert tastetrykk blitt et kall til basen.
+  clearTimeout(sokTimer);
+  sokTimer = setTimeout(() => { historikkGrense = HISTORIKK_SIDE; lastHistorikk(); }, 300);
+});
+
+el.visFlere.addEventListener("click", () => {
+  // Utvider både antall og datovindu: «vis flere» skal også nå lenger bakover enn 30 dager.
+  historikkGrense += HISTORIKK_SIDE;
+  historikkDager += 60;
+  lastHistorikk();
+});
+
+el.historikk.addEventListener("click", (e) => {
+  const kort = e.target.closest("[data-group]");
+  if (kort?.dataset.group) apneDetalj(kort.dataset.group);
+});
+el.historikk.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  const kort = e.target.closest("[data-group]");
+  if (!kort?.dataset.group) return;
+  e.preventDefault();
+  apneDetalj(kort.dataset.group);
+});
+
+el.detaljLukk.addEventListener("click", () => el.detalj.close());
+
+el.detaljInnhold.addEventListener("click", async (e) => {
+  const groupId = el.detalj.dataset.group;
+  if (!groupId) return;
+  const etikett = e.target.closest('button[data-act="etikett"]');
+  if (etikett) { await hentEtikett(etikett, groupId); return; }
+
+  const uttrekk = e.target.closest('button[data-act="deducted"]');
+  if (!uttrekk) return;
+  uttrekk.disabled = true;
+  try {
+    const { error } = await sb.rpc("mark_pos_deducted", { p_group_id: groupId });
+    if (error) throw new Error(error.message);
+    toast("Registrert. Lageret oppdateres ved neste synk.");
+    el.detalj.close();
+    assignedSig = null;
+    await Promise.all([refresh(), lastHistorikk()]);
+  } catch (err) {
+    console.error("[mark_pos_deducted]", err);
+    toast(`Fikk ikke registrert uttrekket: ${String(err?.message ?? err)}`, "error");
+    uttrekk.disabled = false;
   }
 });
 

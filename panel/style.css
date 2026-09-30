@@ -175,3 +175,48 @@ button { font: inherit; }
 
 /* Etikettknappen står for seg selv over kassa-raden. */
 .card__actions--etikett { grid-template-columns: 1fr; }
+
+/* ---------------------------------------------------------------- faner */
+.faner { display: flex; gap: 8px; padding: 0 20px; border-bottom: 1px solid var(--border); }
+.fane {
+  appearance: none; background: none; border: none; cursor: pointer;
+  font: inherit; font-size: 17px; font-weight: 600; color: var(--ink-soft);
+  padding: 14px 16px; border-bottom: 3px solid transparent; margin-bottom: -1px;
+}
+.fane--valgt { color: var(--wine); border-bottom-color: var(--wine); }
+.fane:focus-visible { outline: 3px solid var(--wine); outline-offset: -3px; border-radius: 8px 8px 0 0; }
+
+/* ---------------------------------------------------------------- historikk */
+.historikk { padding: 20px; display: grid; gap: 16px; max-width: 720px; margin: 0 auto; }
+.historikk__sok { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.historikk__sok input {
+  flex: 1 1 260px; min-height: 52px; font-size: 17px; padding: 0 14px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--card); color: var(--ink);
+}
+.historikk__periode { color: var(--ink-soft); font-size: 15px; }
+
+.hist {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  padding: 14px 16px; display: grid; gap: 6px; cursor: pointer;
+}
+.hist:hover { border-color: var(--wine); }
+.hist:focus-visible { outline: 3px solid var(--wine); outline-offset: 2px; }
+.hist__topp, .hist__bunn { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.hist__ordre { font-size: 18px; font-weight: 700; }
+.hist__dato, .hist__bunn { color: var(--ink-soft); font-size: 15px; }
+.hist__status { font-size: 14px; font-weight: 600; white-space: nowrap; }
+.hist__status--sendt { color: var(--green); }
+.hist__status--slatt_ut { color: var(--ink-soft); }
+.hist__status--til_pakking { color: var(--amber); }
+.hist__status--kansellert, .hist__status--avslatt { color: var(--red); }
+
+/* ---------------------------------------------------------------- detaljer */
+.detalj {
+  border: none; border-radius: var(--radius); padding: 20px; width: min(520px, calc(100vw - 32px));
+  background: var(--card); color: var(--ink); box-shadow: var(--shadow); display: grid; gap: 14px;
+}
+.detalj::backdrop { background: rgba(42, 37, 34, .45); }
+.detalj[open] { display: grid; }
+.tider { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; font-size: 15px; }
+.tider dt { color: var(--ink-soft); }
+.tider dd { margin: 0; }

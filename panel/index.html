@@ -53,7 +53,12 @@
     </div>
   </header>
 
-  <main class="cols">
+  <nav class="faner" role="tablist">
+    <button id="fane-aktive" class="fane fane--valgt" role="tab" aria-selected="true" aria-controls="visning-aktive">Aktive ordrer</button>
+    <button id="fane-historikk" class="fane" role="tab" aria-selected="false" aria-controls="visning-historikk">Tidligere ordrer</button>
+  </nav>
+
+  <main id="visning-aktive" class="cols" role="tabpanel" aria-labelledby="fane-aktive">
     <section class="col">
       <h2 class="col__title">
         Nye ordrer
@@ -69,7 +74,23 @@
       <p id="assigned-empty" class="empty" hidden>Ingenting venter på pakking.</p>
     </section>
   </main>
+
+  <main id="visning-historikk" class="historikk" role="tabpanel" aria-labelledby="fane-historikk" hidden>
+    <div class="historikk__sok">
+      <input id="sok" type="search" placeholder="Søk på ordrenummer eller kundenavn" aria-label="Søk i tidligere ordrer" autocapitalize="none" spellcheck="false">
+      <span id="historikk-periode" class="historikk__periode">Siste 30 dager</span>
+    </div>
+    <div id="historikk" class="cards"></div>
+    <p id="historikk-empty" class="empty" hidden>Ingen tidligere ordrer i perioden.</p>
+    <button id="vis-flere" class="btn btn--secondary btn--block" hidden>Vis flere</button>
+  </main>
 </div>
+
+<!-- Detaljer om én tidligere ordre -->
+<dialog id="ordre-detalj" class="detalj">
+  <div id="detalj-innhold"></div>
+  <button id="detalj-lukk" class="btn btn--secondary btn--block">Lukk</button>
+</dialog>
 
 <div id="toast" class="toast" hidden></div>
 
