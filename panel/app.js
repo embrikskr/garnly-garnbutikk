@@ -219,6 +219,9 @@ function renderAssigned(rows) {
       <ul class="lines">${lineItems(r.line_items)}</ul>
       <p class="addr">${esc(r.ship_name ?? "")}<br>${esc(r.ship_address1 ?? "")}${r.ship_address2 ? "<br>" + esc(r.ship_address2) : ""}<br>${esc(r.ship_zip ?? "")} ${esc(r.ship_city ?? "")}</p>
       ${r.tracking_number ? `<p class="track">Sporing: ${r.tracking_url ? `<a href="${esc(r.tracking_url)}" target="_blank" rel="noopener">${esc(r.tracking_number)}</a>` : esc(r.tracking_number)}</p>` : ""}
+      <div class="card__actions card__actions--etikett">
+        <button class="btn btn--secondary" data-act="etikett">Hent fraktetikett (PDF)</button>
+      </div>
       ${kassaStatus(r)}
     </article>`).join("");
   if (html === assignedSig) return;
@@ -269,9 +272,62 @@ el.queue.addEventListener("click", async (e) => {
   await refresh();
 });
 
+/**
+ * Fraktetikett som PDF, for butikker uten etikettskriver.
+ *
+ * Sendingen lages i CargonizerConnect som før; backenden slår den opp og henter PDF-en.
+ * API-nøkkelen ligger på serveren – Cargonizers PDF-URL-er kan uansett ikke lenkes til direkte.
+ */
+async function hentEtikett(btn, groupId) {
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Henter …";
+  let url = null;
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { showLogin(); return; }
+    const res = await fetch(`${CFG.SUPABASE_URL}/functions/v1/shipping-label`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ group_id: groupId }),
+      signal: typeof AbortSignal?.timeout === "function" ? AbortSignal.timeout(30000) : undefined,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      toast(body.message || "Fikk ikke hentet etiketten.", "error");
+      return;
+    }
+    // Åpnes i ny fane så butikken kan skrive ut eller lagre. Uten window.open-sjekken
+    // forsvinner etiketten sporløst hvis nettleseren blokkerer popup.
+    url = URL.createObjectURL(await res.blob());
+    const vindu = window.open(url, "_blank");
+    if (!vindu) {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `fraktetikett-${groupId.slice(0, 8)}.pdf`;
+      a.click();
+    }
+  } catch (err) {
+    console.error("[shipping-label]", err);
+    const grunn = err?.name === "TimeoutError" ? "Svaret tok for lang tid." : String(err?.message ?? err);
+    toast(`Fikk ikke hentet etiketten: ${grunn}`, "error");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+    // Gi nettleseren tid til å åpne fila før vi frigjør den.
+    if (url) setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+}
+
 // «Slått ut i kassa». Går via en RPC og ikke rett på tabellen: panelet skal ikke ha
 // skriverett på routing_groups, og RPC-en sjekker selv at gruppen hører til butikken.
 el.assigned.addEventListener("click", async (e) => {
+  const etikettBtn = e.target.closest('button[data-act="etikett"]');
+  if (etikettBtn) {
+    const kort = etikettBtn.closest("[data-group]");
+    if (kort?.dataset.group) await hentEtikett(etikettBtn, kort.dataset.group);
+    return;
+  }
   const btn = e.target.closest('button[data-act="deducted"]');
   if (!btn) return;
   const card = btn.closest("[data-group]");

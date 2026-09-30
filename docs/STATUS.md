@@ -2,6 +2,48 @@
 
 Oppdatert: 2026-09-30
 
+## Fraktetikett som PDF i panelet (30.09.2026)
+
+Ikke alle butikker har etikettskriver. Sendingen lages fortsatt i CargonizerConnect – vi
+oppretter ingenting – men backenden slår den opp i Cargonizer og leverer PDF-en til panelet.
+
+Verifisert mot ekte data 30.09 (sending 76295361, referanse TEST-1002):
+
+| Kall | Resultat |
+|---|---|
+| `GET /consignments.xml?text=<ordrenummer>` | sendingen, med `<id>` |
+| `GET /consignments/label_pdf?consignment_ids[]=<id>` | PDF, også når `state = open` |
+
+Fire ting som ikke er åpenbare, alle funnet i testen:
+
+1. **`text=` treffer delstreng.** `text=1002` fant «TEST-1002», og ville like gjerne funnet
+   «10021» og «21002». Koden filtrerer derfor på **eksakt lik** `consignor-reference`. Uten
+   det ville en kunde fått en annen kundes fraktetikett. Ligger som test.
+2. **Søk på sporingsnummer eller sendingsnummer gir ingen treff.** Bare avsenders referanse.
+3. **Avsender-ID per butikk**: Garnkilden 25848, Strikkefryd 25849 (Oslo 25846). En sending
+   må slås opp med ID-en til butikken som laget den. Lagret i `stores.shipping_sender_id`.
+4. **Etiketten er gyldig før overføring** til transportør, så butikken kan hente den med
+   en gang – de trenger ikke vente på at sendingen er sendt til Bring.
+
+Id-en lagres i `routing_groups.cargonizer_consignment_id` første gang, så vi søker bare én
+gang per ordre. `<id>` finnes ikke i Cargonizers dokumentasjon; den er lest ut av et ekte svar.
+
+**Nøkkelen forlater aldri serveren.** Cargonizers dokumentasjon sier PDF-URL-ene «is only
+accessible trough an API call. It can not be referenced directly», så panelet kunne uansett
+ikke lenket dit. `shipping-label` sjekker at brukeren hører til butikken gruppen er tildelt –
+uten den sjekken kunne én butikk lastet ned en annen butikks etiketter, med deres kunders
+navn og adresse.
+
+### Ikke bekreftet ennå
+
+- **Hva CargonizerConnect skriver i avsenders referanse.** Woo-versjonen bruker ordrenummeret.
+  Koden godtar både «#1002» og «1002», men begge som eksakt treff. Må sjekkes på første ekte
+  ordre gjennom appen.
+- **`CARGONIZER_KEY` er ikke satt**, så funksjonen kan ikke kjøre ennå. Alt er testet mot
+  nettleserøkt, ikke mot API-nøkkel.
+- Standard datovindu for `consignments.xml` uten `from` er ikke dokumentert. Vi sender derfor
+  alltid `from`, 60 dager før ordren.
+
 ## Avslagsveien testet (30.09.2026)
 
 Testen 29.09 dekket bare godta → sendt → slått ut i kassa. Avslag var sist kjørt 09.09, altså

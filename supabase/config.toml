@@ -20,3 +20,5 @@ verify_jwt = false
 verify_jwt = false
 [functions.reconcile-inventory]
 verify_jwt = false
+[functions.shipping-label]
+verify_jwt = false

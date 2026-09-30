@@ -23,7 +23,7 @@ supabase/migrations/      001 schema, 002 cron, 003 exclude_from_sync, 004 inven
                           009 group_resplit, 010 oppgjor, 011 rls, 012 cron sync-products,
                           013 pos_deduction, 014 fulfillment fra Shopify,
                           015 group_fulfilled, 016 lager-avstemming, 017 cron reconcile,
-                          018 testordrer
+                          018 testordrer, 019 cargonizer-etikett
 supabase/seed/            product_aliases.sql (varer uten brukbar EAN, kjøres etter første sync-products)
 panel/                    butikkpanelet (statisk side, Vercel med rot `panel/`).
                           garnly-butikkpanel.vercel.app – deployes av git push
@@ -38,7 +38,7 @@ supabase/functions/
   _shared/testorder.ts    REN logikk: er ordren en testordre (tag TEST / order.test)
   _shared/fulfillment_sync.ts  henter fulfilled_at fra Shopify (webhook + backstop)
   _shared/offers.ts       makeNextOffer, escalateGroup, refreshOrderStatus
-  _shared/shipping/       bookShipment + shipmondo.ts
+  _shared/shipping/       cargonizer.ts (finn sending + hent etikett-PDF), bookShipment, shipmondo.ts
   sync-store/             cron: kassesystem → inventory → Shopify (+ metafelt garnly.stock_by_store)
   sync-products/          Shopify-varianter → products-tabellen (+ slår på inventory tracking)
   order-intake/           webhook orders/paid → hold → planGroups → offers
@@ -49,6 +49,7 @@ supabase/functions/
   pos-webhook/            Mystore products/update → trigger synk
   pos-catalog/            daglig cron: Duells product/list → pos_catalog (strekkoder)
   reconcile-inventory/    nattlig cron: leser on_hand fra Shopify og retter avvik
+  shipping-label/         fraktetikett som PDF til panelet (Cargonizer, bruker-JWT)
 scripts/                  set-barcodes.ts, import-products.ts, backfill-store-inventory.ts, enable-tracking.ts
 dashboard/                Next.js admin-dashboard (Vercel): oversikt, ordrer, umatchet, lager, synk
 shopify-app/              Shopify Function: kassevalidering «ett parti fra én butikk» (§7)
