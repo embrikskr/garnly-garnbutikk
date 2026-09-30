@@ -211,12 +211,16 @@ button { font: inherit; }
 .hist__status--kansellert, .hist__status--avslatt { color: var(--red); }
 
 /* ---------------------------------------------------------------- detaljer */
+/* display settes BARE på [open]. Setter man det på .detalj, overstyrer man nettleserens
+   egen regel om at en lukket <dialog> er skjult, og dialogen blir stående synlig midt i
+   siden hele tiden – med bare «Lukk» når den er tom. */
 .detalj {
   border: none; border-radius: var(--radius); padding: 20px; width: min(520px, calc(100vw - 32px));
-  background: var(--card); color: var(--ink); box-shadow: var(--shadow); display: grid; gap: 14px;
+  background: var(--card); color: var(--ink); box-shadow: var(--shadow); gap: 14px;
 }
-.detalj::backdrop { background: rgba(42, 37, 34, .45); }
+.detalj:not([open]) { display: none; }
 .detalj[open] { display: grid; }
+.detalj::backdrop { background: rgba(42, 37, 34, .45); }
 .tider { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; font-size: 15px; }
 .tider dt { color: var(--ink-soft); }
 .tider dd { margin: 0; }
