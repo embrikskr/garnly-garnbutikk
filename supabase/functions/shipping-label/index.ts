@@ -14,7 +14,7 @@
  * lastet ned en annen butikks fraktetiketter, med navn og adresse til deres kunder.
  */
 import { adminClient, audit, json } from "../_shared/db.ts";
-import { finnConsignment, hentEtikett } from "../_shared/shipping/cargonizer.ts";
+import { finnConsignment, hentEtikett, SOKEVINDU_DAGER } from "../_shared/shipping/cargonizer.ts";
 
 const ALLOWED = (Deno.env.get("PANEL_ORIGIN") ?? "*").split(",").map((s) => s.trim()).filter(Boolean);
 
@@ -29,9 +29,6 @@ function cors(req: Request): Record<string, string> {
     "Vary": "Origin",
   };
 }
-
-/** Hvor langt bakover i tid vi ber Cargonizer søke. Standardvinduet deres er ikke dokumentert. */
-const SOKEVINDU_DAGER = 60;
 
 Deno.serve(async (req) => {
   const CORS = cors(req);

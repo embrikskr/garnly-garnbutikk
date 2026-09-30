@@ -1,11 +1,20 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { type CargonizerConsignment, parseConsignments, referanseVarianter, sokeord, velgConsignment } from "./cargonizer.ts";
+import {
+  type CargonizerConsignment,
+  parseConsignments,
+  parseErrors,
+  referanseVarianter,
+  sokeord,
+  transferBeslutning,
+  velgConsignment,
+} from "./cargonizer.ts";
 
 const c = (id: number, ref: string, state = "open"): CargonizerConsignment => ({
   id,
   consignorReference: ref,
   state,
   trackingUrl: null,
+  transferAt: null,
 });
 
 Deno.test("delstreng-treff forkastes – ellers går etiketten til feil kunde", () => {
@@ -83,4 +92,68 @@ Deno.test("godtar både «#1002» og «1002» som avsenders referanse", () => {
 Deno.test("søkeordet sendes uten firkant", () => {
   assertEquals(sokeord("#1002"), "1002");
   assertEquals(sokeord("1002"), "1002");
+});
+
+// ---------------------------------------------------------------- overføring
+
+Deno.test("open skal overføres, transferred og closed skal ikke", () => {
+  assertEquals(transferBeslutning({ state: "open", transferAt: null }).handling, "overfor");
+  assertEquals(transferBeslutning({ state: "transferred", transferAt: null }).handling, "allerede");
+  assertEquals(transferBeslutning({ state: "closed", transferAt: null }).handling, "allerede");
+  // Store bokstaver og mellomrom skal ikke avgjøre om en pakke meldes inn to ganger.
+  assertEquals(transferBeslutning({ state: " Transferred ", transferAt: null }).handling, "allerede");
+});
+
+Deno.test("transfer-at slår state: er tidspunktet satt, er sendingen meldt inn", () => {
+  // Sett tidspunktet står, er EDI-en sendt uansett hva tilstanden heter. Overførte vi igjen,
+  // ville transportøren fått samme pakke to ganger.
+  const b = transferBeslutning({ state: "open", transferAt: "2026-09-30T19:10:00Z" });
+  assertEquals(b.handling, "allerede");
+  assertEquals(b.handling === "allerede" ? b.tidspunkt : null, "2026-09-30T19:10:00Z");
+});
+
+Deno.test("ukjent tilstand overføres ikke – vi gjetter ikke på Cargonizers vokabular", () => {
+  // Tilstandene er ikke dokumentert. En vi aldri har sett kan like gjerne bety «under
+  // overføring» som «avvist»; da er det bedre at et menneske ser på den.
+  assertEquals(transferBeslutning({ state: "hva_nå", transferAt: null }).handling, "ukjent");
+  assertEquals(transferBeslutning({ state: null, transferAt: null }).handling, "ukjent");
+  assertEquals(transferBeslutning({ state: "", transferAt: null }).handling, "ukjent");
+});
+
+Deno.test("tomt transfer-at fra Cargonizer er ingen verdi", () => {
+  // <transfer-at type="dateTime" nil="true"/> kommer ut av parseren som tom streng.
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+  <consignments><consignment>
+    <id type="integer">76296163</id>
+    <consignor-reference>#1004</consignor-reference>
+    <state>open</state>
+    <transfer-at type="dateTime" nil="true"/>
+    <tracking-url nil="true"/>
+  </consignment></consignments>`;
+  const r = parseConsignments(xml);
+  assertEquals(r[0].transferAt, null);
+  assertEquals(r[0].trackingUrl, null);
+  assertEquals(transferBeslutning(r[0]).handling, "overfor");
+});
+
+Deno.test("parseConsignments leser et satt transfer-at", () => {
+  const xml = `<consignments><consignment><id>5</id><consignor-reference>#1004</consignor-reference>
+    <state>transferred</state><transfer-at type="dateTime">2026-09-30T19:10:00Z</transfer-at></consignment></consignments>`;
+  assertEquals(parseConsignments(xml)[0].transferAt, "2026-09-30T19:10:00Z");
+});
+
+Deno.test("feilmeldinger plukkes ut av <errors>", () => {
+  // Ekte svar fra POST /consignments/transfer.xml med ukjent id (30.09.2026).
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+  <errors>
+    <info><request-id>98862ddf</request-id></info>
+    <error>Denne handlingen kunne ikke utføres på de markerte sendingene</error>
+  </errors>`;
+  assertEquals(parseErrors(xml), ["Denne handlingen kunne ikke utføres på de markerte sendingene"]);
+});
+
+Deno.test("flere feil, og svar uten feil", () => {
+  assertEquals(parseErrors("<errors><error>A</error><error>B</error></errors>"), ["A", "B"]);
+  assertEquals(parseErrors("<consignments/>"), []);
+  assertEquals(parseErrors(""), []);
 });

@@ -11,6 +11,7 @@
 import { adminClient, audit } from "./db.ts";
 import { getOrderFulfillments } from "./shopify.ts";
 import { type GroupForMatch, matchFulfillments } from "./fulfillment.ts";
+import { overfoerGruppe } from "./transfer_sync.ts";
 
 /**
  * Setter fulfilled_at på gruppene i én ordre som Shopify har sendt.
@@ -76,6 +77,9 @@ export async function reconcileFulfilledAt(routingOrderId: string): Promise<numb
         // så en fulfillment uten sporing ikke nuller ut en vi alt har.
         ...(sending?.trackingNumber ? { tracking_number: sending.trackingNumber } : {}),
         ...(sending?.trackingUrl ? { tracking_url: sending.trackingUrl } : {}),
+        // Transportøren lagres for panelteksten: «Overført til PostNord» skal ikke stå på
+        // en Bring-pakke. Kommer fra CargonizerConnect via Shopifys trackingInfo.company.
+        ...(sending?.carrier ? { carrier: sending.carrier } : {}),
       })
       .eq("id", groupId).is("fulfilled_at", null).select("id");
     if (!upd?.length) continue;
@@ -86,6 +90,16 @@ export async function reconcileFulfilledAt(routingOrderId: string): Promise<numb
       carrier: sending?.carrier ?? null,
     });
     merket++;
+
+    // CargonizerConnect lager sendingen, men overfører den ikke til transportøren. Gjør vi
+    // det ikke her, står pakken som «Usendt» hos Logistra og sporingsnummeret over er dødt.
+    // Feiler det, tar backstoppen i timeout-sweeper den – bokføringen av at ordren er sendt
+    // skal uansett stå.
+    try {
+      await overfoerGruppe(groupId);
+    } catch (e) {
+      console.error("[transfer]", groupId, e instanceof Error ? e.message : e);
+    }
   }
   return merket;
 }

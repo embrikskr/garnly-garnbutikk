@@ -158,6 +158,12 @@ button { font: inherit; }
 .kassa--ok { color: var(--green); }
 .kassa--purre { color: var(--amber); font-weight: 600; }
 
+/* Overføring til transportør. Samme form som kassa-linja: én linje, ingen knapp –
+   butikken kan ikke gjøre noe med den, men skal se den. */
+.frakt { font-size: 15px; margin: 0; }
+.frakt--ok { color: var(--green); }
+.frakt--venter { color: var(--amber); font-weight: 600; }
+
 /* ---------------------------------------------------------------- toast */
 .toast {
   position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);

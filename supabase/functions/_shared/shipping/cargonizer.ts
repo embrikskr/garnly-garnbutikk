@@ -1,8 +1,11 @@
 /**
- * Cargonizer (Logistra): finn sendingen for en ordre, og hent fraktetiketten som PDF.
+ * Cargonizer (Logistra): finn sendingen for en ordre, hent fraktetiketten, og overfør
+ * sendingen til transportøren.
  *
- * Garnly oppretter ikke sendinger. Butikken lager dem i CargonizerConnect i Shopify. Vi leser
- * bare – dette er for butikkene som ikke har etikettskriver og trenger PDF-en i panelet.
+ * Garnly oppretter ikke sendinger. Butikken lager dem i CargonizerConnect i Shopify. Men
+ * appen *overfører* dem ikke: den har bare en innstilling for automatisk overføring på
+ * «Home Small main shipment», ikke på pakkeboks. Uten overføring får transportøren aldri
+ * EDI-en, og sporingsnummeret på ordren er dødt. Derfor gjør vi det (se transfer_sync.ts).
  *
  * Verifisert mot ekte API 30.09.2026 (sending 76295361, referanse TEST-1002, avsender 25846):
  *   GET /consignments.xml?text=<ordrenummer>            → sendingen, med <id>
@@ -35,7 +38,16 @@ export interface CargonizerConsignment {
   /** «open» = ikke overført til transportør. */
   state: string | null;
   trackingUrl: string | null;
+  /** Satt når sendingen er overført. Tom til den er det. */
+  transferAt: string | null;
 }
+
+/**
+ * Hvor langt bakover i tid vi ber Cargonizer søke når vi ikke har sendings-id-en fra før.
+ * Deres standardvindu for consignments.xml er ikke dokumentert, så vi ber om et vindu selv.
+ * Verifisert 30.09.2026: `from=` treffer minst tre år tilbake.
+ */
+export const SOKEVINDU_DAGER = 60;
 
 /**
  * Sendingen som hører til ordren, av alle søket returnerte.
@@ -78,6 +90,16 @@ export function sokeord(orderName: string): string {
   return (orderName ?? "").trim().replace(/^#/, "");
 }
 
+/**
+ * Tom streng er ikke en verdi. Cargonizer skriver tomme felt som `<transfer-at nil="true"/>`,
+ * som parseren gir oss som "". Uten denne ville «ikke overført» sett ut som en verdi.
+ */
+function tekst(v: unknown): string | null {
+  if (v == null) return null;
+  const s = String(v).trim();
+  return s === "" ? null : s;
+}
+
 /** Parser svaret fra /consignments.xml. REN logikk, så den kan testes uten nett. */
 export function parseConsignments(xml: string): CargonizerConsignment[] {
   const parser = new XMLParser({ ignoreAttributes: true, parseTagValue: false, trimValues: true });
@@ -91,8 +113,9 @@ export function parseConsignments(xml: string): CargonizerConsignment[] {
       // id-er; en regex over hele svaret ville plukket feil tall.
       id: Number(c.id),
       consignorReference: String(c["consignor-reference"] ?? ""),
-      state: c.state != null ? String(c.state) : null,
-      trackingUrl: c["tracking-url"] != null ? String(c["tracking-url"]) : null,
+      state: tekst(c.state),
+      trackingUrl: tekst(c["tracking-url"]),
+      transferAt: tekst(c["transfer-at"]),
     }))
     .filter((c) => Number.isFinite(c.id) && c.id > 0);
 }
@@ -136,4 +159,79 @@ export async function hentEtikett(consignmentId: number, senderId: string): Prom
     throw new Error(`Cargonizer ga ikke PDF (${type}): ${(await res.text()).slice(0, 200)}`);
   }
   return await res.arrayBuffer();
+}
+
+// ---------------------------------------------------------------------------
+// Overføring til transportør
+// ---------------------------------------------------------------------------
+
+/**
+ * Tilstander vi vet hva betyr. Alt annet behandles som ukjent og overføres ikke:
+ * å gjette på en tilstand vi aldri har sett kan bety å melde inn samme pakke to ganger.
+ */
+const APEN = "open";
+const ALLEREDE_OVERFORT = new Set(["transferred", "closed"]);
+
+export type TransferBeslutning =
+  | { handling: "overfor" }
+  | { handling: "allerede"; tidspunkt: string | null }
+  | { handling: "ukjent"; state: string | null };
+
+/**
+ * Skal denne sendingen overføres nå? REN logikk.
+ *
+ * `transfer-at` er sterkere enn `state`: er tidspunktet satt, er sendingen meldt inn,
+ * uansett hva tilstanden heter. Da skal vi ikke melde den inn en gang til.
+ */
+export function transferBeslutning(c: Pick<CargonizerConsignment, "state" | "transferAt">): TransferBeslutning {
+  if (c.transferAt) return { handling: "allerede", tidspunkt: c.transferAt };
+  const s = (c.state ?? "").trim().toLowerCase();
+  if (ALLEREDE_OVERFORT.has(s)) return { handling: "allerede", tidspunkt: null };
+  if (s === APEN) return { handling: "overfor" };
+  return { handling: "ukjent", state: c.state };
+}
+
+/** Feilmeldingene i et <errors>-svar. REN logikk. */
+export function parseErrors(xml: string): string[] {
+  const parser = new XMLParser({ ignoreAttributes: true, parseTagValue: false, trimValues: true });
+  const feil = parser.parse(xml)?.errors?.error;
+  if (feil == null) return [];
+  return (Array.isArray(feil) ? feil : [feil]).map((f: unknown) => String(f)).filter(Boolean);
+}
+
+/** Én sending, slått opp på id. Brukes når vi alt har lagret id-en. */
+export async function hentConsignment(consignmentId: number, senderId: string): Promise<CargonizerConsignment | null> {
+  const res = await fetch(`${BASE}/consignments/${consignmentId}.xml`, { headers: headers(senderId) });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Cargonizer-oppslag feilet: ${res.status} ${(await res.text()).slice(0, 200)}`);
+  return parseConsignments(await res.text())[0] ?? null;
+}
+
+/**
+ * Melder sendingene inn til transportøren.
+ *
+ * To ting som ikke er åpenbare, begge verifisert mot ekte API 30.09.2026:
+ *
+ * 1. `.xml`-endelsen er nødvendig. Uten den svarer Cargonizer 302 til forsiden, som er en
+ *    HTML-404 – og et `fetch` som følger redirecter ville lest det som 404-side, ikke feil.
+ *    Med `.xml` kommer 400 og <errors><error>Denne handlingen kunne ikke utføres …</error>.
+ * 2. Cargonizer dokumenterer 302 som et gyldig svar, så vi godtar det. Derfor følger vi
+ *    ikke redirecten: statusen er svaret.
+ *
+ * Kaster ved feil. Kallet er trygt å gjenta – den som kaller sjekker tilstanden først, og
+ * verifiserer etterpå ved å lese sendingen på nytt.
+ */
+export async function overfoerConsignments(consignmentIds: number[], senderId: string): Promise<void> {
+  if (!consignmentIds.length) return;
+  const url = new URL(`${BASE}/consignments/transfer.xml`);
+  for (const id of consignmentIds) url.searchParams.append("consignment_ids[]", String(id));
+
+  const res = await fetch(url, { method: "POST", headers: headers(senderId), redirect: "manual" });
+  if (res.ok || res.status === 302) {
+    await res.body?.cancel();
+    return;
+  }
+  const kropp = await res.text();
+  const feil = parseErrors(kropp);
+  throw new Error(`Cargonizer-overføring feilet: ${res.status} ${feil.length ? feil.join("; ") : kropp.slice(0, 200)}`);
 }

@@ -232,6 +232,7 @@ function renderAssigned(rows) {
       <ul class="lines">${lineItems(r.line_items)}</ul>
       <p class="addr">${esc(r.ship_name ?? "")}<br>${esc(r.ship_address1 ?? "")}${r.ship_address2 ? "<br>" + esc(r.ship_address2) : ""}<br>${esc(r.ship_zip ?? "")} ${esc(r.ship_city ?? "")}</p>
       ${r.tracking_number ? `<p class="track">Sporing: ${r.tracking_url ? `<a href="${esc(r.tracking_url)}" target="_blank" rel="noopener">${esc(r.tracking_number)}</a>` : esc(r.tracking_number)}</p>` : ""}
+      ${fraktStatus(r)}
       <div class="card__actions card__actions--etikett">
         <button class="btn btn--secondary" data-act="etikett">Hent fraktetikett (PDF)</button>
       </div>
@@ -255,6 +256,24 @@ function kassaStatus(r) {
       <button class="btn btn--secondary" data-act="deducted">Slått ut i kassa</button>
     </div>
     ${purre ? `<p class="kassa kassa--purre">Sendt for over et døgn siden. Til dette er slått ut i kassa, holder Garnly igjen varene på lageret.</p>` : ""}`;
+}
+
+/**
+ * Er sendingen meldt inn til transportøren?
+ *
+ * CargonizerConnect lager sendingen, men overfører den ikke. Gjør ikke Garnly det, står
+ * pakken som «Usendt» hos Logistra og sporingsnummeret kunden fikk virker ikke – uten at
+ * noe ser galt ut i panelet. Derfor står det her.
+ */
+function fraktStatus(r) {
+  if (r.transferred_at) {
+    return `<p class="frakt frakt--ok">Overført til ${esc(r.carrier || "transportør")} ${klokke(r.transferred_at)}</p>`;
+  }
+  if (!r.fulfilled_at) return "";
+  // Overføringen skjer normalt i samme minutt som sendingen. Vi maser ikke om det første
+  // kvarteret; står den igjen etterpå, skal butikken vite det før kunden ringer.
+  if (Date.now() - new Date(r.fulfilled_at).getTime() < 15 * 60 * 1000) return "";
+  return `<p class="frakt frakt--venter">Ikke overført til transportør ennå. Garnly prøver videre; sporingen virker ikke før den er det.</p>`;
 }
 
 /** Sendt for mer enn 24 t siden uten at uttrekket er bekreftet. */
@@ -336,6 +355,7 @@ function apneDetalj(groupId) {
   const tider = [
     r.assigned_at ? ["Godtatt", tidspunkt(r.assigned_at)] : null,
     r.fulfilled_at ? ["Sendt", tidspunkt(r.fulfilled_at)] : null,
+    r.transferred_at ? ["Overført", `${tidspunkt(r.transferred_at)}${r.carrier ? " – " + esc(r.carrier) : ""}`] : null,
     r.pos_deducted_at ? ["Slått ut i kassa", `${tidspunkt(r.pos_deducted_at)}${r.pos_deducted_by ? " – " + esc(r.pos_deducted_by) : ""}`] : null,
   ].filter(Boolean);
 

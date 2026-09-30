@@ -2,6 +2,66 @@
 
 Oppdatert: 2026-09-30
 
+## Sendinger overføres til transportøren automatisk (30.09.2026)
+
+CargonizerConnect lager sendingen og fulfiller ordren i Shopify, men **overfører den ikke**.
+#1004 lå som «Usendt» hos avsender 25849 med `state=open` og `transfer-at` tom. Appen har
+bare automatisk overføring på «Home Small main shipment», ikke på pakkeboks. Uten overføring
+får transportøren aldri EDI-en, og sporingsnummeret kunden fikk i Shopify er dødt.
+
+Garnly gjør det nå selv, i det `fulfilled_at` settes, med backstop i `timeout-sweeper`
+(hvert kvarter per gruppe). Ren logikk i `shipping/cargonizer.ts` (`transferBeslutning`),
+I/O i `_shared/transfer_sync.ts`. Migrasjon 022.
+
+    POST /consignments/transfer.xml?consignment_ids[]=<id>
+
+**`.xml`-endelsen er ikke pynt.** Uten den svarer Cargonizer 302 til forsiden, som er en
+HTML-404 – et `fetch` som følger redirecter ville lest en feilet overføring som suksess. Med
+`.xml` kommer 400 og `<errors><error>…</error></errors>`. Verifisert mot ekte API.
+
+**Vi stoler ikke på svaret.** Cargonizer dokumenterer 302 som et gyldig svar, så statusen
+alene sier ikke om overføringen gikk gjennom. Etter POST-en leses sendingen på nytt, og
+overføringen bokføres bare hvis tilstanden faktisk har endret seg. `transfer-at` veier tyngre
+enn `state`: er tidspunktet satt, er pakken meldt inn uansett hva tilstanden heter.
+
+**Ukjente tilstander overføres ikke.** Cargonizer dokumenterer ikke vokabularet. Vi kjenner
+`open` (ikke overført) og `transferred`/`closed` (overført). En tilstand vi aldri har sett
+kan like gjerne bety «under overføring» som «avvist», og å melde inn samme pakke to ganger er
+verre enn å la et menneske se på den. Da blir det feil + varsel i stedet.
+
+**Testordrer overføres aldri** (`routing_orders.is_test`). En testsending som blir meldt inn
+er en ekte transportbestilling.
+
+### Verifisert mot ekte data
+
+- Oppslag på lagret id (76296163) og søk på ordrenummer gir samme sending; beslutningen blir
+  `overfor`. Ukjent id gir `null`, ikke krasj.
+- Feilparsing mot ekte 400-svar: «Denne handlingen kunne ikke utføres på de markerte
+  sendingene».
+- **Bevisst feil-test i produksjon:** avsender-ID-en ble midlertidig fjernet fra Strikkefryd
+  og #1004 gjort om til ikke-testordre. Backstoppen plukket gruppen opp på første sveip,
+  bokførte forsøket (`transfer_attempts` 1, `transfer_checked_at` satt, feilmelding lagret),
+  og varslet drift nøyaktig ved tredje forsøk – én gang. Fjerde forsøk ga nytt forsøk, men
+  ikke nytt varsel. Alt gjenopprettet etterpå.
+- **Testordre-sperren holder:** med `is_test` tilbake på #1004 har backstoppen gått flere
+  sveip uten å røre gruppen (`transfer_attempts` står på 0).
+- Panelvisningen testet i ekte Chromium: overført kort viser «Overført til PostNord», et kort
+  som har stått usendt i to timer viser gul advarsel, og et som ble sendt for to minutter
+  siden viser ingenting. Testen ble kjørt mot koden med fraktlinja fjernet først, og feilet
+  da – den fanger altså feilen.
+
+### #1004 blir ikke overført av dette
+
+#1004 er merket `is_test = true`, og regelen over gjelder den. Sendingen ligger fortsatt som
+«Usendt». Skal den faktisk sendes, må den overføres manuelt i Cargonizer – eller flagget tas
+av først. Det er en bevisst konsekvens av regelen, ikke en feil.
+
+### Transportørnavn
+
+`routing_groups.carrier` settes fra Shopifys `trackingInfo.company` (som CargonizerConnect
+fyller). Panelet skriver «Overført til PostNord» bare når vi faktisk vet det; ellers
+«Overført til transportør». Ellers hadde en Bring-pakke fått PostNord-tekst.
+
 ## «Tidligere ordrer» i panelet (30.09.2026)
 
 Når butikken trykket «Slått ut i kassa», forsvant ordren. Da fant de ikke igjen etiketten,
