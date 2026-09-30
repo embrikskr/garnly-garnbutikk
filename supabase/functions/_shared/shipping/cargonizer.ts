@@ -4,9 +4,13 @@
  * Garnly oppretter ikke sendinger. Butikken lager dem i CargonizerConnect i Shopify. Vi leser
  * bare – dette er for butikkene som ikke har etikettskriver og trenger PDF-en i panelet.
  *
- * Verifisert mot ekte data 30.09.2026 (sending 76295361, referanse TEST-1002):
- *   GET /consignments.xml?text=<ordrenummer>   → sendingen, med <id>
- *   GET /consignments/label_pdf?consignment_ids[]=<id>  → PDF, også før overføring
+ * Verifisert mot ekte API 30.09.2026 (sending 76295361, referanse TEST-1002, avsender 25846):
+ *   GET /consignments.xml?text=<ordrenummer>            → sendingen, med <id>
+ *   GET /consignments/label_pdf?consignment_ids[]=<id>  → 47 kB PDF, også når state=open
+ *
+ * Svaret har FLERE <id>-elementer: sendingen har sin egen, og hver <bundle> har sin.
+ * Sendingens id er direkte barn av <consignment>; buntens ligger under <bundles><bundle>.
+ * Derfor parser vi XML-en ordentlig – en regex over svaret ville plukket buntens id.
  *
  * Fire ting som ikke er åpenbare:
  *
@@ -21,7 +25,9 @@
  */
 import { XMLParser } from "npm:fast-xml-parser@4";
 
-const BASE = Deno.env.get("CARGONIZER_BASE_URL") ?? "https://cargonizer.no";
+// Begge vertsnavn svarer likt (verifisert 30.09.2026 med samme nøkkel og samme sending).
+// api.cargonizer.no er det dokumenterte, så det er standarden.
+const BASE = Deno.env.get("CARGONIZER_BASE_URL") ?? "https://api.cargonizer.no";
 
 export interface CargonizerConsignment {
   id: number;

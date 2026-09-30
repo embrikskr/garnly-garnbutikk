@@ -34,13 +34,33 @@ ikke lenket dit. `shipping-label` sjekker at brukeren hører til butikken gruppe
 uten den sjekken kunne én butikk lastet ned en annen butikks etiketter, med deres kunders
 navn og adresse.
 
+### Bekreftet mot ekte API 30.09
+
+`CARGONIZER_KEY` er satt. Testet med nøkkel mot sending 76295361 (avsender 25846):
+
+| Kall | Resultat |
+|---|---|
+| `finnConsignment("TEST-1002", 25846)` | id 76295361, state `open` |
+| `hentEtikett(76295361, 25846)` | 47 253 byte, signatur `%PDF-` |
+| `finnConsignment("#1002", 25846)` | `null` – delstreng avvist mot ekte data |
+| `finnConsignment("TEST-1002", 25849)` | `null` – avsender-ID-en skiller butikkene |
+| `hentEtikett(76295361, 25849)` | 404 – **Cargonizer håndhever avsender også på PDF-en** |
+
+Den siste er verdt å merke seg: selv om koden vår skulle fått tak i feil sendings-id, kan
+feil avsender ikke hente etiketten. Skillet ligger i Cargonizer, ikke bare hos oss.
+
+**Svaret har flere `<id>`-elementer.** Sendingen har sin egen, og hver `<bundle>` har sin
+(76295361 mot 82387924 i testen). Sendingens ligger som direkte barn av `<consignment>`.
+Derfor parses XML-en ordentlig – en regex over svaret ville plukket buntens id og hentet
+feil etikett.
+
+`api.cargonizer.no` og `cargonizer.no` gir identisk svar; koden bruker det dokumenterte.
+
 ### Ikke bekreftet ennå
 
 - **Hva CargonizerConnect skriver i avsenders referanse.** Woo-versjonen bruker ordrenummeret.
   Koden godtar både «#1002» og «1002», men begge som eksakt treff. Må sjekkes på første ekte
   ordre gjennom appen.
-- **`CARGONIZER_KEY` er ikke satt**, så funksjonen kan ikke kjøre ennå. Alt er testet mot
-  nettleserøkt, ikke mot API-nøkkel.
 - Standard datovindu for `consignments.xml` uten `from` er ikke dokumentert. Vi sender derfor
   alltid `from`, 60 dager før ordren.
 
