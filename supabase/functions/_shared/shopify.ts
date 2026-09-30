@@ -402,6 +402,9 @@ export interface ShopifyFulfillment {
   status: string;
   locationId: string | null;
   variantIds: string[];
+  trackingNumber: string | null;
+  trackingUrl: string | null;
+  carrier: string | null;
 }
 
 /**
@@ -424,6 +427,7 @@ export async function getOrderFulfillments(orderGid: string): Promise<ShopifyFul
         createdAt
         status
         location { id }
+        trackingInfo { number url company }
         fulfillmentLineItems(first: 100) { nodes { quantity lineItem { id variant { id } } } }
       }
     }
@@ -438,6 +442,11 @@ export async function getOrderFulfillments(orderGid: string): Promise<ShopifyFul
     variantIds: (f.fulfillmentLineItems?.nodes ?? [])
       .map((n: any) => n.lineItem?.variant?.id)
       .filter(Boolean) as string[],
+    // CargonizerConnect legger sporingsnummeret på fulfillmenten. Vi oppretter den ikke selv,
+    // så dette er eneste stedet vi får tak i det – og panelet viser det til butikken.
+    trackingNumber: f.trackingInfo?.[0]?.number ?? null,
+    trackingUrl: f.trackingInfo?.[0]?.url ?? null,
+    carrier: f.trackingInfo?.[0]?.company ?? null,
   }));
 }
 

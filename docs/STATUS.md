@@ -2,6 +2,38 @@
 
 Oppdatert: 2026-09-30
 
+## Ekte ordre gjennom hele kjeden (30.09.2026, #1004)
+
+Strikkefryd, PostNord pakkeboks via CargonizerConnect. **«Hent fraktetikett (PDF)» virket på
+første forsøk** – CargonizerConnect skriver ordrenummeret i avsenders referanse, og oppslaget
+traff. Det var det siste ubekreftede punktet i etikettløsningen.
+
+### Feil funnet: «Slått ut i kassa» virket ikke etter sending
+
+`mark_pos_deducted` filtrerte på `status = 'assigned'`. Funksjonen ble skrevet i 013, før
+`fulfilled` fantes, og ble glemt da 015/016 innførte statusen – views og TypeScript ble
+oppdatert, RPC-en ikke. Butikken fikk «Fant ingen tildelt ordre».
+
+Rekkefølgen som feilet er den vanligste i butikk: pakk → lag sending → slå ut i kassa.
+Gruppen er da `fulfilled`, ikke `assigned`.
+
+Rettet i 020. Verifisert ved å utgi seg for butikkbrukeren i SQL, så hele tilgangsveien ble
+kjørt og ikke omgått: `pos_deducted_at` satt 19:12:53, `pos_deducted_by`
+strikkefryd@garnly.no, dobbelttrykk gir samme tidspunkt, og Garnkilden nektes fortsatt.
+
+De fire tilstandene ligger nå også som ren logikk i `_shared/inventory.ts`
+(`pendingForGroup`), med test på nettopp «sendt først, så slått ut». SQL-viewet er fortsatt
+implementasjonen; den rene funksjonen er der for at regelen skal være lesbar og testbar –
+det var mangelen på det som lot feilen gå upåaktet.
+
+### Sporingsnummer lagres nå
+
+`getOrderFulfillments` henter `trackingInfo`, og `fulfilled_at` lagres sammen med
+`tracking_number` og `tracking_url`. Vi oppretter ikke fulfillments selv, så dette er eneste
+stedet sporingen finnes. Settes bare når den finnes, så en fulfillment uten sporing ikke
+nuller ut en vi alt har. #1004 etterfylt manuelt (PostNord 70727320855841324), siden den ble
+merket sendt før endringen.
+
 ## Fraktetikett som PDF i panelet (30.09.2026)
 
 Ikke alle butikker har etikettskriver. Sendingen lages fortsatt i CargonizerConnect – vi

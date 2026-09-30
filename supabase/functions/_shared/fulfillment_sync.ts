@@ -60,16 +60,31 @@ export async function reconcileFulfilledAt(routingOrderId: string): Promise<numb
     sendinger.map((f) => ({ id: f.id, createdAt: f.createdAt, status: f.status, locationId: f.locationId, variantIds: f.variantIds })),
   );
 
+  const sendingPerId = new Map(sendinger.map((f) => [f.createdAt, f]));
+
   let merket = 0;
   for (const [groupId, createdAt] of treff) {
+    const sending = sendingPerId.get(createdAt);
     // Betinget: en webhook og backstoppen kan treffe samtidig, og da skal tidspunktet stå.
     // Status følger med: uten den ville gruppen blitt liggende som 'assigned' og vist i
     // panelets pakkeliste for alltid.
     const { data: upd } = await db.from("routing_groups")
-      .update({ fulfilled_at: createdAt, status: "fulfilled" })
+      .update({
+        fulfilled_at: createdAt,
+        status: "fulfilled",
+        // Sporingen kommer fra CargonizerConnect via Shopify. Settes bare hvis den finnes,
+        // så en fulfillment uten sporing ikke nuller ut en vi alt har.
+        ...(sending?.trackingNumber ? { tracking_number: sending.trackingNumber } : {}),
+        ...(sending?.trackingUrl ? { tracking_url: sending.trackingUrl } : {}),
+      })
       .eq("id", groupId).is("fulfilled_at", null).select("id");
     if (!upd?.length) continue;
-    await audit("routing_group", groupId, "fulfilled", { at: createdAt, order: order.shopify_order_name });
+    await audit("routing_group", groupId, "fulfilled", {
+      at: createdAt,
+      order: order.shopify_order_name,
+      tracking: sending?.trackingNumber ?? null,
+      carrier: sending?.carrier ?? null,
+    });
     merket++;
   }
   return merket;
