@@ -139,12 +139,16 @@ async function applyResponse(offer: any, action: "accept" | "decline", byUser?: 
   if (action === "decline") {
     await db.from("offers").update({ status: "declined", responded_at: now, response_note: byUser ? `avslått av ${byUser}` : null }).eq("id", offer.id);
     await audit("offer", offer.id, "declined", { store_id: store.id, by: byUser ?? "lenke" });
-    await makeNextOffer(group.id);
+    // makeNextOffer svarer om noen faktisk fikk tilbudet. Er butikken den siste, ble ordren
+    // eskalert til Garnly – og da skal vi ikke si at den «går videre til neste butikk».
+    const gikkVidere = await makeNextOffer(group.id);
     return {
       ok: true,
       code: "declined",
       title: "Takk for svaret",
-      message: `Ordre ${order.shopify_order_name} går videre til neste butikk. Dere blir ikke nedprioritert for å si nei.`,
+      message: gikkVidere
+        ? `Ordre ${order.shopify_order_name} går videre til neste butikk. Dere blir ikke nedprioritert for å si nei.`
+        : `Ordre ${order.shopify_order_name} er sendt til Garnly for manuell håndtering, siden ingen andre butikker har varene. Dere blir ikke nedprioritert for å si nei.`,
     };
   }
 

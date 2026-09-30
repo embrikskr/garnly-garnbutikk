@@ -2,6 +2,30 @@
 
 Oppdatert: 2026-09-30
 
+## Avslagsveien testet (30.09.2026)
+
+Testen 29.09 dekket bare godta → sendt → slått ut i kassa. Avslag var sist kjørt 09.09, altså
+før flyttingen til ny Shopify-butikk og før alt som er endret siden. Avslag rører ikke
+Shopify, så den lot seg teste mot basen alene.
+
+Kjørt med en testordre (2 × Finull 401, som begge butikkene fører):
+
+| Steg | Resultat |
+|---|---|
+| Garnkilden avslår | tilbudet går til Strikkefryd 0,2 s etter, ny frist og eget token |
+| Strikkefryd avslår | gruppen og ordren settes `escalated`, «Ingen kvalifiserte butikker igjen i køen» |
+| `timeout_streak` | uendret – aktivt avslag straffes ikke, som regelen sier |
+
+**Rettet: butikken fikk feil beskjed.** Siste butikk som avslo fikk «går videre til neste
+butikk», selv om det ikke fantes noen neste og ordren gikk til Garnly. `makeNextOffer` svarer
+allerede om noen faktisk fikk tilbudet; nå brukes svaret til å velge melding. Verifisert med
+begge utfallene.
+
+**Åpent: eskaleringsvarselet når ingen.** `escalateGroup` kaller `notifyOps`, som uten
+`RESEND_API_KEY` bare skriver til loggen. Det er her systemet med vilje gir fra seg ordren til
+et menneske, og akkurat den overleveringen er brutt. Ordren blir liggende ON_HOLD i Shopify
+til noen ser den i dashbordet, som viser eskalerte ordrer.
+
 ## Testordrer holdes utenfor oppgjøret (30.09.2026)
 
 `routing_orders.is_test` settes i `order-intake` fra Shopify-taggen «TEST» eller Shopifys eget
