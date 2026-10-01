@@ -2,6 +2,34 @@
 
 Oppdatert: 2026-10-01
 
+## Admin-toppen, og ingenting arves ved brukerbytte (01.10.2026)
+
+**Admin:** toppen viser nå **«Garnly admin»**, og tallene er på tvers av alle butikker, fra
+`v_admin_stats` (testordrer holdes utenfor, som for butikkene): **på tilbud** (ute hos en
+butikk nå), **å pakke**, **i dag** (tildelt i dag). Før sto det «Garnly Strikkefryd» med
+Strikkefryds tall. Det kom ikke fra databasen – admin er ikke koblet til noen butikk – men
+fra forrige innlogging i samme fane: toppen ble bare satt for butikkbrukere, så en ren admin
+arvet det som sto der. En bruker som er både admin og butikk ser fortsatt butikkens topp.
+
+**Brukerbytte i samme nettleser.** Panelet holder butikknavn, tall, kort, faner og
+butikkvelger i over ti variabler og i DOM-en, og utlogging nullstilte bare noen av dem.
+Gjenskapt i Chromium med den gamle koden:
+- admin etter Strikkefryd: «Garnly Strikkefryd», Strikkefryds tall, og Strikkefryds ordrekort
+  – med kundenavn og adresse – liggende skjult i DOM-en
+- Garnkilden etter admin: **ingen faner synlige** – butikken så en tom side
+- økt som løp ut, og en annen logget inn: den forriges data lå igjen under
+
+Nå laster «Logg ut» siden på nytt, og det samme skjer hvis økten løp ut og en *annen* bruker
+logger inn. Samme bruker inn igjen etter utløpt økt fortsetter uten omlasting. Å nullstille
+hver variabel for hånd ville glemt én; en omlasting glemmer ingenting. «garnly.store» (sist
+valgte butikk) og lydvalget i localStorage står igjen – butikkvalget brukes bare hvis den nye
+brukeren har tilgang til den butikken, og lyden er en innstilling for nettbrettet.
+
+Testet i Chromium med en Supabase-stubb som, som den ekte, holder økten i localStorage:
+Strikkefryd → logg ut → admin → logg ut → Garnkilden → økten løper ut → Garnkilden igjen
+(ingen omlasting) → økten løper ut → Strikkefryd (omlasting). 12 av 12 riktige; den gamle
+koden feilet 7 av dem.
+
 ## Avslag uten bekreftelse (01.10.2026)
 
 «Avslå» i panelet spurte «Avslå denne ordren? Den går videre til neste butikk.» før den gjorde

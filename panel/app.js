@@ -21,7 +21,7 @@ const el = {
   app: $("app"), storeName: $("store-name"), storeSwitch: $("store-switch"),
   queue: $("queue"), queueEmpty: $("queue-empty"),
   assigned: $("assigned"), assignedEmpty: $("assigned-empty"),
-  statQueue: $("stat-queue"), statPack: $("stat-pack"), statToday: $("stat-today"),
+  statQueue: $("stat-queue"), statQueueLabel: $("stat-queue-label"), statPack: $("stat-pack"), statToday: $("stat-today"),
   acceptAll: $("accept-all"), logout: $("logout"), toast: $("toast"),
   conn: $("conn"), soundToggle: $("sound-toggle"),
   faneAktive: $("fane-aktive"), faneHistorikk: $("fane-historikk"),
@@ -65,6 +65,8 @@ let autoGodkjenning = false;
 let erAdmin = false;
 let alleButikker = [];
 let adminTimer = null;
+// Brukeren hvis data står på skjermen. Se start().
+let visningFor = null;
 
 // ---------------------------------------------------------------- oppstart
 
@@ -105,7 +107,13 @@ el.loginForm.addEventListener("submit", async (e) => {
   }
 });
 
-el.logout.addEventListener("click", () => sb.auth.signOut());
+// Utlogging laster siden på nytt. Panelet holder butikknavn, tall, kort, faner og
+// butikkvelger i over ti variabler og i DOM-en, og et nettbrett deles gjerne: den neste som
+// logger inn skal ikke arve noe av det. Å nullstille hver bit for hånd glemmer alltid én.
+el.logout.addEventListener("click", async () => {
+  await sb.auth.signOut();
+  location.reload();
+});
 
 el.soundToggle.addEventListener("click", () => {
   soundOn = !soundOn;
@@ -118,6 +126,16 @@ el.soundToggle.addEventListener("click", () => {
 async function start() {
   if (started) return;
   started = true;
+
+  // Utløpt økt viser innloggingen uten å laste siden på nytt. Logger en ANNEN bruker inn da,
+  // lastes siden på nytt før noe tegnes – ellers står den forriges data igjen under.
+  const { data: { session } } = await sb.auth.getSession();
+  const bruker = session?.user?.id ?? null;
+  if (visningFor && bruker !== visningFor) {
+    location.reload();
+    return;
+  }
+  visningFor = bruker;
   el.login.hidden = true;
   el.app.hidden = false;
   el.soundToggle.textContent = soundOn ? "🔔" : "🔕";
@@ -140,7 +158,13 @@ async function start() {
       toast("Brukeren er ikke koblet til en butikk. Ta kontakt med Garnly.", "error");
       return;
     }
-    // Ren Garnly-bruker: butikkfanene har ingenting å vise.
+    // Ren Garnly-bruker: butikkfanene har ingenting å vise. Toppen viser Garnly admin, og
+    // tallene der er på tvers av alle butikker (fra v_admin_stats, se lastAdmin) – ikke
+    // en tilfeldig butikks.
+    el.storeSwitch.hidden = true;
+    el.storeName.textContent = "admin";
+    el.statQueueLabel.textContent = "på tilbud";
+    document.title = "Garnly admin";
     el.faneAktive.hidden = true;
     el.faneHistorikk.hidden = true;
     velgFane("garnly");
@@ -1011,6 +1035,13 @@ async function lastAdmin() {
   ]);
   adminHandling = handling.data ?? [];
   adminOrdrer = ordrer.data ?? [];
+  // Toppen er butikkens så lenge brukeren også er en butikk; bare en ren admin får
+  // Garnly-tallene der.
+  if (!stores.length && tall.data) {
+    el.statQueue.textContent = tall.data.ute_pa_tilbud ?? 0;
+    el.statPack.textContent = tall.data.til_pakking ?? 0;
+    el.statToday.textContent = tall.data.tildelt_i_dag ?? 0;
+  }
   tegnTall(tall.data);
   tegnHandling();
   tegnSynk(synk.data ?? []);
