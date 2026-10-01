@@ -2,6 +2,26 @@
 
 Oppdatert: 2026-10-01
 
+## Produktbilde ute av panelet (01.10.2026)
+
+Bildet ble lagt inn dagen før og brukes ikke – butikken plukker på navn, farge og strekkode,
+og bildet stjal plassen på kortet. Ute av panelet, ute av `line_items`, og ute av
+Shopify-spørringen.
+
+Med det forsvant også forbeholdet fra i går: spørringen brukte `variant.image` og
+`product.featuredImage`, som Shopify har merket deprecated til fordel for `media`. Den
+avhengigheten er borte, og `order-intake` krever igjen bare `read_products`.
+
+`backfill-lines` brukte `image_url` som markør for «rutet før endringen». Den er byttet til
+`variant_title`, som alltid settes. Uten byttet ville jobben ment at hver nye ordre trengte
+etterfylling, i all evighet.
+
+Lagrede linjer er ryddet: ingen rader har `image_url` igjen.
+
+Kortet viser fortsatt navn og variant («Merinoull – 8581 Dyp skoggrønn»), antall stort,
+strekkode i monospace, SKU, og innholdet i garnpakker. Verifisert i ekte Chromium for begge
+butikktyper: ingen `<img>` igjen i noen linje, resten uendret.
+
 ## Automatisk godkjenning kan skrus på av butikken (01.10.2026)
 
 Motoren har vært der hele tiden: `stores.auto_accept` kom i 001, og `makeNextOffer` kaller

@@ -15,7 +15,7 @@
  */
 import { adminClient, json, requireInternalSecret } from "../_shared/db.ts";
 import { getOrder } from "../_shared/shopify.ts";
-import { bildeUrl, erGarnpakke, kitLinjer, variantTittel } from "../_shared/lines.ts";
+import { erGarnpakke, kitLinjer, variantTittel } from "../_shared/lines.ts";
 import type { LineItem } from "../_shared/types.ts";
 
 Deno.serve(async (req) => {
@@ -32,9 +32,9 @@ Deno.serve(async (req) => {
   type Rad = { id: string; line_items: LineItem[] | null; routing_orders: { shopify_order_id: string; shopify_order_name: string } | { shopify_order_id: string; shopify_order_name: string }[] | null };
   const grupper = (rader ?? []) as unknown as Rad[];
 
-  // Bare de som mangler feltene. Nøkkelen `image_url` er markøren: den settes alltid av
-  // byggLinje, også når den er null, så fravær av nøkkelen betyr «rutet før endringen».
-  const trenger = grupper.filter((g) => (g.line_items ?? []).some((l) => !("image_url" in l)));
+  // Bare de som mangler feltene. `variant_title` er markøren: den settes alltid av byggLinje,
+  // også når den er null, så fravær av nøkkelen betyr «rutet før endringen».
+  const trenger = grupper.filter((g) => (g.line_items ?? []).some((l) => !("variant_title" in l)));
 
   const cache = new Map<string, Map<string, Partial<LineItem>>>();
   let oppdatert = 0, hoppet = 0;
@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
         const d = perVariant!.get(l.variant_id);
         // Nøklene settes selv uten treff, så gruppen ikke plukkes opp på nytt i all evighet
         // om varianten er slettet i Shopify.
-        return { ...l, variant_title: null, sku: null, barcode: null, image_url: null, ...d };
+        return { ...l, variant_title: null, sku: null, barcode: null, ...d };
       });
       const { error } = await db.from("routing_groups").update({ line_items: nye }).eq("id", g.id);
       if (error) throw new Error(error.message);
@@ -78,7 +78,6 @@ function detaljerPerVariant(order: Awaited<ReturnType<typeof getOrder>>): Map<st
         variant_title: variantTittel(v.title),
         sku: v.sku?.trim() || null,
         barcode: v.barcode?.trim() || null,
-        image_url: bildeUrl(v),
         ...(innhold.length ? { kit_contents: innhold } : {}),
       });
     }

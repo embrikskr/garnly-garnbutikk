@@ -240,11 +240,9 @@ export interface ShopifyOrder {
             id: string; title: string; quantity: number;
             variant: {
               id: string; barcode: string | null; sku: string | null; title: string | null;
-              image: { url: string | null } | null;
               inventoryItem: { id: string };
               product: {
                 id: string; isGiftCard: boolean; productType: string | null; tags: string[] | null;
-                featuredImage: { url: string | null } | null;
                 metafield: { value: string | null } | null;
               } | null;
             } | null;
@@ -270,13 +268,8 @@ export async function getOrder(orderId: string): Promise<ShopifyOrder> {
       lineItems(first: 50) { nodes { id remainingQuantity totalQuantity
         lineItem { id title quantity
           variant { id barcode sku title
-            # image og featuredImage er deprecated til fordel for media, men media krever
-            # read_files/read_images, som appen ikke har. De gamle feltene krever bare
-            # read_products og virker i 2025-07. Byttes når scopene utvides.
-            image { url }
             inventoryItem { id }
             product { id isGiftCard productType tags
-              featuredImage { url }
               # Garnpakkens innhold. Ikke en Shopify-bundle; metafeltet er eneste kilde.
               metafield(namespace: "garnly", key: "garn_innhold") { value } } }
           discountedTotalSet { shopMoney { amount } }

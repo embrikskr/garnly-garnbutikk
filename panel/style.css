@@ -137,17 +137,13 @@ button { font: inherit; }
 
 .lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 
-/* Plukkelinja: bilde, antall, tekst. Antallet skal være det første øyet finner – butikken
-   står ved pakkebordet og skal se «2» uten å lete. */
+/* Plukkelinja: antall, tekst. Antallet skal være det første øyet finner – butikken står ved
+   pakkebordet og skal se «2» uten å lete. Produktbilde ble prøvd og tatt bort: de plukker på
+   navn, farge og strekkode, og bildet stjal plassen. */
 .linje {
-  display: grid; grid-template-columns: 48px auto 1fr; gap: 12px; align-items: center;
+  display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center;
   padding: 10px 12px; background: #FBF8F3; border-radius: 10px;
 }
-.linje__bilde {
-  width: 48px; height: 48px; border-radius: 8px; object-fit: cover;
-  background: var(--cream-2); border: 1px solid var(--border);
-}
-.linje__bilde--tom { display: block; }
 .linje__qty {
   font-size: 26px; font-weight: 700; line-height: 1; min-width: 44px; text-align: center;
   background: var(--cream-2); border-radius: 8px; padding: 8px 6px;

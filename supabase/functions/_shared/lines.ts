@@ -9,6 +9,10 @@
  * Feltene denormaliseres bevisst i stedet for å leses fra `products` ved visning: da viser
  * kortet det kunden faktisk kjøpte, selv om produktet senere endres eller avpubliseres.
  *
+ * Produktbilde ble prøvd, men butikken plukker på navn, farge og strekkode – bildet ble bare
+ * støy på kortet (01.10.2026). Med det forsvant også avhengigheten til Shopifys `image` og
+ * `featuredImage`, som er merket deprecated.
+ *
  * Garnpakker har ingen strekkode og ingen variantbilde – variantene er størrelser (XS, S, M).
  * Innholdet står i Shopify-metafeltet `garnly.garn_innhold`, én garnsort per linje. Det er
  * ikke en Shopify-bundle, så `productVariantComponents` er tomt; metafeltet er eneste kilde.
@@ -27,11 +31,9 @@ export interface ShopifyLinjeNode {
       title?: string | null;
       sku?: string | null;
       barcode?: string | null;
-      image?: { url?: string | null } | null;
       product?: {
         productType?: string | null;
         tags?: string[] | null;
-        featuredImage?: { url?: string | null } | null;
         metafield?: { value?: string | null } | null;
       } | null;
     } | null;
@@ -64,11 +66,6 @@ export function kitLinjer(metafelt: string | null | undefined, maks = 12): strin
     .slice(0, maks);
 }
 
-/** Variantbildet hvis det finnes, ellers produktbildet. */
-export function bildeUrl(v: ShopifyLinjeNode["lineItem"]["variant"]): string | null {
-  return v?.image?.url ?? v?.product?.featuredImage?.url ?? null;
-}
-
 /** Bygger én varelinje. Beløpene regnes ut av den som kaller, siden de avhenger av andelen. */
 export function byggLinje(
   node: ShopifyLinjeNode,
@@ -88,7 +85,6 @@ export function byggLinje(
     variant_title: variantTittel(v?.title),
     sku: v?.sku?.trim() || null,
     barcode: v?.barcode?.trim() || null,
-    image_url: bildeUrl(v),
     ...(innhold.length ? { kit_contents: innhold } : {}),
     amount_inc_vat: amountIncVat,
     vat_amount: vatAmount,

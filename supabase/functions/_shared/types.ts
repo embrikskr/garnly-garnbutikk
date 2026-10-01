@@ -68,8 +68,6 @@ export interface LineItem {
   sku?: string | null;
   /** Strekkoden butikken skanner i kassa. */
   barcode?: string | null;
-  /** Variantbildet, ellers produktbildet. */
-  image_url?: string | null;
   /** Bare garnpakker: hvilke garn og farger pakken består av (metafelt garnly.garn_innhold). */
   kit_contents?: string[];
   /** Linjesum inkl. mva etter rabatt, i butikkens valuta. Grunnlag for oppgjør. */

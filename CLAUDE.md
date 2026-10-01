@@ -44,7 +44,7 @@ supabase/functions/
   _shared/transfer_sync.ts     overfører Cargonizer-sendingen til transportøren (webhook + backstop)
   _shared/ship.ts              «Slått ut og klar til sending»: uttrekk → sending → fulfillment → etikett
   _shared/shipping/consignment.ts  REN logikk: consignment-XML, vekt, sporingsnummer, mobilnummer
-  _shared/lines.ts        REN logikk: varelinja butikken plukker fra (variant, EAN, SKU, bilde, garnpakkeinnhold)
+  _shared/lines.ts        REN logikk: varelinja butikken plukker fra (variant, EAN, SKU, garnpakkeinnhold)
   _shared/offers.ts       makeNextOffer, escalateGroup, refreshOrderStatus
   _shared/shipping/       cargonizer.ts (finn sending + hent etikett-PDF), bookShipment, shipmondo.ts
   sync-store/             cron: kassesystem → inventory → Shopify (+ metafelt garnly.stock_by_store)
@@ -78,7 +78,7 @@ shopify-app/              Shopify Function: kassevalidering «ett parti fra én 
 - **Panelet skal aldri gjøre forretningslogikk.** Godta/avslå går via `offer-respond`, sending via `ship-order`. Serveren eier lagersjekk, Shopify-flytting, fraktbestilling og fulfillment. Panelet leser, viser og trykker.
 - **Butikkens innstillinger lagres via `store-settings`**, aldri rett på tabellen: panelet har ikke skriverett på `stores`, og endringer som auto-godkjenning skal i revisjonsloggen.
 - **Fraktoppsett ligger i `stores`**, ikke i koden: `shipping_sender_id`, `shipping_transport_agreement`, `shipping_product`, `label_printer_id`. Avtale-id-ene er ulike per butikk, og et transportørbytte skal ikke kreve ny utrulling.
-- **Varelinjene skal kunne plukkes uten oppslag.** `line_items` lagrer variant, SKU, strekkode, bilde og garnpakkeinnhold ved ordremottak (`_shared/lines.ts`). Nye felt der krever en kjøring av `backfill-lines` for ordrer som alt ligger i panelet.
+- **Varelinjene skal kunne plukkes uten oppslag.** `line_items` lagrer variant, SKU, strekkode og garnpakkeinnhold ved ordremottak (`_shared/lines.ts`). Produktbilde ble prøvd og tatt bort igjen: butikken plukker på navn, farge og strekkode. Nye felt der krever en kjøring av `backfill-lines` for ordrer som alt ligger i panelet.
 - **Ikke legg kundedata i panel-viewene** utover det butikken trenger for å pakke og sende. `routing_orders.raw_order` skal aldri eksponeres.
 - **Ikke gjett på kassesystem-API-er.** Begge adaptere er verifisert mot ekte data (sept. 2026); feltnavn står i filhodene. Ved avvik: logg en rå eksempelrad og juster.
 - **Sortimentet styres i Shopify.** Aldri opprett produkter i Shopify fra butikkdata. Nye produkter legges inn av Embrik/Halvor; `sync-products` plukker dem opp.

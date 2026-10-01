@@ -436,9 +436,11 @@ function tidspunkt(iso) {
  * Varelinjene butikken skal plukke.
  *
  * Kortet viste før bare produktnavnet – «Merinoull» – og butikken måtte gjette hvilket nøste
- * av tretti de skulle hente. Nå står varianten, strekkoden de skanner i kassa, SKU og et
- * lite bilde. Garnpakker har verken strekkode eller variantbilde (variantene er størrelser),
- * så der vises innholdet i pakken i stedet.
+ * av tretti de skulle hente. Nå står varianten og strekkoden de skanner i kassa. Garnpakker
+ * har ingen strekkode (variantene er størrelser), så der vises innholdet i pakken i stedet.
+ *
+ * Produktbilde ble prøvd og tatt bort igjen: butikken plukker på navn, farge og strekkode,
+ * og bildet ble bare støy.
  *
  * Feltene kan mangle på ordrer rutet før 30.09.2026. Alt er derfor betinget.
  */
@@ -452,9 +454,6 @@ function lineItems(items) {
       ? `<ul class="linje__pakke">${i.kit_contents.map((k) => `<li>${esc(k)}</li>`).join("")}</ul>`
       : "";
     return `<li class="linje">
-      ${i.image_url
-        ? `<img class="linje__bilde" src="${esc(i.image_url)}" alt="" loading="lazy" decoding="async">`
-        : '<span class="linje__bilde linje__bilde--tom" aria-hidden="true"></span>'}
       <span class="linje__qty">${Number(i.qty)}</span>
       <div class="linje__tekst">
         <span class="linje__navn">${esc(i.title ?? "")}${i.variant_title ? ` – ${esc(i.variant_title)}` : ""}</span>
