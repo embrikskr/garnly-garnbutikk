@@ -44,6 +44,14 @@ Deno.serve(async (req) => {
     .eq("status", "offered")
     .lt("deadline_at", na);
 
+  // Sendinger som stoppet etter at butikken trykket. Butikken ser «Kontakt Garnly» – da må
+  // Garnly faktisk få vite det, også om ingen ringer.
+  const { data: feiletRaw } = await db
+    .from("routing_groups")
+    .select("id, ship_error, assigned_at, stores:assigned_store_id(name), routing_orders!inner(shopify_order_name, is_test)")
+    .eq("status", "assigned")
+    .not("ship_error", "is", null);
+
   type Rad = Record<string, any>;
   const ett = <T>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? v[0] : v) ?? null;
 
@@ -54,7 +62,11 @@ Deno.serve(async (req) => {
     return g?.status === "routing" && !ett<Rad>(g?.routing_orders)?.is_test;
   });
 
-  if (!esk.length && !utl.length) return json({ sendt: false, eskalert: 0, utlopt: 0 });
+  const feilet = ((feiletRaw ?? []) as Rad[]).filter((g) => !ett<Rad>(g.routing_orders)?.is_test);
+
+  if (!esk.length && !utl.length && !feilet.length) {
+    return json({ sendt: false, eskalert: 0, utlopt: 0, sending_feilet: 0 });
+  }
 
   const timer = (fra: string) => Math.round((Date.now() - new Date(fra).getTime()) / 36e5);
   const linjer: string[] = [];
@@ -74,8 +86,16 @@ Deno.serve(async (req) => {
     }
     linjer.push("");
   }
-  linjer.push("Åpne butikkpanelet og gå til fanen «Garnly» for å gi ordren til en butikk eller rute den på nytt.");
+  if (feilet.length) {
+    linjer.push(`${feilet.length} sending(er) som stoppet hos butikken:`);
+    for (const g of feilet) {
+      linjer.push(`  • ${ett<Rad>(g.routing_orders)?.shopify_order_name ?? g.id} hos ${ett<Rad>(g.stores)?.name ?? "ukjent"}: ${g.ship_error}`);
+    }
+    linjer.push("");
+  }
+  linjer.push("Åpne butikkpanelet og gå til fanen «Garnly».");
 
-  await notifyOps(`${esk.length + utl.length} ordre(r) venter på Garnly`, linjer.join("\n"));
-  return json({ sendt: true, eskalert: esk.length, utlopt: utl.length });
+  const totalt = esk.length + utl.length + feilet.length;
+  await notifyOps(`${totalt} ordre(r) venter på Garnly`, linjer.join("\n"));
+  return json({ sendt: true, eskalert: esk.length, utlopt: utl.length, sending_feilet: feilet.length });
 });

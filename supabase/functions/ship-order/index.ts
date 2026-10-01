@@ -1,7 +1,7 @@
 /**
  * ship-order: «Slått ut og klar til sending» i butikkpanelet.
  *
- *   POST { group_id, kun_uttrekk? } + Authorization: Bearer <bruker-JWT>
+ *   POST { group_id } + Authorization: Bearer <bruker-JWT>
  *
  * Hele forretningslogikken ligger i _shared/ship.ts. Her er bare tilgang og transport.
  *
@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
 
   if (group.status === "cancelled") return json({ ok: false, melding: "Ordren er kansellert." }, 409, CORS);
 
-  const utfall = await sendOrdre(body.group_id, jwt, body.kun_uttrekk === true);
+  const utfall = await sendOrdre(body.group_id, jwt);
   // 200 også når et steg feilet: svaret sier hva som er gjort og hva som gjenstår, og
   // panelet viser det. En naken 500 ville skjult at kassauttrekket faktisk gikk gjennom.
   return json(utfall, 200, CORS);

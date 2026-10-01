@@ -2,6 +2,44 @@
 
 Oppdatert: 2026-10-01
 
+## Reserveknappen er fjernet – en feilet sending går til Garnly (01.10.2026)
+
+Under «Slått ut og klar til sending» lå «Sendt på annen måte – registrer bare
+kassauttrekk». Den var bestilt som en vei ut når den automatiske sendingen ikke går. **Den
+gjorde ikke jobben sin:** den registrerte bare uttrekket. Ordren ble stående som `assigned`,
+så kortet lå igjen i pakkelista med de samme to knappene, og Shopify fikk aldri en
+fulfillment – kunden fikk aldri beskjed om at pakken var sendt.
+
+Nå har kortet bare den ene knappen. Feiler sendingen – kunden mangler mobilnummer, pakken er
+over 10 kg, eller det finnes ingen pakkeboks i nærheten – sier feilboksen **«Kontakt
+Garnly»**, og ordren havner i admin under **«Trenger handling»** med feilmeldingen. Garnly
+sender den manuelt og fulfiller i Shopify; webhooken setter gruppen til `fulfilled`, og den
+forsvinner fra både pakkelista og admin av seg selv.
+
+`v_admin_action_needed` har fått en tredje årsak, `sending_feilet`, med `feilsteg` og
+`feilmelding`. Tidspunktet hentes fra revisjonsloggen (`ship_failed`), siden det ikke står på
+gruppen. Admin-kortet for en feilet sending har bare «Åpne i Shopify» – den skal ikke gis bort
+eller rutes på nytt, den er alt butikkens. Den daglige e-posten tar dem med.
+
+Server-veien (`kun_uttrekk` i `ship-order`, `bareUttrekk` i `ship.ts`) er fjernet sammen med
+knappen.
+
+### Verifisert
+
+- **Mot ekte data:** #1005 ble midlertidig satt som feilet sending. Admin så den som
+  `sending_feilet` hos Garnkilden med feilmeldingen, nøkkeltallet «Trenger handling» gikk til
+  1, og **butikkbrukeren fikk 0 rader**. Daglig e-post: som testordre `sending_feilet: 0`, som
+  ekte ordre `sending_feilet: 1, sendt: true`. Gjenopprettet etterpå.
+- **I ekte Chromium:** kortet har bare `send` før sending, også når forrige forsøk feilet
+  («Prøv igjen»). Admin-kortet for feilet sending viser feilmeldingen og bare Shopify-lenken.
+  Testen ble kjørt med reserveknappen tilbake, og feilet da.
+
+### Merk
+
+Sendes en ordre manuelt **utenom Cargonizer**, vil overføringsbackstoppen (`transfer_sync`)
+ikke finne noen sending å overføre, og varsle drift etter tre forsøk. Sendes den via
+Cargonizer – som er det naturlige – finner den sendingen og merker den som overført.
+
 ## Etikettskriveren er Garnlys oppsett, ikke butikkens (01.10.2026)
 
 Valget lå i butikkpanelets innstillinger. Butikkene skal ikke forholde seg til DirectPrint i

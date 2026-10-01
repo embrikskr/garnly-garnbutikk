@@ -285,25 +285,18 @@ function renderAssigned(rows) {
 }
 
 /**
- * Knappene på kortet.
+ * Knappen på kortet.
  *
- * Før sending: én stor knapp som gjør alt – kassauttrekk, sending i Cargonizer, fulfillment
- * i Shopify og etiketten. Butikkene har ikke tilgang til Shopify-admin, så dette er eneste
- * vei ut for ordren. Under den ligger reserveknappen for ordrer som alt er sendt på annen
- * måte; den registrerer bare uttrekket.
+ * Før sending: én knapp som gjør alt – kassauttrekk, sending i Cargonizer, fulfillment i
+ * Shopify og etiketten. Butikkene har ikke tilgang til Shopify-admin, så dette er eneste vei
+ * ut for ordren. Feiler den, viser kortet feilen, og ordren havner hos Garnly.
  *
- * Etter sending: etiketten, så den kan skrives ut på nytt.
+ * Etter sending: ingen knapp. Etiketten ligger som ikon i korthodet.
  */
 function handlinger(r, sendt) {
-  // Sendte ordrer står bare her når kassauttrekket mangler (sendt utenfor panelet).
-  // Etiketten ligger som ikon i korthodet, ikke som knapp.
   if (sendt) return "";
-  const igjen = !!r.ship_error;
   return `<div class="card__actions card__actions--etikett">
-      <button class="btn btn--primary" data-act="send">${igjen ? "Prøv igjen" : "Slått ut og klar til sending"}</button>
-    </div>
-    <div class="card__actions card__actions--etikett">
-      <button class="btn btn--ghost btn--sm" data-act="kun-uttrekk">Sendt på annen måte – registrer bare kassauttrekk</button>
+      <button class="btn btn--primary" data-act="send">${r.ship_error ? "Prøv igjen" : "Slått ut og klar til sending"}</button>
     </div>`;
 }
 
@@ -586,10 +579,10 @@ el.assigned.addEventListener("click", async (e) => {
     if (kort?.dataset.group) await hentEtikett(etikettBtn, kort.dataset.group);
     return;
   }
-  const sendBtn = e.target.closest('button[data-act="send"], button[data-act="kun-uttrekk"]');
+  const sendBtn = e.target.closest('button[data-act="send"]');
   if (sendBtn) {
     const kort = sendBtn.closest("[data-group]");
-    if (kort?.dataset.group) await sendOrdre(sendBtn, kort.dataset.group, sendBtn.dataset.act === "kun-uttrekk");
+    if (kort?.dataset.group) await sendOrdre(sendBtn, kort.dataset.group);
     return;
   }
   const btn = e.target.closest('button[data-act="deducted"]');
@@ -625,21 +618,20 @@ el.assigned.addEventListener("click", async (e) => {
  * leser vi `ok` og ikke HTTP-statusen: butikken skal se at uttrekket er registrert selv om
  * fraktsendingen stoppet.
  */
-async function sendOrdre(btn, groupId, kunUttrekk = false) {
+async function sendOrdre(btn, groupId) {
   if (busy.has(groupId)) return;
-  if (kunUttrekk && !confirm("Registrer bare kassauttrekket? Ordren blir ikke sendt herfra, og kunden får ingen sporing.")) return;
   busy.add(groupId);
   const kort = btn.closest("[data-group]");
   kort?.querySelectorAll("button").forEach((b) => (b.disabled = true));
   const original = btn.textContent;
-  btn.textContent = kunUttrekk ? "Registrerer …" : "Sender …";
+  btn.textContent = "Sender …";
   try {
     const { data: { session } } = await sb.auth.getSession();
     if (!session) { showLogin(); return; }
     const res = await fetch(`${CFG.SUPABASE_URL}/functions/v1/ship-order`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ group_id: groupId, kun_uttrekk: kunUttrekk }),
+      body: JSON.stringify({ group_id: groupId }),
       // Sendingen går innom Cargonizer og Shopify. 60 sekunder er rundhåndet, men et
       // tidsavbrudd midt i ville sett ut som om ingenting skjedde – og noe har skjedd.
       signal: typeof AbortSignal?.timeout === "function" ? AbortSignal.timeout(60000) : undefined,
@@ -649,16 +641,12 @@ async function sendOrdre(btn, groupId, kunUttrekk = false) {
       toast(svar.melding || "Noe stoppet. Prøv igjen.", "error");
       return;
     }
-    if (kunUttrekk) {
-      toast("Kassauttrekket er registrert.");
-    } else {
-      // Etiketten lastes IKKE ned av seg selv. Har Garnly satt opp en DirectPrint-skriver for
-      // butikken, er den alt på vei dit. Er den ikke satt, henter butikken PDF-en med ikonet
-      // på kortet når de vil – en PDF som åpner seg i en ny fane midt i pakkingen er i veien.
-      toast(svar.etikett === "skriver"
-        ? "Sendt. Etiketten skrives ut."
-        : "Sendt. Du finner den under Tidligere ordrer.");
-    }
+    // Etiketten lastes IKKE ned av seg selv. Har Garnly satt opp en DirectPrint-skriver for
+    // butikken, er den alt på vei dit. Er den ikke satt, henter butikken PDF-en med ikonet
+    // på kortet når de vil – en PDF som åpner seg i en ny fane midt i pakkingen er i veien.
+    toast(svar.etikett === "skriver"
+      ? "Sendt. Etiketten skrives ut."
+      : "Sendt. Du finner den under Tidligere ordrer.");
   } catch (err) {
     console.error("[ship-order]", err);
     const grunn = err?.name === "TimeoutError" ? "Svaret tok for lang tid. Sjekk kortet før du prøver igjen." : String(err?.message ?? err);
@@ -1043,20 +1031,31 @@ function tegnHandling() {
     const svar = (r.svar ?? []).map((s) =>
       `<li>${esc(s.butikk)}: ${esc(AVSLAGSTEKST[s.status] ?? s.status)}${s.begrunnelse ? ` – ${esc(s.begrunnelse)}` : ""}</li>`).join("");
     const ventet = ventetid(r.ventet_siden);
+    const feilet = r.arsak === "sending_feilet";
+    const hva = r.arsak === "eskalert" ? "Ingen butikk kunne ta den"
+      : feilet ? `Sendingen stoppet hos ${esc(r.store_name ?? "")}`
+      : `Frist gikk ut hos ${esc(r.store_name ?? "")}`;
+    const shopify = `<a class="btn btn--ghost btn--sm" data-act="shopify" target="_blank" rel="noopener"
+           href="${esc(shopifyOrdreLenke(r.shopify_order_id))}">Åpne i Shopify</a>`;
+    // En feilet sending er alt butikkens: den skal ikke gis bort eller rutes på nytt, men sendes
+    // manuelt og fulfilles i Shopify. Da lukker webhooken den av seg selv.
+    const knapper = feilet
+      ? `<div class="card__actions card__actions--etikett">${shopify}</div>`
+      : `<div class="card__actions card__actions--tre">
+        <button class="btn btn--primary btn--sm" data-act="gi">Gi til butikk</button>
+        <button class="btn btn--secondary btn--sm" data-act="ruting">Prøv ruting på nytt</button>
+        ${shopify}
+      </div>`;
     return `<article class="card card--late" data-group="${esc(r.group_id)}" data-ordre="${esc(r.order_name ?? "")}" data-shopify="${esc(r.shopify_order_id ?? "")}">
       <div class="card__head">
         <span class="card__order">${esc(r.order_name ?? "Ordre")}${r.is_test ? ' <span class="merke">TEST</span>' : ""}</span>
-        <span class="card__meta">${r.arsak === "eskalert" ? "Ingen butikk kunne ta den" : `Frist gikk ut hos ${esc(r.store_name ?? "")}`} · ventet ${ventet}</span>
+        <span class="card__meta">${hva} · ventet ${ventet}</span>
       </div>
       <ul class="lines">${lineItems(r.line_items)}</ul>
       <p class="addr">${esc(r.kunde ?? "")}${r.kunde_postnr ? ` – ${esc(r.kunde_postnr)} ${esc(r.kunde_sted ?? "")}` : ""}</p>
+      ${feilet && r.feilmelding ? `<p class="feil" role="alert">${esc(r.feilmelding)}</p>` : ""}
       ${svar ? `<ul class="avslag">${svar}</ul>` : ""}
-      <div class="card__actions card__actions--tre">
-        <button class="btn btn--primary btn--sm" data-act="gi">Gi til butikk</button>
-        <button class="btn btn--secondary btn--sm" data-act="ruting">Prøv ruting på nytt</button>
-        <a class="btn btn--ghost btn--sm" data-act="shopify" target="_blank" rel="noopener"
-           href="${esc(shopifyOrdreLenke(r.shopify_order_id))}">Åpne i Shopify</a>
-      </div>
+      ${knapper}
     </article>`;
   }).join("");
 }

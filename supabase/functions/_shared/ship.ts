@@ -90,8 +90,16 @@ function ett<T>(v: T | T[] | null | undefined): T | null {
   return (Array.isArray(v) ? v[0] : v) ?? null;
 }
 
-/** Hele flyten. `bareUttrekk` er reserveknappen for ordrer som alt er sendt på annen måte. */
-export async function sendOrdre(groupId: string, jwt: string, bareUttrekk = false): Promise<SendUtfall> {
+/**
+ * Hele flyten.
+ *
+ * Det fantes en reserveknapp her («sendt på annen måte – registrer bare kassauttrekk»). Den
+ * er fjernet: den registrerte uttrekket, men ordren ble stående som `assigned`, kortet ble
+ * liggende i pakkelista, og Shopify fikk aldri vite at pakken var sendt. Feiler sendingen nå,
+ * ser butikken feilen og «Kontakt Garnly», og ordren dukker opp i admin under «Trenger
+ * handling». Fulfilles den manuelt i Shopify, lukker webhooken den av seg selv.
+ */
+export async function sendOrdre(groupId: string, jwt: string): Promise<SendUtfall> {
   const db = adminClient();
   const k = await hentKontekst(groupId);
   if (!k) return { ok: false, steg: "uttrekk", melding: "Fant ikke ordren", utfort: tomt() };
@@ -108,12 +116,6 @@ export async function sendOrdre(groupId: string, jwt: string, bareUttrekk = fals
     if (error) return await feil(k, "uttrekk", error.message, utfort);
   }
   utfort.uttrekk = true;
-
-  if (bareUttrekk) {
-    await db.from("routing_groups").update({ ship_error: null, ship_step: null }).eq("id", groupId);
-    await audit("routing_group", groupId, "pos_deducted_only", { order: k.ordre.shopify_order_name });
-    return { ok: true, utfort, melding: "Kassauttrekket er registrert. Ordren er ikke sendt herfra." };
-  }
 
   // ---- 2 og 3. sending i Cargonizer, og lagring ----------------------------
   let sending: CargonizerConsignment;
@@ -241,7 +243,7 @@ async function sikreSending(k: Kontekst): Promise<{ sending: CargonizerConsignme
   if (!mobil) {
     // Produktet krever mobilnummer (consignee_mobile_required). Uten det svarer Cargonizer
     // med en feil butikken ikke kan gjøre noe med, så vi sier det tydelig i stedet.
-    throw new Error("Ordren mangler mobilnummer. PostNord pakkeboks krever det. Ta kontakt med kunden, eller send pakken manuelt.");
+    throw new Error("Ordren mangler mobilnummer, og PostNord pakkeboks krever det. Kontakt Garnly.");
   }
 
   const ta = k.butikk.shipping_transport_agreement;
@@ -257,11 +259,11 @@ async function sikreSending(k: Kontekst): Promise<{ sending: CargonizerConsignme
     city: kunde.city,
   });
   const pakkeboks = partnere[0] ?? null;
-  if (!pakkeboks) throw new Error(`Fant ingen pakkeboks nær ${postnr}. Send pakken manuelt, og bruk reserveknappen.`);
+  if (!pakkeboks) throw new Error(`Fant ingen pakkeboks nær ${postnr}. Kontakt Garnly.`);
 
   const vekt = await beregnVekt(k);
   if (vekt > MAKS_VEKT_KG) {
-    throw new Error(`Pakken veier ${vekt} kg. PostNord pakkeboks tar maks ${MAKS_VEKT_KG} kg. Send den manuelt.`);
+    throw new Error(`Pakken veier ${vekt} kg, og PostNord pakkeboks tar maks ${MAKS_VEKT_KG} kg. Kontakt Garnly.`);
   }
 
   const xml = byggConsignmentXml({
