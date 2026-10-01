@@ -31,6 +31,7 @@ const el = {
   detalj: $("ordre-detalj"), detaljInnhold: $("detalj-innhold"), detaljLukk: $("detalj-lukk"),
   innstillinger: $("innstillinger"), innstillingerDialog: $("innstillinger-dialog"),
   innstillingerLukk: $("innstillinger-lukk"), skriverValg: $("skriver-valg"), skriverLagre: $("skriver-lagre"),
+  skriverHjelp: $("skriver-hjelp"), autoGodkjenn: $("auto-godkjenn"),
 };
 
 /** Historikk: standardvindu, og hvor mye «Vis flere» utvider med. */
@@ -53,6 +54,7 @@ let historikkDager = HISTORIKK_DAGER;
 let historikkGrense = HISTORIKK_SIDE;
 let historikkRader = [];
 let sokTimer = null;
+let autoGodkjenning = false;
 
 // ---------------------------------------------------------------- oppstart
 
@@ -639,58 +641,90 @@ async function sendOrdre(btn, groupId, kunUttrekk = false) {
 // ---------------------------------------------------------------- innstillinger
 
 /**
- * Etikettskriver.
+ * Butikkens egne innstillinger: etikettskriver og automatisk godkjenning.
  *
- * Lista over DirectPrint-skrivere hentes fra serveren – Cargonizer-nøkkelen skal ikke innom
- * nettleseren. Serveren sjekker også at id-en vi lagrer finnes i lista.
+ * Alt går via serveren. Skriverlista hentes der fordi Cargonizer-nøkkelen ikke skal innom
+ * nettleseren, og lagringen fordi panelet ikke har – og ikke skal ha – skriverett på
+ * `stores`. Serveren sjekker også at skriver-id-en finnes i lista den nettopp hentet.
  */
+let autoVarFor = false;
+
 el.innstillinger.addEventListener("click", async () => {
   el.skriverValg.disabled = true;
+  el.autoGodkjenn.disabled = true;
   el.innstillingerDialog.showModal();
-  const svar = await kallPrintere({ action: "list" });
+  const svar = await kallInnstillinger({ action: "les" });
   if (!svar) return;
-  tegnSkrivere(svar);
+  tegnInnstillinger(svar);
 });
 
 el.innstillingerLukk.addEventListener("click", () => el.innstillingerDialog.close());
 
 el.skriverLagre.addEventListener("click", async () => {
+  const auto = el.autoGodkjenn.checked;
+  // Å skru PÅ automatisk godkjenning betyr at ordrer blir butikkens uten at noen ser på dem,
+  // og de kan ikke avslå etterpå. Det skal ikke skje med et uhell på et nettbrett.
+  if (auto && !autoVarFor &&
+      !confirm("Skru på automatisk godkjenning?\n\nOrdrer dere får tilbud om blir deres med en gang, og dere kan ikke avslå dem etterpå.")) {
+    return;
+  }
   el.skriverLagre.disabled = true;
-  const svar = await kallPrintere({ action: "save", printer_id: el.skriverValg.value });
+  const svar = await kallInnstillinger({ action: "lagre", printer_id: el.skriverValg.value, auto_accept: auto });
   el.skriverLagre.disabled = false;
   if (!svar) return;
-  tegnSkrivere(svar);
-  toast(svar.valgt ? `Etiketten sendes til ${svar.valgt_navn}.` : "Etiketten åpnes som PDF.");
+  tegnInnstillinger(svar);
+  toast([
+    svar.valgt ? `Etiketten sendes til ${svar.valgt_navn}.` : "Etiketten hentes som PDF.",
+    svar.auto_accept ? "Nye ordrer godtas automatisk." : "Nye ordrer må godtas manuelt.",
+  ].join(" "));
   el.innstillingerDialog.close();
 });
 
-function tegnSkrivere(svar) {
+function tegnInnstillinger(svar) {
   const valgt = svar.valgt ?? "";
   el.skriverValg.innerHTML = ['<option value="">Ingen – skriv ut PDF selv</option>']
     .concat((svar.printere ?? []).map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`))
     .join("");
   el.skriverValg.value = valgt;
-  el.skriverValg.disabled = false;
+  // Får vi ikke tak i skriverlista, skal resten av innstillingene likevel kunne endres.
+  el.skriverValg.disabled = !!svar.skriverfeil;
+  if (svar.skriverfeil) el.skriverHjelp.textContent = `Fikk ikke hentet skriverlista: ${svar.skriverfeil}`;
+
+  autoVarFor = svar.auto_accept === true;
+  el.autoGodkjenn.checked = autoVarFor;
+  el.autoGodkjenn.disabled = false;
+  autoGodkjenning = autoVarFor;
+  tegnKoStatus();
 }
 
-async function kallPrintere(body) {
+async function kallInnstillinger(body) {
   try {
     const { data: { session } } = await sb.auth.getSession();
     if (!session) { showLogin(); return null; }
-    const res = await fetch(`${CFG.SUPABASE_URL}/functions/v1/label-printers`, {
+    const res = await fetch(`${CFG.SUPABASE_URL}/functions/v1/store-settings`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
       body: JSON.stringify({ ...body, store_id: storeId }),
       signal: typeof AbortSignal?.timeout === "function" ? AbortSignal.timeout(30000) : undefined,
     });
     const svar = await res.json().catch(() => ({}));
-    if (!svar.ok) { toast(svar.melding || "Fikk ikke hentet skriverne.", "error"); return null; }
+    if (!svar.ok) { toast(svar.melding || "Fikk ikke hentet innstillingene.", "error"); return null; }
     return svar;
   } catch (err) {
-    console.error("[label-printers]", err);
-    toast(`Fikk ikke hentet skriverne: ${String(err?.message ?? err)}`, "error");
+    console.error("[store-settings]", err);
+    toast(`Fikk ikke hentet innstillingene: ${String(err?.message ?? err)}`, "error");
     return null;
   }
+}
+
+/**
+ * Står automatisk godkjenning på, kommer ordrene rett i pakkelista og «Nye ordrer» er tom
+ * hele dagen. Uten en forklaring der ser det ut som om panelet ikke virker.
+ */
+function tegnKoStatus() {
+  el.queueEmpty.innerHTML = autoGodkjenning
+    ? 'Ingen nye ordrer akkurat nå.<br><span>Automatisk godkjenning er på, så ordrer går rett til «Til pakking».</span>'
+    : 'Ingen nye ordrer akkurat nå.<br><span>Panelet varsler av seg selv når det kommer en.</span>';
 }
 
 // ---------------------------------------------------------------- faner og historikk

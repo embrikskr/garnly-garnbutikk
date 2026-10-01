@@ -283,6 +283,18 @@ button { font: inherit; }
 }
 .hjelp { margin: 0; font-size: 15px; color: var(--ink-soft); }
 
+/* Av/på-valg i innstillingene. Hele raden er trykkflate – det skal gå med tommelen på et
+   nettbrett, ikke bare på selve avkrysningsboksen. */
+.bryter {
+  display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start;
+  padding: 14px; border: 1px solid var(--border); border-radius: 14px; cursor: pointer;
+}
+.bryter:hover { border-color: var(--wine); }
+.bryter input { width: 26px; height: 26px; margin: 2px 0 0; accent-color: var(--wine); }
+.bryter > span { display: grid; gap: 4px; }
+.bryter .hjelp { font-size: 14px; }
+.bryter:focus-within { outline: 3px solid var(--wine); outline-offset: 2px; }
+
 .tider { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; font-size: 15px; }
 .tider dt { color: var(--ink-soft); }
 .tider dd { margin: 0; }

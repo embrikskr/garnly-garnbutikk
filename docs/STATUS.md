@@ -1,6 +1,46 @@
 # Status – garnly-garnbutikk
 
-Oppdatert: 2026-09-30
+Oppdatert: 2026-10-01
+
+## Automatisk godkjenning kan skrus på av butikken (01.10.2026)
+
+Motoren har vært der hele tiden: `stores.auto_accept` kom i 001, og `makeNextOffer` kaller
+`offer-respond` internt med tokenet i det tilbudet går ut. Det som manglet var en bryter –
+feltet kunne bare settes med SQL.
+
+Bryteren ligger nå i panelets innstillinger, sammen med etikettskriveren. Begge lagres via
+**`store-settings`** (som erstatter `label-printers`; det navnet ble feil da den også skulle
+lagre auto-godkjenning). Panelet har ikke skriverett på `stores`, og hver endring skrives til
+`audit_log` med hvem som gjorde den – fra det øyeblikket blir ordrer butikkens uten at et
+menneske har sett på dem.
+
+### Det butikken får vite
+
+Teksten i dialogen sier rett ut at **de ikke kan avslå etterpå**: går de tom mellom synk og
+pakking, må de ta kontakt med Garnly. Å skru den på krever en bekreftelse – det skal ikke
+skje med en tommel på et nettbrett.
+
+Står den på, forklarer «Nye ordrer»-feltet hvorfor det er tomt («ordrer går rett til Til
+pakking»). Uten det ser panelet ut som om det ikke virker.
+
+### Risikoen som følger med
+
+Sanntidssjekken mot kassa har en frist (`LIVE_CHECK_MS`). Ryker den, godtas ordren på forrige
+synk, som er maks 15 minutter gammel – det skjedde på #1005 (`live_check_timeout` mot Duell).
+Det er samme risiko som når et menneske trykker Godta, men uten et menneske som kan se at
+hylla er tom. Begge butikkene står på `false` i dag.
+
+### Verifisert
+
+- **Mot ekte API, innlogget som Garnkilden:** lesing gir butikkens faktiske innstillinger,
+  lagring går gjennom, og revisjonsraden står med `av: garnkilden@garnly.no`.
+- **Tilgang:** 401 uten token, og **403 når Garnkilden spør om Strikkefryds butikk-id**.
+- **Robusthet:** feiler skriveroppslaget mot Cargonizer, svarer endepunktet likevel `ok` med
+  tom liste, så en nede-situasjon hos Logistra ikke sperrer en innstilling som ikke har med
+  frakt å gjøre.
+- **I ekte Chromium, begge butikktyper:** dialogen leser tilstanden fra serveren, bekreftelsen
+  kommer når bryteren skrus på, lagringen sender både skriver og auto-godkjenning, og
+  kø-teksten endrer seg. Testen ble kjørt uten bekreftelsen først, og feilet da.
 
 ## Panelet etter test av #1005 (30.09.2026)
 

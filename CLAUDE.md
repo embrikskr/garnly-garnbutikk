@@ -7,7 +7,7 @@ Dette repoet er backend for Garnlys felles nettbutikk for lokale garnbutikker. L
 1. **Lagersynk**: leser lager fra partnerbutikkenes kassesystemer (Duell, Mystore, CSV) hvert 15. minutt på dagtid og hver time mellom 22 og 08 (lokal tid, `_shared/schedule.ts`), matcher mot Garnlys produkter på EAN → alias (`product_aliases`) → SKU → navn, og skriver antall til butikkens *location* i Garnlys Shopify (`fhxr10-gu.myshopify.com`).
 2. **Ordreruting**: når en kunde betaler i Shopify, settes ordren på hold, og den tilbys én butikk om gangen (round-robin på `last_assigned_at`). Butikken svarer i **butikkpanelet** (`panel/`, garnly-butikkpanel.vercel.app) innen en frist (i åpningstid). Ved aksept flyttes fulfillment order til butikkens location.
 3. **Sending**: butikken trykker **«Slått ut og klar til sending»** i panelet, og `ship-order` gjør alt (`_shared/ship.ts`): kassauttrekk → sending i Cargonizer (pakkeboks, vekt, SMS-varsling, `transfer=true`) → lagring av sporing → `fulfillmentCreate` i Shopify med sporing → etikett til DirectPrint-skriver, ellers ingenting (etiketten hentes som PDF fra ikonet når butikken vil). Kortet forsvinner fra pakkelista med én gang, og ordren ligger under «Tidligere ordrer». Hvert steg tåler å kjøres på nytt. **Butikkene har ikke Shopify-tilgang**, og CargonizerConnect overførte aldri sendingen til PostNord – derfor gjør Garnly begge deler selv. Testordrer får `transfer=false`. `transfer_sync.ts` er backstop for sendinger som ikke ble overført.
-4. **Butikkpanel**: en side butikken har oppe på nettbrettet. Sanntid via Supabase Realtime på `offers`, innlogging med Supabase Auth, tilgang styrt av `store_users` + RLS. E-post per tilbud er AV som standard (`stores.notify_offers`); det skalerer ikke når en butikk får titalls ordrer om dagen.
+4. **Butikkpanel**: en side butikken har oppe på nettbrettet. Sanntid via Supabase Realtime på `offers`, innlogging med Supabase Auth, tilgang styrt av `store_users` + RLS. E-post per tilbud er AV som standard (`stores.notify_offers`); det skalerer ikke når en butikk får titalls ordrer om dagen. Butikken styrer selv etikettskriver og **automatisk godkjenning** (`stores.auto_accept`) via `store-settings`; endringene havner i `audit_log`.
 5. **Regler som aldri brytes**: hele antallet av én varelinje kommer fra samme butikk (garnparti). Hele ordren fra én butikk foretrekkes; kan splittes per varelinje hvis ingen har alt. Aktivt avslag straffes ikke; timeout gir 24 t nedvekting (maks 3).
 
 ## Stack
@@ -59,7 +59,7 @@ supabase/functions/
   reconcile-inventory/    nattlig cron: leser on_hand fra Shopify og retter avvik
   shipping-label/         fraktetikett som PDF til panelet (Cargonizer, bruker-JWT)
   ship-order/             panelknappen «Slått ut og klar til sending» (bruker-JWT)
-  label-printers/         butikkens valg av DirectPrint-skriver (bruker-JWT)
+  store-settings/         butikkens egne innstillinger: etikettskriver, auto-godkjenning (bruker-JWT)
   backfill-lines/         vedlikehold: etterfyller varelinjer med felt som kom til senere
 scripts/                  set-barcodes.ts, import-products.ts, backfill-store-inventory.ts, enable-tracking.ts
 dashboard/                Next.js admin-dashboard (Vercel): oversikt, ordrer, umatchet, lager, synk
@@ -76,6 +76,7 @@ shopify-app/              Shopify Function: kassevalidering «ett parti fra én 
 - **Destruktive operasjoner mot Shopify** (arkivere produkter, slette locations, nullstille lager for alle) krever eksplisitt bekreftelse fra Embrik i samme melding.
 - **Språk**: kode og identifikatorer på engelsk, kommentarer, meldinger til butikker og dokumentasjon på norsk.
 - **Panelet skal aldri gjøre forretningslogikk.** Godta/avslå går via `offer-respond`, sending via `ship-order`. Serveren eier lagersjekk, Shopify-flytting, fraktbestilling og fulfillment. Panelet leser, viser og trykker.
+- **Butikkens innstillinger lagres via `store-settings`**, aldri rett på tabellen: panelet har ikke skriverett på `stores`, og endringer som auto-godkjenning skal i revisjonsloggen.
 - **Fraktoppsett ligger i `stores`**, ikke i koden: `shipping_sender_id`, `shipping_transport_agreement`, `shipping_product`, `label_printer_id`. Avtale-id-ene er ulike per butikk, og et transportørbytte skal ikke kreve ny utrulling.
 - **Varelinjene skal kunne plukkes uten oppslag.** `line_items` lagrer variant, SKU, strekkode, bilde og garnpakkeinnhold ved ordremottak (`_shared/lines.ts`). Nye felt der krever en kjøring av `backfill-lines` for ordrer som alt ligger i panelet.
 - **Ikke legg kundedata i panel-viewene** utover det butikken trenger for å pakke og sende. `routing_orders.raw_order` skal aldri eksponeres.
