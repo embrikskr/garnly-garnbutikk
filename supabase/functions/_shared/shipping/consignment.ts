@@ -25,6 +25,17 @@ export const FALLBACK_VARE_GRAM = 100;
 /** Grensen for Parcel Locker, fra transportavtalen. */
 export const MAKS_VEKT_KG = 10;
 
+/**
+ * Vektgrensen for et produkt, eller null når avtalen ikke oppgir noen.
+ *
+ * REN logikk. Bare Parcel Locker har `max_weight` i transport_agreements.xml (10 kg).
+ * Service Point (`mypack`) har ingen – da håndhever vi ingen grense selv, og lar Cargonizer
+ * avvise hvis PostNord har en. Å gjette en grense ville stoppet pakker som kunne gått.
+ */
+export function maksVektKg(produkt: string): number | null {
+  return produkt === "postnord_mypack_small" ? MAKS_VEKT_KG : null;
+}
+
 export interface VektLinje {
   qty: number;
   /** Vekt per enhet i gram, fra Shopify via products.grams. Null når den ikke er satt. */

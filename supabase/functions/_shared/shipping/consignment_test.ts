@@ -6,6 +6,7 @@ import {
   FALLBACK_VARE_GRAM,
   gramFraShopify,
   innholdstekst,
+  maksVektKg,
   mobilnummer,
   sporingsnummer,
   vektKg,
@@ -140,4 +141,11 @@ Deno.test("vekt fra Shopify regnes om til gram", () => {
   assertEquals(gramFraShopify(0, "GRAMS"), null);
   assertEquals(gramFraShopify(null, "GRAMS"), null);
   assertEquals(gramFraShopify(50, "STEIN"), null);
+});
+
+Deno.test("vektgrensen gjelder pakkeboks, ikke hentested", () => {
+  // Bare Parcel Locker har max_weight i transportavtalen. Service Point har ingen oppgitt
+  // grense, og da gjetter vi ikke – Cargonizer får avvise hvis PostNord har en.
+  assertEquals(maksVektKg("postnord_mypack_small"), 10);
+  assertEquals(maksVektKg("mypack"), null);
 });

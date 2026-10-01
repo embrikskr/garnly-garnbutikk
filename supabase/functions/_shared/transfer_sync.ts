@@ -25,6 +25,7 @@
  */
 import { adminClient, audit } from "./db.ts";
 import {
+  erPostNord,
   finnConsignment,
   hentConsignment,
   overfoerConsignments,
@@ -42,6 +43,7 @@ const TRANSFER_BATCH = 20;
 export type TransferUtfall =
   | { status: "overfort"; consignmentId: number }
   | { status: "allerede"; consignmentId: number }
+  | { status: "manuelt"; grunn: string }
   | { status: "hoppet_over"; grunn: string }
   | { status: "feilet"; grunn: string };
 
@@ -52,6 +54,8 @@ interface GruppeRad {
   transfer_attempts: number;
   transfer_alerted_at: string | null;
   cargonizer_consignment_id: number | null;
+  carrier: string | null;
+  manually_shipped_at: string | null;
   assigned_store_id: string | null;
   routing_orders: { shopify_order_name: string | null; is_test: boolean } | null;
   stores: { name: string | null; shipping_sender_id: string | null } | null;
@@ -73,6 +77,7 @@ export async function overfoerGruppe(groupId: string): Promise<TransferUtfall> {
     .from("routing_groups")
     .select(
       "id, created_at, transferred_at, transfer_attempts, transfer_alerted_at, cargonizer_consignment_id, assigned_store_id, " +
+        "carrier, manually_shipped_at, " +
         "routing_orders(shopify_order_name, is_test), stores:assigned_store_id(name, shipping_sender_id)",
     )
     .eq("id", groupId)
@@ -87,9 +92,18 @@ export async function overfoerGruppe(groupId: string): Promise<TransferUtfall> {
   const g: GruppeRad = { ...rå, routing_orders: ett(rå.routing_orders), stores: ett(rå.stores) };
 
   if (g.transferred_at) return { status: "allerede", consignmentId: g.cargonizer_consignment_id ?? 0 };
+  if (g.manually_shipped_at) return { status: "manuelt", grunn: "alt merket som sendt manuelt" };
   if (g.routing_orders?.is_test) return { status: "hoppet_over", grunn: "testordre" };
 
   const orderName = g.routing_orders?.shopify_order_name ?? "";
+
+  // Sendt med et annet fraktselskap: det finnes ingen PostNord-sending å melde inn, og en
+  // Cargonizer-sending med samme ordrenummer er i så fall IKKE den som ble brukt. Å overføre
+  // den ville bestilt en PostNord-henting av en pakke som allerede er på vei med noen andre.
+  // Ingen oppslag, intet forsøk, intet varsel.
+  if (erPostNord(g.carrier) === false) {
+    return await merkManuelt(g, orderName, `sendt med ${g.carrier}`);
+  }
 
   // Ta forsøket FØR noe kan feile. Slår den feil, holder noen andre på med samme gruppe nå.
   // Alt som kan gå galt må ligge etter denne: en feil som ikke er bokført som et forsøk
@@ -111,7 +125,11 @@ export async function overfoerGruppe(groupId: string): Promise<TransferUtfall> {
   try {
     const sending = await finnSending(g, orderName, senderId);
     if (!sending) {
-      return await bokførFeil(g, orderName, `fant ingen sending på ${orderName || "ordren"} i Cargonizer`);
+      // Oppslaget gikk gjennom, men det finnes ingen sending: pakken er sendt utenom Cargonizer.
+      // Før ble dette bokført som feil, prøvd hvert kvarter og varslet etter tre forsøk – om en
+      // pakke som var sendt helt fint. En feil i selve oppslaget (nett, 5xx) kaster i stedet,
+      // og havner i catch under som et vanlig forsøk.
+      return await merkManuelt(g, orderName, "ingen Cargonizer-sending");
     }
 
     const beslutning = transferBeslutning(sending);
@@ -158,6 +176,25 @@ async function finnSending(g: GruppeRad, orderName: string, senderId: string) {
     await adminClient().from("routing_groups").update({ cargonizer_consignment_id: funnet.id }).eq("id", g.id);
   }
   return funnet;
+}
+
+/**
+ * Sendt utenom Garnlys Cargonizer-flyt. Ingenting å overføre, og ingen grunn til å varsle.
+ * Backstoppen lar gruppen være fra nå av.
+ */
+async function merkManuelt(g: GruppeRad, orderName: string, grunn: string): Promise<TransferUtfall> {
+  const db = adminClient();
+  const { data: upd } = await db
+    .from("routing_groups")
+    .update({ manually_shipped_at: new Date().toISOString(), transfer_error: null })
+    .eq("id", g.id)
+    .is("manually_shipped_at", null)
+    .is("transferred_at", null)
+    .select("id");
+  if (upd?.length) {
+    await audit("routing_group", g.id, "shipped_manually", { order: orderName, grunn, carrier: g.carrier });
+  }
+  return { status: "manuelt", grunn };
 }
 
 async function bokførOverfort(groupId: string, tidspunkt: string, consignmentId: number, orderName: string, alleredeOverfort: boolean) {
@@ -229,6 +266,7 @@ export async function overfoerEtterslep(db: ReturnType<typeof adminClient>, gren
     .in("status", ["assigned", "fulfilled"])
     .not("fulfilled_at", "is", null)
     .is("transferred_at", null)
+    .is("manually_shipped_at", null)
     .eq("routing_orders.is_test", false)
     .or(`transfer_checked_at.is.null,transfer_checked_at.lt.${sjekketFør}`)
     .limit(grense);

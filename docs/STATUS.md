@@ -2,6 +2,65 @@
 
 Oppdatert: 2026-10-01
 
+## Hentested når det ikke finnes pakkeboks, og «sendt manuelt» (01.10.2026)
+
+### 1. Vanlig hentested som reserve
+
+Finnes det ingen PostNord-pakkeboks nær kunden, sendes pakken nå som **Service Point**
+(`mypack`, «MyPack Collect») på samme butikk-avsender og samme avtale, i stedet for å stoppe.
+Feiler bare hvis det heller ikke finnes hentested.
+
+Pakkebokser finnes ikke overalt. Sjekket mot `/service_partners.xml` 01.10.2026: 9990
+Båtsfjord, 9760 Honningsvåg, 8700 Nesna, 3864 Rauland og 5966 Eivindvik har **null**
+pakkebokser, men fem hentesteder hver. 6997 har ingen av delene, og feiler fortsatt.
+
+Reserveproduktet ligger i `stores.shipping_product_fallback` (= `mypack` for begge), som
+resten av fraktoppsettet. Lest ut av `transport_agreements.xml`: Service Point krever pakkested
+og vekt, men **ikke** mobilnummer, og har både SMS- og e-postvarsling. Bare Parcel Locker har
+`max_weight` (10 kg); Service Point oppgir ingen, så vi håndhever ingen grense der selv.
+
+Produktet som ble brukt lagres i `service_partner.produkt` og i revisjonsloggen, så det står
+hvorfor kunden fikk hentested og ikke boks. Testordrer får fortsatt `transfer=false`.
+
+### 2. «Sendt manuelt» i stedet for evig overføringsforsøk
+
+Er en ordre fulfillet i Shopify med et annet fraktselskap enn PostNord, eller finnes det ingen
+Cargonizer-sending, har vi ingenting å overføre. Før prøvde backstoppen hvert kvarter og
+varslet drift etter tre forsøk – om en pakke som var sendt helt fint. Nå:
+
+- **Annet fraktselskap** (`carrier` fra Shopify, alt som ikke inneholder «postnord»): merkes
+  `manually_shipped_at` **uten noe oppslag** i Cargonizer. En PostNord-sending med samme
+  ordrenummer er i så fall ikke den som ble brukt, og å overføre den ville bestilt en henting
+  av en pakke som alt er på vei med noen andre.
+- **Ukjent transportør** (tom `carrier`) er «vet ikke», ikke «annen transportør»: da slår vi
+  opp i Cargonizer. Finnes ingen sending → `manually_shipped_at`. En feil i selve oppslaget
+  (nett, 5xx) er fortsatt et vanlig forsøk som prøves igjen.
+- Ingen driftsvarsel, og backstoppen hopper over gruppen fra da av.
+
+Panelet viser «Sendt manuelt med Bring» der det ellers ville stått «Ikke overført til
+transportør ennå. Garnly prøver videre» – om en pakke som er sendt helt fint.
+
+### Verifisert mot ekte data
+
+Alt på testordren #1004, med øyeblikksbilde før og gjenopprettet nøyaktig etterpå:
+
+- **Hentested, gjennom den ekte `sendOrdre`:** kunden flyttet til 9990 Båtsfjord. Ingen
+  pakkeboks → sendingen gikk til **Extra Båtsfjord, Havnegata 2** som `mypack`. Cargonizer
+  godtok den (sending **76315379**), og den står `state=open` – testordren ble ikke overført.
+  `service_partner.produkt = mypack` og revisjonsraden sier `overfort: false`.
+- **Bring:** `carrier = Bring` → `manuelt / sendt med Bring`, 0 forsøk, intet varsel.
+  Kjørt med en **ugyldig Cargonizer-nøkkel med vilje**, så ingenting kunne overføres om
+  sjekken skulle slippe gjennom.
+- **Ingen sending:** ukjent transportør og et ordrenummer uten sending → `manuelt / ingen
+  Cargonizer-sending`, ett oppslag, intet varsel, ingen feilrader.
+- **I ekte Chromium:** kortet sier «Sendt manuelt med Bring». Testen ble kjørt uten den
+  grenen først, og viste da nettopp «Ikke overført til transportør ennå» – og feilet.
+
+### Rydd
+
+Testsending **76315379** (referanse `#1004-HENTESTED`) i Cargonizer bør slettes. Den er ikke
+overført.
+
 ## Reserveknappen er fjernet – en feilet sending går til Garnly (01.10.2026)
 
 Under «Slått ut og klar til sending» lå «Sendt på annen måte – registrer bare

@@ -194,6 +194,22 @@ export function transferBeslutning(c: Pick<CargonizerConsignment, "state" | "tra
   return { handling: "ukjent", state: c.state };
 }
 
+/**
+ * Er dette PostNord? REN logikk.
+ *
+ * Transportøren kommer fra Shopifys `trackingInfo.company`, satt av den som fulfillet: vår
+ * egen flyt skriver «PostNord», CargonizerConnect og et menneske i Shopify-admin kan skrive
+ * «Postnord», «PostNord Norge» eller «PostNord MyPack». Alt som inneholder «postnord» teller.
+ *
+ * Null betyr «vet ikke» og er IKKE det samme som «annen transportør». Da avgjør oppslaget i
+ * Cargonizer.
+ */
+export function erPostNord(carrier: string | null | undefined): boolean | null {
+  const c = (carrier ?? "").replace(/\s+/g, "").toLowerCase();
+  if (!c) return null;
+  return c.includes("postnord");
+}
+
 /** Feilmeldingene i et <errors>-svar. REN logikk. */
 export function parseErrors(xml: string): string[] {
   const parser = new XMLParser({ ignoreAttributes: true, parseTagValue: false, trimValues: true });

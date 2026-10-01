@@ -37,7 +37,7 @@ import {
 import {
   byggConsignmentXml,
   innholdstekst,
-  MAKS_VEKT_KG,
+  maksVektKg,
   mobilnummer,
   sporingsnummer,
   vektKg,
@@ -82,6 +82,7 @@ interface Kontekst {
     shipping_sender_id: string | null;
     shipping_transport_agreement: string | null;
     shipping_product: string | null;
+    shipping_product_fallback: string | null;
     directprint_printer_id: string | null;
   };
 }
@@ -179,7 +180,7 @@ async function hentKontekst(groupId: string): Promise<Kontekst | null> {
       "id, routing_order_id, created_at, line_items, shopify_fulfillment_order_id, pos_deducted_at, fulfilled_at, " +
         "cargonizer_consignment_id, shipped_at, " +
         "routing_orders(shopify_order_name, is_test, customer), " +
-        "stores:assigned_store_id(name, shipping_sender_id, shipping_transport_agreement, shipping_product, directprint_printer_id)",
+        "stores:assigned_store_id(name, shipping_sender_id, shipping_transport_agreement, shipping_product, shipping_product_fallback, directprint_printer_id)",
     )
     .eq("id", groupId)
     .maybeSingle();
@@ -247,23 +248,41 @@ async function sikreSending(k: Kontekst): Promise<{ sending: CargonizerConsignme
   }
 
   const ta = k.butikk.shipping_transport_agreement;
-  const produkt = k.butikk.shipping_product;
-  if (!ta || !produkt) throw new Error("Butikken mangler transportavtale for frakt. Kontakt Garnly.");
+  const hovedprodukt = k.butikk.shipping_product;
+  if (!ta || !hovedprodukt) throw new Error("Butikken mangler transportavtale for frakt. Kontakt Garnly.");
 
-  const partnere = await finnServicePartnere(senderId, {
-    transportAgreementId: ta,
-    product: produkt,
-    postcode: postnr,
-    country: land,
-    address: kunde.address1,
-    city: kunde.city,
-  });
-  const pakkeboks = partnere[0] ?? null;
-  if (!pakkeboks) throw new Error(`Fant ingen pakkeboks nær ${postnr}. Kontakt Garnly.`);
+  // Pakkeboks først. Finnes ingen i nærheten, vanlig hentested (Service Point / MyPack
+  // Collect) på samme avtale. Pakkebokser finnes ikke overalt: 9990 Båtsfjord, 9760
+  // Honningsvåg og 8700 Nesna har ingen, men fem hentesteder hver (sjekket 01.10.2026).
+  const reserve = k.butikk.shipping_product_fallback;
+  const produkter = [hovedprodukt, ...(reserve && reserve !== hovedprodukt ? [reserve] : [])];
+  let produkt = hovedprodukt;
+  let pakkeboks: ServicePartnerRad | null = null;
+  for (const p of produkter) {
+    const partnere = await finnServicePartnere(senderId, {
+      transportAgreementId: ta,
+      product: p,
+      postcode: postnr,
+      country: land,
+      address: kunde.address1,
+      city: kunde.city,
+    });
+    if (partnere[0]) {
+      produkt = p;
+      pakkeboks = partnere[0];
+      break;
+    }
+  }
+  if (!pakkeboks) {
+    throw new Error(produkter.length > 1
+      ? `Fant verken pakkeboks eller hentested nær ${postnr}. Kontakt Garnly.`
+      : `Fant ingen pakkeboks nær ${postnr}. Kontakt Garnly.`);
+  }
 
   const vekt = await beregnVekt(k);
-  if (vekt > MAKS_VEKT_KG) {
-    throw new Error(`Pakken veier ${vekt} kg, og PostNord pakkeboks tar maks ${MAKS_VEKT_KG} kg. Kontakt Garnly.`);
+  const maks = maksVektKg(produkt);
+  if (maks !== null && vekt > maks) {
+    throw new Error(`Pakken veier ${vekt} kg, og PostNord pakkeboks tar maks ${maks} kg. Kontakt Garnly.`);
   }
 
   const xml = byggConsignmentXml({
@@ -296,8 +315,10 @@ async function sikreSending(k: Kontekst): Promise<{ sending: CargonizerConsignme
   });
 
   const laget = await opprettConsignment(xml, senderId);
-  await lagreSending(k, laget, pakkeboks);
+  // Produktet følger med pakkestedet, så det står hvorfor kunden fikk hentested og ikke boks.
+  await lagreSending(k, laget, { ...pakkeboks, produkt } as ServicePartnerRad);
   await audit("routing_group", k.group.id, "consignment_created", {
+    produkt,
     consignment_id: laget.id,
     order: orderName,
     vekt_kg: vekt,

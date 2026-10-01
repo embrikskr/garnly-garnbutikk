@@ -1,6 +1,7 @@
 import { assertEquals } from "jsr:@std/assert@1";
 import {
   type CargonizerConsignment,
+  erPostNord,
   parseConsignments,
   parseErrors,
   parsePrintere,
@@ -202,4 +203,31 @@ Deno.test("skriverlista tåler at kontoen ikke har noen", () => {
     parsePrintere('<printers type="array"><printer><id>123</id><name>Zebra pakkebord</name></printer></printers>'),
     [{ id: "123", name: "Zebra pakkebord" }],
   );
+});
+
+// ---------------------------------------------------------------- manuelt sendt
+
+Deno.test("PostNord kjennes igjen uansett skrivemåte", () => {
+  // Vår egen flyt skriver «PostNord». CargonizerConnect og et menneske i Shopify-admin kan
+  // skrive noe annet.
+  assertEquals(erPostNord("PostNord"), true);
+  assertEquals(erPostNord("Postnord"), true);
+  assertEquals(erPostNord("PostNord Norge"), true);
+  assertEquals(erPostNord("Post Nord"), true);
+  assertEquals(erPostNord("PostNord MyPack"), true);
+});
+
+Deno.test("annet fraktselskap er ikke PostNord", () => {
+  assertEquals(erPostNord("Bring"), false);
+  assertEquals(erPostNord("Helthjem"), false);
+  assertEquals(erPostNord("Posten"), false);
+});
+
+Deno.test("ukjent transportør er «vet ikke», ikke «annen transportør»", () => {
+  // Null skal sende saken videre til oppslaget i Cargonizer. Behandlet vi den som «annen
+  // transportør», ville en PostNord-sending uten trackingInfo.company aldri blitt overført.
+  assertEquals(erPostNord(null), null);
+  assertEquals(erPostNord(undefined), null);
+  assertEquals(erPostNord(""), null);
+  assertEquals(erPostNord("   "), null);
 });

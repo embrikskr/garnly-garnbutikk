@@ -340,6 +340,11 @@ function fraktStatus(r) {
   if (r.transferred_at) {
     return `<p class="frakt frakt--ok">Overført til ${esc(r.carrier || "transportør")} ${klokke(r.transferred_at)}</p>`;
   }
+  // Sendt utenom Cargonizer: det finnes ingenting å overføre. Uten denne ville kortet sagt
+  // «Ikke overført ennå» om en pakke som er sendt helt fint.
+  if (r.manually_shipped_at) {
+    return `<p class="frakt frakt--ok">Sendt manuelt${r.carrier ? ` med ${esc(r.carrier)}` : ""}</p>`;
+  }
   if (!r.fulfilled_at) return "";
   // Overføringen skjer normalt i samme minutt som sendingen. Vi maser ikke om det første
   // kvarteret; står den igjen etterpå, skal butikken vite det før kunden ringer.
@@ -428,6 +433,7 @@ function apneDetalj(groupId) {
     r.assigned_at ? ["Godtatt", tidspunkt(r.assigned_at)] : null,
     r.fulfilled_at ? ["Sendt", tidspunkt(r.fulfilled_at)] : null,
     r.transferred_at ? ["Overført", `${tidspunkt(r.transferred_at)}${r.carrier ? " – " + esc(r.carrier) : ""}`] : null,
+    r.manually_shipped_at ? ["Sendt manuelt", `${tidspunkt(r.manually_shipped_at)}${r.carrier ? " – " + esc(r.carrier) : ""}`] : null,
     r.pos_deducted_at ? ["Slått ut i kassa", `${tidspunkt(r.pos_deducted_at)}${r.pos_deducted_by ? " – " + esc(r.pos_deducted_by) : ""}`] : null,
   ].filter(Boolean);
 
