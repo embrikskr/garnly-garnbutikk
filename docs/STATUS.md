@@ -2,6 +2,22 @@
 
 Oppdatert: 2026-10-01
 
+## Innlogginger til panelet (01.10.2026)
+
+Tre brukere, alle med nytt passord (gitt til Embrik direkte, ikke lagret her):
+
+| Bruker | Rolle |
+|---|---|
+| `embrik.skrindo@gmail.com` | Garnly-admin |
+| `butikk@garnkilden.no` | Garnkilden (var `garnkilden@garnly.no`) |
+| `post@strikkefryden.no` | Strikkefryd (var `strikkefryd@garnly.no`) |
+
+Byttet i `auth.users` og `auth.identities` (samme bruker-id, så `store_users`, `garnly_admins`
+og historikken henger med). Verifisert med ekte innlogging mot Supabase Auth: de nye går
+inn, de gamle adressene og det gamle admin-passordet avvises. Eldre notater under nevner de
+gamle adressene – det er historikk. `stores.contact_email` peker fortsatt på Embrik for begge
+butikkene (e-post per tilbud er av).
+
 ## Admin-toppen, og ingenting arves ved brukerbytte (01.10.2026)
 
 **Admin:** toppen viser nå **«Garnly admin»**, og tallene er på tvers av alle butikker, fra
