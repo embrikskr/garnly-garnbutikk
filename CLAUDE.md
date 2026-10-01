@@ -30,7 +30,8 @@ supabase/migrations/      001 schema, 002 cron, 003 exclude_from_sync, 004 inven
                           022 cargonizer-overføring, 023 panelsending,
                           024 kort forsvinner ved sending, 025 garnly-admin,
                           026 cron ops-digest, 027 directprint bare Garnly,
-                          028 feilet sending til admin, 029 hentested + manuell sending
+                          028 feilet sending til admin, 029 hentested + manuell sending,
+                          030 view- og funksjonstilgang (anon ut)
 supabase/seed/            product_aliases.sql (varer uten brukbar EAN, kjøres etter første sync-products)
 panel/                    butikkpanelet (statisk side, Vercel med rot `panel/`).
                           garnly-butikkpanel.vercel.app – deployes av git push
@@ -85,6 +86,7 @@ shopify-app/              Shopify Function: kassevalidering «ett parti fra én 
 - **Butikkens innstillinger lagres via `store-settings`**, aldri rett på tabellen: panelet har ikke skriverett på `stores`, og endringer som auto-godkjenning skal i revisjonsloggen.
 - **Fraktoppsett ligger i `stores`**, ikke i koden: `shipping_sender_id`, `shipping_transport_agreement`, `shipping_product`, `shipping_product_fallback`, `directprint_printer_id`. Skriveren settes bare av Garnly, aldri av butikken. Avtale-id-ene er ulike per butikk, og et transportørbytte skal ikke kreve ny utrulling.
 - **Varelinjene skal kunne plukkes uten oppslag.** `line_items` lagrer variant, SKU, strekkode og garnpakkeinnhold ved ordremottak (`_shared/lines.ts`). Produktbilde ble prøvd og tatt bort igjen: butikken plukker på navn, farge og strekkode. Nye felt der krever en kjøring av `backfill-lines` for ordrer som alt ligger i panelet.
+- **Nye view og funksjoner i `public` er åpne for `anon` til du sier noe annet.** Supabase gir anon og authenticated tilgang til alt nytt der, og anon-nøkkelen står i `panel/config.js`. Et view er enten `security_invoker = true`, eller kjører som eier og filtrerer selv på `current_store_ids()` / `is_garnly_admin()` – og får `revoke all ... from anon` uansett. En funksjon får `revoke execute ... from public, anon` (og `authenticated` hvis bare Edge Functions/cron kaller den) og `set search_path = public`. Se 030. Linteren flagger de ni panel/admin-viewene som «security definer» – det er bevisst.
 - **Ikke legg kundedata i panel-viewene** utover det butikken trenger for å pakke og sende. `routing_orders.raw_order` skal aldri eksponeres.
 - **Ikke gjett på kassesystem-API-er.** Begge adaptere er verifisert mot ekte data (sept. 2026); feltnavn står i filhodene. Ved avvik: logg en rå eksempelrad og juster.
 - **Sortimentet styres i Shopify.** Aldri opprett produkter i Shopify fra butikkdata. Nye produkter legges inn av Embrik/Halvor; `sync-products` plukker dem opp.

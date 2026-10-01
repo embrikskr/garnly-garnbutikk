@@ -2,6 +2,53 @@
 
 Oppdatert: 2026-10-01
 
+## Sikkerhetslinteren: to lekkende view tettet (01.10.2026)
+
+Supabase-linteren flagget 11 view som «Security Definer View» (ERROR). Gjennomgått ett for ett,
+og testet som anon, som hver butikk, som admin og som service role.
+
+**To var ekte lekker.** `v_store_overview` og `v_offer_stats_30d` (fra 001, laget før panelet)
+kjørte som eier uten noe filter, og var lesbare for `anon`. Anon-nøkkelen står åpent i
+`panel/config.js`, så hvem som helst kunne hente butikkliste, kassesystem, synkstatus, antall
+varer på lager, umatchede varer og godtatt/avslått/utløpt per butikk rett fra REST-API-et –
+bekreftet med `set role anon`, som ga begge butikkene. Ingen kundedata. En innlogget butikk
+kunne også se den andres tall. Begge er nå `security_invoker` og stengt for anon og
+authenticated. Dashboardet bruker service role og ser dem som før (2 rader); `v_offer_stats_30d`
+brukes ingen steder i koden.
+
+**De ni andre er bevisste**, og blir stående i linteren. `v_panel_*` og `v_admin_*` kjører som
+eier og filtrerer selv på `current_store_ids()` / `is_garnly_admin()` (008, 025), fordi
+butikkene ikke skal ha lesetilgang på tabellene under – bare på kolonnene viewene plukker ut.
+Linteren ser at de kjører som eier, ikke filteret. Testet: hver butikk ser bare sine egne rader
+(0 rader fra den andre), null admin-rader; admin ser alt (16 ordrer, 2 butikker). Anon er tatt
+ut av alle viewene i tillegg – panelet leser ingenting før innlogging.
+
+**Funksjonene, samme runde:**
+- `anon` kan ikke lenger kalle `current_store_ids`, `is_garnly_admin` eller `mark_pos_deducted`.
+  Ingen av dem var farlige (`mark_pos_deducted` avviste alle uten butikk), men anon har ingen
+  grunn til å kalle dem. Innloggede beholder dem – panelet og RLS-policyene trenger dem.
+- `call_edge_function`, `mark_store_assigned`, `mark_store_timeout`, `qualified_stores` og
+  `store_coverage` kan bare kalles av service role og cron. `call_edge_function` leser
+  cron-hemmeligheten fra vault, men ga «permission denied for schema vault» for både anon og
+  butikkbrukere også før endringen.
+- Fast `search_path` på de seks som manglet det.
+- Verifisert etterpå: rutingens RPC-er virker som service role, `mark_pos_deducted` kan
+  fortsatt kalles av butikkene, og cron-jobbene svarer 200 etter endringen.
+
+**Igjen i linteren, med vilje:**
+- 9 × «Security Definer View» – se over.
+- 3 × «Signed-In Users Can Execute SECURITY DEFINER Function» – panelet trenger dem.
+- «RLS Enabled No Policy» (INFO) på 14 tabeller – riktig: ingen klient skal lese dem, bare
+  service role. To av dem er `_flytting_backup_*_2026_09_27`, som kan slettes når flyttingen er
+  bekreftet ferdig.
+- «pg_net i public» – å flytte utvidelsen krever å fjerne og legge den inn igjen, med cron-
+  kallene i mellomtiden. Ikke verdt risikoen for en advarsel.
+
+**For Embrik:** «Leaked Password Protection» er av. Det er en bryter i Auth-innstillingene i
+Supabase som avviser passord som finnes i HaveIBeenPwned. Se
+https://supabase.com/docs/guides/auth/password-security – den er bare tilgjengelig på Pro-plan
+og oppover.
+
 ## Tunge pakker til hentested, ikke stopp (01.10.2026)
 
 Pakker over **10 kg** går nå til nærmeste PostNord-**hentested** (`mypack`) i stedet for å
