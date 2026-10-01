@@ -2,6 +2,16 @@
 
 Oppdatert: 2026-10-01
 
+## Avslag uten bekreftelse (01.10.2026)
+
+«Avslå» i panelet spurte «Avslå denne ordren? Den går videre til neste butikk.» før den gjorde
+noe – to trykk per avslag. Bekreftelsen er fjernet: ett trykk avslår. Et avslag straffes ikke,
+og ordren går bare videre til neste butikk. «Godta» er uendret. Bekreftelsen på automatisk
+godkjenning står igjen – den kan ikke angres ordre for ordre.
+
+Testet i Chromium: ett trykk på «Avslå» gir null dialoger og nøyaktig ett kall til
+`offer-respond` med `decline`. Samme test mot den gamle koden fikk dialogen, og null kall.
+
 ## Sikkerhetslinteren: to lekkende view tettet (01.10.2026)
 
 Supabase-linteren flagget 11 view som «Security Definer View» (ERROR). Gjennomgått ett for ett,

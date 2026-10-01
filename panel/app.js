@@ -514,7 +514,8 @@ el.queue.addEventListener("click", async (e) => {
   const card = btn.closest("[data-offer]");
   const offerId = card.dataset.offer;
   const action = btn.dataset.act;
-  if (action === "decline" && !confirm("Avslå denne ordren? Den går videre til neste butikk.")) return;
+  // Ingen «Er du sikker?» på avslag: det kostet et ekstra trykk på hver eneste ordre, og et
+  // avslag straffes ikke – ordren går bare videre til neste butikk.
   card.querySelectorAll("button").forEach((b) => (b.disabled = true));
   const ok = await respond(offerId, action);
   // Gikk det galt, må knappene tilbake: uten ny opptegning ville kortet blitt
