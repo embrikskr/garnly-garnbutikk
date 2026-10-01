@@ -8,8 +8,9 @@ Dette repoet er backend for Garnlys felles nettbutikk for lokale garnbutikker. L
 2. **Ordreruting**: når en kunde betaler i Shopify, settes ordren på hold, og den tilbys én butikk om gangen (round-robin på `last_assigned_at`). Butikken svarer i **butikkpanelet** (`panel/`, garnly-butikkpanel.vercel.app) innen en frist (i åpningstid). Ved aksept flyttes fulfillment order til butikkens location.
 3. **Sending**: butikken trykker **«Slått ut og klar til sending»** i panelet, og `ship-order` gjør alt (`_shared/ship.ts`): kassauttrekk → sending i Cargonizer (pakkeboks – eller vanlig hentested når det ikke finnes pakkeboks i nærheten eller pakken er over 10 kg; over 35 kg stopper den –, vekt, SMS-varsling, `transfer=true`) → lagring av sporing → `fulfillmentCreate` i Shopify med sporing → etikett til DirectPrint-skriver hvis Garnly har satt en opp for butikken (`stores.directprint_printer_id`), ellers ingenting – butikken henter PDF-en fra ikonet på kortet når de vil. Kortet forsvinner fra pakkelista med én gang, og ordren ligger under «Tidligere ordrer». Hvert steg tåler å kjøres på nytt. Kortet har bare den ene knappen; feiler sendingen, sier kortet «Kontakt Garnly» og ordren havner i admin under «Trenger handling». **Butikkene har ikke Shopify-tilgang**, og CargonizerConnect overførte aldri sendingen til PostNord – derfor gjør Garnly begge deler selv. Testordrer får `transfer=false`. `transfer_sync.ts` er backstop for sendinger som ikke ble overført; er ordren fulfillet med et annet fraktselskap enn PostNord, eller finnes det ingen Cargonizer-sending, merkes den «sendt manuelt» (`manually_shipped_at`) uten forsøk eller driftsvarsel.
 4. **Butikkpanel**: en side butikken har oppe på nettbrettet. Sanntid via Supabase Realtime på `offers`, innlogging med Supabase Auth, tilgang styrt av `store_users` + RLS. E-post per tilbud er AV som standard (`stores.notify_offers`); det skalerer ikke når en butikk får titalls ordrer om dagen. Butikken styrer selv **automatisk godkjenning** (`stores.auto_accept`) via `store-settings`; endringene havner i `audit_log`. Butikkene ser ingenting om etikettskrivere.
-5. **Garnly-admin**: egen fane «Garnly» i panelet, bare for brukere i `garnly_admins` (egen tabell – en admin er ikke en butikk og har ingen rad i `store_users`). Viser «Trenger handling» (eskalerte grupper, tilbud med utløpt frist, og sendinger som stoppet hos butikken – med hvem som avslo og hvorfor, eller feilmeldingen), alle ordrer på tvers av butikker med filter, oppgjør, nøkkeltall og synkstatus per butikk. Handlinger via `admin-actions`: gi ordren til en butikk **uten lagersjekk** (butikken kan ha bestilt inn), eller prøv ruting på nytt mot dagens lager. Kansellering er bare en lenke til Shopify – refusjon gjøres av et menneske. Alle `v_admin_*`-view filtrerer på `is_garnly_admin()` og gir butikkbrukere null rader.
-6. **Regler som aldri brytes**: hele antallet av én varelinje kommer fra samme butikk (garnparti). Hele ordren fra én butikk foretrekkes; kan splittes per varelinje hvis ingen har alt. Aktivt avslag straffes ikke; timeout gir 24 t nedvekting (maks 3).
+5. **Oppgjør**: butikken får varebeløpet minus `commission_pct`; frakt er Garnlys og aldri med; testordrer telles aldri. Refusjoner fra Shopify (`refunds/create` → `order-refunded`, nattlig backstop) blir trekk i `settlement_adjustments` (minus refundert varebeløp × (100 − provisjon) / 100), i refusjonsmåneden eller neste ubetalte. Alt leses fra én regnebok, `settlement_ledger`, gjennom `settlement_lines` / `settlement_summary` / `settlement_months`. Fanen «Oppgjør» i panelet: Garnly ser alle butikker, laster ned CSV og markerer måneder som utbetalt (`mark_settlement_paid`); butikken ser bare seg selv. «Refundert» står på ordren i Tidligere ordrer.
+6. **Garnly-admin**: egen fane «Garnly» i panelet, bare for brukere i `garnly_admins` (egen tabell – en admin er ikke en butikk og har ingen rad i `store_users`). Viser «Trenger handling» (eskalerte grupper, tilbud med utløpt frist, og sendinger som stoppet hos butikken – med hvem som avslo og hvorfor, eller feilmeldingen), alle ordrer på tvers av butikker med filter, nøkkeltall og synkstatus per butikk (oppgjøret har egen fane, se 5). Handlinger via `admin-actions`: gi ordren til en butikk **uten lagersjekk** (butikken kan ha bestilt inn), eller prøv ruting på nytt mot dagens lager. Kansellering er bare en lenke til Shopify – refusjon gjøres av et menneske. Alle `v_admin_*`-view filtrerer på `is_garnly_admin()` og gir butikkbrukere null rader.
+7. **Regler som aldri brytes**: hele antallet av én varelinje kommer fra samme butikk (garnparti). Hele ordren fra én butikk foretrekkes; kan splittes per varelinje hvis ingen har alt. Aktivt avslag straffes ikke; timeout gir 24 t nedvekting (maks 3).
 
 ## Stack
 
@@ -31,7 +32,8 @@ supabase/migrations/      001 schema, 002 cron, 003 exclude_from_sync, 004 inven
                           024 kort forsvinner ved sending, 025 garnly-admin,
                           026 cron ops-digest, 027 directprint bare Garnly,
                           028 feilet sending til admin, 029 hentested + manuell sending,
-                          030 view- og funksjonstilgang (anon ut)
+                          030 view- og funksjonstilgang (anon ut),
+                          031 oppgjør: refusjoner, utbetalinger, regnebok
 supabase/seed/            product_aliases.sql (varer uten brukbar EAN, kjøres etter første sync-products)
 panel/                    butikkpanelet (statisk side, Vercel med rot `panel/`).
                           garnly-butikkpanel.vercel.app – deployes av git push
@@ -49,6 +51,8 @@ supabase/functions/
   _shared/ship.ts              «Slått ut og klar til sending»: uttrekk → sending → fulfillment → etikett
   _shared/shipping/consignment.ts  REN logikk: consignment-XML, vekt, sporingsnummer, mobilnummer
   _shared/lines.ts        REN logikk: varelinja butikken plukker fra (variant, EAN, SKU, garnpakkeinnhold)
+  _shared/settlement.ts   REN logikk: hvor mye refundert varebeløp som trekkes fra hvilken gruppe/butikk
+  _shared/refund_sync.ts  refusjon fra Shopify → settlement_adjustments (webhook + backstop), registrerer webhooken
   _shared/offers.ts       makeNextOffer, escalateGroup, refreshOrderStatus
   _shared/shipping/       cargonizer.ts (finn sending + hent etikett-PDF), bookShipment, shipmondo.ts
   sync-store/             cron: kassesystem → inventory → Shopify (+ metafelt garnly.stock_by_store)
@@ -57,6 +61,7 @@ supabase/functions/
   offer-respond/          svar fra panelet (POST + bruker-JWT), engangslenke (GET) og internt kall
   timeout-sweeper/        cron hvert minutt
   order-cancelled/        webhook orders/cancelled
+  order-refunded/         webhook refunds/create → trekk i oppgjøret; nattlig backstop (cron 04:50 UTC)
   fulfillment-webhook/    webhook fulfillments/create → fulfilled_at (CargonizerConnect fulfiller)
   pos-webhook/            Mystore products/update → trigger synk
   pos-catalog/            daglig cron: Duells product/list → pos_catalog (strekkoder)
@@ -87,6 +92,8 @@ shopify-app/              Shopify Function: kassevalidering «ett parti fra én 
 - **Fraktoppsett ligger i `stores`**, ikke i koden: `shipping_sender_id`, `shipping_transport_agreement`, `shipping_product`, `shipping_product_fallback`, `directprint_printer_id`. Skriveren settes bare av Garnly, aldri av butikken. Avtale-id-ene er ulike per butikk, og et transportørbytte skal ikke kreve ny utrulling.
 - **Varelinjene skal kunne plukkes uten oppslag.** `line_items` lagrer variant, SKU, strekkode og garnpakkeinnhold ved ordremottak (`_shared/lines.ts`). Produktbilde ble prøvd og tatt bort igjen: butikken plukker på navn, farge og strekkode. Nye felt der krever en kjøring av `backfill-lines` for ordrer som alt ligger i panelet.
 - **Nye view og funksjoner i `public` er åpne for `anon` til du sier noe annet.** Supabase gir anon og authenticated tilgang til alt nytt der, og anon-nøkkelen står i `panel/config.js`. Et view er enten `security_invoker = true`, eller kjører som eier og filtrerer selv på `current_store_ids()` / `is_garnly_admin()` – og får `revoke all ... from anon` uansett. En funksjon får `revoke execute ... from public, anon` (og `authenticated` hvis bare Edge Functions/cron kaller den) og `set search_path = public`. Se 030. Linteren flagger de ni panel/admin-viewene som «security definer» – det er bevisst.
+- **Oppgjøret regnes i databasen, ett sted.** Provisjon og øreavrunding for både salg og refusjon står i `settlement_ledger` og triggeren på `settlement_adjustments` – ikke i TypeScript, ikke i panelet. Panelet viser tallene og lager CSV av linjene; det summerer ingenting som noen betaler etter. En utbetaling angres ved å annullere raden (`annullert_at`), ikke ved å slette den.
+- **Supabase-koblingen (MCP) stopper SQL med DROP eller DELETE** til noen bekrefter i appen, og går ut på tid etter 60 s hvis ingen gjør det. Skriv migrasjoner uten dem når det går, eller be Embrik kjøre dem.
 - **Ikke legg kundedata i panel-viewene** utover det butikken trenger for å pakke og sende. `routing_orders.raw_order` skal aldri eksponeres.
 - **Ikke gjett på kassesystem-API-er.** Begge adaptere er verifisert mot ekte data (sept. 2026); feltnavn står i filhodene. Ved avvik: logg en rå eksempelrad og juster.
 - **Sortimentet styres i Shopify.** Aldri opprett produkter i Shopify fra butikkdata. Nye produkter legges inn av Embrik/Halvor; `sync-products` plukker dem opp.

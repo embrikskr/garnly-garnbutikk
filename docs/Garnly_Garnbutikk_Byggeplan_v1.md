@@ -248,6 +248,22 @@ ikke i bruk.
 
 **Ny konsekvens av splitt (§8.2):** kunden betaler én frakt, men to etiketter bookes. Anbefaling: Garnly dekker den ekstra etiketten i pilot, og `split_rate` måles. Alternativ: trekkes fra provisjon på ordren. Policyvalg, ikke teknisk.
 
+### 10.1 Oppgjør med butikkene (01.10.2026)
+
+Butikken får varebeløpet (inkl. mva, etter rabatt, uten frakt) minus `commission_pct`. Frakt
+er Garnlys og er aldri med i butikkens oppgjør. Testordrer telles aldri. Provisjonen fryses på
+gruppa når butikken får den (`routing_groups.commission_pct`), så en ny avtale ikke skriver om
+måneder som er betalt.
+
+Refusjoner kommer fra Shopify (`refunds/create` → `order-refunded`, med nattlig backstop) og
+blir trekk i `settlement_adjustments`: minus refundert varebeløp × (100 − provisjon) / 100.
+Refundert frakt trekkes ikke. Trekket gjøres opp i måneden refusjonen skjedde, eller i neste
+ubetalte måned hvis den alt er markert som utbetalt (`settlement_payouts`).
+
+Én regnebok (`settlement_ledger`) med én linje per ordre og per justering, provisjonen regnet
+per linje. Garnly-admin og butikkpanelet leser den samme gjennom `settlement_*`-funksjonene.
+Måneder følger norsk tid. Detaljer i STATUS.md.
+
 ---
 
 ## 11. Datamodell (eget Supabase-prosjekt)

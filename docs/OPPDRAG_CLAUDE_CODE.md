@@ -123,6 +123,11 @@ hører om en ordre:
 |---|---|
 | Order payment | `https://zesaeleooiptrpjzqhxe.supabase.co/functions/v1/order-intake` |
 | Order cancellation | `https://zesaeleooiptrpjzqhxe.supabase.co/functions/v1/order-cancelled` |
+| Refund create | `https://zesaeleooiptrpjzqhxe.supabase.co/functions/v1/order-refunded` |
+
+`refunds/create` registreres av funksjonen selv, med appens token (en webhook laget i
+Shopify-admin signeres med en annen hemmelighet og avvises):
+`select call_edge_function('order-refunded', '{"mode":"ensure_webhook"}'::jsonb);`
 
 ### Steg 3. Legg inn butikkene
 

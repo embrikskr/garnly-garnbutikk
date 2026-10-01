@@ -342,4 +342,21 @@ button { font: inherit; }
 .tabell tr:last-child td { border-bottom: none; }
 .tabell a { color: var(--wine); }
 .svak { font-size: 14px; color: var(--ink-soft); }
+
+/* ---------------------------------------------------------------- oppgjør */
+.felt input[type="date"] {
+  font: inherit; font-size: 16px; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--card); color: var(--ink);
+}
+.filtre .btn { min-height: 46px; }
+/* Ikke «.tall»: det navnet er nøkkeltall-rutenettet i admin, og gjorde cellene til grid. */
+.tabell td.num, .tabell th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tabell tr.minus td { color: var(--red); }
+.tabell tr.sum td { font-weight: 700; border-top: 2px solid var(--border); }
+.tabell tr.klikkbar { cursor: pointer; }
+.tabell tr.klikkbar:hover td { background: #FBF8F3; }
+.tabell tr.valgt td { background: var(--cream-2); }
+.tabell .btn--sm { min-height: 36px; padding: 6px 12px; font-size: 14px; }
+.utbetalt { color: var(--green); font-weight: 600; }
+.merke--refundert { background: #F6E3E1; color: var(--red); }
 .svak--feil { color: var(--red); }

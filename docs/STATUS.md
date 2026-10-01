@@ -2,6 +2,134 @@
 
 Oppdatert: 2026-10-01
 
+## Oppgjør og salg per butikk (01.10.2026)
+
+Regelen er som før: butikken får varebeløpet minus `commission_pct`. Frakt er Garnlys og aldri
+med i butikkens oppgjør. Testordrer telles aldri.
+
+### 1. Refusjoner trekkes automatisk
+
+Shopify-webhooken `refunds/create` går til den nye funksjonen `order-refunded`. Den spør
+Shopify om refusjonen (payloaden er bare et varsel), finner butikken via
+`routing_groups.assigned_store_id`, og lager en rad i `settlement_adjustments`:
+
+- `gross_inc_vat` = minus refundert varebeløp (inkl. mva), `amount_inc_vat` = minus
+  varebeløp × (100 − provisjon) / 100, `reason` «Refusjon #ordrenr», `group_id`, og
+  `occurred_at` = da refusjonen skjedde.
+- **Refundert frakt trekkes ikke.** Refunderes 85 kr i varer og 79 kr frakt, trekkes butikken
+  76,50 kr.
+- **Kommer refusjonen etter at måneden er betalt ut**, havner trekket i neste ubetalte måned
+  (`settlement_month`, satt av en trigger).
+- Refunderes varer før noen butikk fikk ordren, er det ingen å trekke. Refusjoner som ikke
+  lar seg knytte til én butikk, trekkes ikke automatisk; Garnly får beskjed (`notifyOps` og
+  `refund_not_deducted` i revisjonsloggen). Det gjelder: refusjon av et beløp uten varelinjer
+  (godvilje), mer tilbake enn varer og frakt, eller samme variant i to grupper.
+- Ble refusjonsbeløpet satt ned i Shopify, trekkes butikken bare for det kunden faktisk fikk
+  tilbake for varene.
+
+Varelinjene våre lagrer fulfillment order-linjens id, ikke ordrelinjens, så refusjonen kobles
+til gruppa på variant. Fordelingen er ren logikk i `_shared/settlement.ts` (11 tester).
+Provisjon og øreavrunding regnes i databasen, med samme regnestykke som salget. Da går en
+hel refusjon nøyaktig i null mot salget.
+
+**Backstop:** cron `refund-backstop` kl. 04:50 UTC går gjennom ordrer med refusjoner de siste
+tre dagene. Trygt å kjøre om igjen: `(shopify_refund_id, group_id)` er unik.
+
+**Webhooken er registrert** (`WebhookSubscription/2080370425916`), av funksjonen selv med appens
+token (`{"mode":"ensure_webhook"}`), så den signeres med hemmeligheten `verifyShopifyHmac`
+sjekker. Uten signatur, med falsk signatur og med feil cron-hemmelighet: 401.
+
+### 2. Fanen «Oppgjør»
+
+Én fane for Garnly og butikk. Garnly ser den ved siden av «Garnly», butikkene ved siden av
+«Tidligere ordrer».
+
+- **Butikk** (bare Garnly; alle eller én) og **periode**: denne måneden, forrige måned eller
+  egendefinert fra–til.
+- **Sammendrag per butikk:** ordrer, varesalg, Garnly (10 %), refusjoner/justeringer, til
+  utbetaling. Varesalg − Garnly + refusjoner = til utbetaling.
+- **Trykk på en butikk:** hver ordre med dato, ordrenr, varebeløp, provisjon og til butikk;
+  refusjoner som egne røde minuslinjer. Et trekk som ble flyttet fordi måneden var betalt,
+  sier «trukket i oktober».
+- **Last ned CSV** for valgt butikk og periode: én linje per ordre og refusjon, semikolon og
+  desimalkomma og BOM, så norsk Excel åpner den riktig.
+- **Måned for måned** med «Marker som utbetalt» per butikk per måned, med dato. Bare for
+  måneder som er over (en løpende måned kan få flere ordrer), bare for Garnly, og datoen kan
+  ikke være fram i tid. Beløpet fryses i det den markeres; endrer måneden seg etterpå, står
+  det «Markert med X kr». «Angre» annullerer markeringen, men raden blir stående
+  (`annullert_at`), så det går an å se hva som skjedde.
+- **Butikken** ser samme tall, bare sine egne, uten butikkvelger og uten knapper.
+
+Den gamle seksjonen «Oppgjør per butikk» under Garnly-fanen er fjernet.
+
+### 3. «Refundert» i Tidligere ordrer
+
+Kortet får merket «Refundert», og detaljvinduet sier hvor mye varer som ble refundert og når.
+
+### Hvordan tallene regnes
+
+`settlement_ledger` er den ene regneboka: én linje per ordre (gruppe) og per justering, med
+provisjonen regnet og avrundet per linje. Summen av linjene i CSV-en er derfor nøyaktig det
+som står i sammendraget. Funksjonene `settlement_lines`, `settlement_summary` og
+`settlement_months` leser den, og bestemmer selv hvem som ser hva: Garnly alle butikker, en
+butikk bare seg selv, uansett hvilken `p_store` panelet sender. Utbetalinger skrives bare
+gjennom `mark_settlement_paid` / `unmark_settlement_paid`, som sjekker `garnly_admins`
+eksplisitt.
+
+To endringer i regnestykket fra før:
+
+- **Måneder i norsk tid.** Før gikk månedsgrensen ved midnatt UTC, så en ordre kl. 00:30 natt
+  til 1. i måneden havnet i forrige måned.
+- **Provisjonen fryses på ordren** (`routing_groups.commission_pct`, satt av en trigger når
+  butikken får den). En ny avtale med en butikk skriver ikke lenger om måneder som er betalt.
+  Eksisterende ordrer er fylt med dagens sats (10 % for begge).
+
+`v_admin_settlement` og `v_store_settlement` er erstattet, og regnet hver sin vei: den ene
+bare `assigned`, den andre også `fulfilled`, begge i UTC.
+
+### Verifisert mot ekte data
+
+Med en ekte refusjon: #1004 (Strikkefryd, testordre) ble refundert i Shopify i dag, 85 kr i
+varer + 79 kr frakt. `is_test` satt midlertidig til `false`, så kjørt gjennom den deployede
+funksjonen:
+
+- Backstoppen fant alle fem refunderte ordrene. Fire ble hoppet over som testordrer; #1004 ga
+  én rad: Strikkefryd, varebeløp −85,00, provisjon 10 %, **trekk −76,50**, oktober. Frakten
+  (79 kr) ikke trukket.
+- Samme refusjon kjørt på nytt: «fantes fra før», ingen dobbel rad.
+- Som Garnly: september viser Strikkefryd 1 ordre, 85,00 / 8,50 / 76,50; oktober −76,50.
+- Som Strikkefryd: bare egne tall, ingen knapper, og «Refundert 85,00 kr» på #1004.
+- Som Garnkilden: tom liste – også når Strikkefryds id sendes inn direkte.
+- **I ekte Chromium, innlogget som de tre ekte brukerne mot den ekte databasen:** 23 av 23
+  riktige – sammendrag, minuslinjer, CSV-innhold, dialogen for utbetalt, «Refundert» i
+  historikken, og at butikkene ikke ser hverandre. Markeringen ble fanget i nettleseren, så
+  testen ikke skrev noe.
+- **Utbetaling, i en transaksjon som ble rullet tilbake:** butikk avvist, løpende måned
+  avvist, september markert med 76,50 (frosset), dobbel markering avvist, en refusjon datert
+  september havnet i oktober, angre annullerte, ny markering tok raden i bruk igjen.
+- Øreavrunding: 99,95 kr gir provisjon 10,00 (ikke 9,99) og 89,95 til butikken, likt for salg
+  og refusjon.
+
+#1004 er satt tilbake til testordre. Regneboka er tom igjen (0 linjer).
+
+### Rydd – trenger Embrik
+
+Supabase-koblingen stopper SQL med DROP eller DELETE til noen bekrefter i appen, og ga opp
+etter 60 sekunder. Tre ting ble derfor stående. Ingen av dem påvirker tallene:
+
+- **Test-trekket på #1004** står i `settlement_adjustments`. Det telles ikke, fordi #1004 er
+  testordre, men Strikkefryd ser «Refundert» på den i Tidligere ordrer – noe som er sant.
+  `delete from settlement_adjustments where shopify_refund_id = 'gid://shopify/Refund/1111326326844';`
+- **`v_admin_settlement` og `v_store_settlement`** er stengt for panelet og merket UTGÅTT.
+  `drop view v_admin_settlement; drop view v_store_settlement;`
+- 031 ble lagt inn bit for bit med vanlig SQL i stedet for som én migrasjon. Filen i repoet er
+  fasit; den står ikke i `supabase_migrations`.
+
+### Deploy
+
+`order-refunded` er deployet via Supabase-koblingen (CLI-tokenet var slettet), med samme filer
+som i repoet. Panelet går ut med Vercel ved push.
+
 ## Innlogginger til panelet (01.10.2026)
 
 Tre brukere, alle med nytt passord (gitt til Embrik direkte, ikke lagret her):

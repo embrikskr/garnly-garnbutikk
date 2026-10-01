@@ -57,6 +57,7 @@
   <nav class="faner" role="tablist">
     <button id="fane-aktive" class="fane fane--valgt" role="tab" aria-selected="true" aria-controls="visning-aktive">Aktive ordrer</button>
     <button id="fane-historikk" class="fane" role="tab" aria-selected="false" aria-controls="visning-historikk">Tidligere ordrer</button>
+    <button id="fane-oppgjor" class="fane" role="tab" aria-selected="false" aria-controls="visning-oppgjor" hidden>Oppgjør</button>
     <button id="fane-garnly" class="fane" role="tab" aria-selected="false" aria-controls="visning-garnly" hidden>Garnly</button>
   </nav>
 
@@ -113,11 +114,37 @@
       <div id="admin-ordrer" class="tabell"></div>
       <p id="admin-ordrer-tom" class="empty" hidden>Ingen ordrer i utvalget.</p>
     </section>
+  </main>
+
+  <!-- Oppgjør: samme fane for Garnly (alle butikker) og butikken (bare seg selv). -->
+  <main id="visning-oppgjor" class="admin" role="tabpanel" aria-labelledby="fane-oppgjor" hidden>
+    <section>
+      <div class="filtre">
+        <label class="felt" id="oppgjor-butikk-felt" hidden>Butikk <select id="oppgjor-butikk"></select></label>
+        <label class="felt">Periode
+          <select id="oppgjor-periode">
+            <option value="denne">Denne måneden</option>
+            <option value="forrige">Forrige måned</option>
+            <option value="egen">Egendefinert</option>
+          </select>
+        </label>
+        <label class="felt" id="oppgjor-fra-felt" hidden>Fra <input type="date" id="oppgjor-fra"></label>
+        <label class="felt" id="oppgjor-til-felt" hidden>Til <input type="date" id="oppgjor-til"></label>
+        <button id="oppgjor-csv" class="btn btn--secondary">Last ned CSV</button>
+      </div>
+      <p id="oppgjor-periodetekst" class="svak"></p>
+      <div id="oppgjor-sum" class="tabell"></div>
+      <p class="svak">Butikken får varebeløpet minus Garnlys provisjon. Frakt er Garnlys og er aldri med. Refunderte varer trekkes i måneden de ble refundert, eller i neste måned hvis den alt er betalt ut. Testordrer telles ikke.</p>
+    </section>
+
+    <section id="oppgjor-linjer-seksjon" hidden>
+      <h2 class="col__title" id="oppgjor-linjer-tittel">Ordrer</h2>
+      <div id="oppgjor-linjer" class="tabell"></div>
+    </section>
 
     <section>
-      <h2 class="col__title">Oppgjør per butikk</h2>
-      <div id="admin-oppgjor" class="tabell"></div>
-      <p id="admin-oppgjor-tom" class="empty" hidden>Ingen salg å gjøre opp ennå.</p>
+      <h2 class="col__title">Måned for måned</h2>
+      <div id="oppgjor-maaneder" class="tabell"></div>
     </section>
   </main>
 </div>
@@ -136,6 +163,17 @@
   <div class="card__actions">
     <button id="gi-send" class="btn btn--primary">Send tilbud</button>
     <button id="gi-lukk" class="btn btn--secondary">Avbryt</button>
+  </div>
+</dialog>
+
+<!-- Marker en måned som utbetalt -->
+<dialog id="utbetalt-dialog" class="detalj">
+  <h2 class="detalj__tittel">Marker som utbetalt</h2>
+  <p id="utbetalt-hva" class="hjelp"></p>
+  <label class="felt">Utbetalt dato <input type="date" id="utbetalt-dato"></label>
+  <div class="card__actions">
+    <button id="utbetalt-lagre" class="btn btn--primary">Marker som utbetalt</button>
+    <button id="utbetalt-lukk" class="btn btn--secondary">Avbryt</button>
   </div>
 </dialog>
 
