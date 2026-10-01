@@ -20,9 +20,11 @@
  * external_id (for product_aliases) = "v:<variant-id>" for varianter, "p:<product-id>" for produkter uten varianter.
  */
 import type { StockLine, StoreRow } from "../types.ts";
-import { AdapterError, normalizeEan, type PosAdapter, sleep } from "./types.ts";
+import { AdapterError, borProveIgjen, normalizeEan, type PosAdapter, sleep } from "./types.ts";
 
 const PAGE = 50;
+/** Hvor mange ganger en side prøves på nytt ved 429 eller 5xx. Se borProveIgjen. */
+const MAKS_FORSOK = 3;
 
 interface JsonApiResource {
   id: string;
@@ -31,7 +33,14 @@ interface JsonApiResource {
   relationships?: Record<string, { data: { id: string; type: string } | { id: string; type: string }[] | null }>;
 }
 
-async function getPage(store: StoreRow, secrets: Record<string, string>, resource: string, page: number, extra: Record<string, string> = {}): Promise<{ data: JsonApiResource[]; last: boolean }> {
+async function getPage(
+  store: StoreRow,
+  secrets: Record<string, string>,
+  resource: string,
+  page: number,
+  extra: Record<string, string> = {},
+  forsok = 1,
+): Promise<{ data: JsonApiResource[]; last: boolean }> {
   const shop = String(store.pos_config.shop ?? "");
   if (!shop) throw new AdapterError(`Butikk ${store.name}: pos_config.shop mangler`);
   const url = new URL(`https://api.mystore.no/shops/${shop}/${resource}`);
@@ -46,12 +55,17 @@ async function getPage(store: StoreRow, secrets: Record<string, string>, resourc
       "User-Agent": "Garnly Sync",
     },
   });
-  if (res.status === 429) {
-    await sleep(5000);
-    return getPage(store, secrets, resource, page, extra);
-  }
   if (res.status === 404 && page > 1) return { data: [], last: true };
-  if (!res.ok) throw new AdapterError(`Mystore ${resource} side ${page}: ${res.status} ${(await res.text()).slice(0, 200)}`, res.status);
+  if (!res.ok && borProveIgjen(res.status) && forsok < MAKS_FORSOK) {
+    // 429 trenger å vente ut vinduet; 504 trenger bare at serveren puster.
+    await res.body?.cancel();
+    await sleep(res.status === 429 ? 5000 : 2000 * forsok);
+    return getPage(store, secrets, resource, page, extra, forsok + 1);
+  }
+  if (!res.ok) {
+    const halen = forsok > 1 ? ` (etter ${forsok} forsøk)` : "";
+    throw new AdapterError(`Mystore ${resource} side ${page}${halen}: ${res.status} ${(await res.text()).slice(0, 200)}`, res.status);
+  }
   const json = await res.json();
   const data: JsonApiResource[] = json.data ?? [];
   const last = data.length < PAGE || !json.links?.next;

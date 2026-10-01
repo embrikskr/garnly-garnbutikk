@@ -2,6 +2,104 @@
 
 Oppdatert: 2026-10-01
 
+## Garnly-admin i butikkpanelet (01.10.2026)
+
+Egen fane «Garnly», bare for brukere i `garnly_admins`. Rollen er en egen tabell og ikke
+`store_users.role = 'admin'`: `store_users` har `store_id` som del av primærnøkkelen og not
+null, så en admin måtte knyttes til en vilkårlig butikk – og ville dukket opp som butikk i
+panelet og i butikkvelgeren. **Admin-brukeren har ingen rad i `store_users`**, og hvilke
+faner som vises styres nå av medlemskap der, ikke av butikklista (admin ser alle butikker via
+`stores_admin`-policyen, men er ikke selv en av dem).
+
+Admin-bruker opprettet: `embrik.skrindo@gmail.com`.
+
+### Hva fanen viser
+
+- **Trenger handling**: eskalerte grupper, og tilbud som står ubesvart etter fristen. Hvert
+  kort viser ordrenr, kunde, varelinjer, **hvem som har avslått og hvorfor**
+  (`response_note`), og hvor lenge den har ventet.
+- **Synkstatus** per butikk: grønn prikk når synken går, rød med feilmeldingen når den ikke
+  gjør det, gul når det er over en time siden sist. Siste feil og antall feil siste uke står
+  under.
+- **Alle ordrer** på tvers av butikker, med status, butikk, frist og sporingsnummer. Filter
+  på butikk og status. Testordrer er skjult som standard, med bryter.
+- **Oppgjør per butikk** og nøkkeltall. «Trenger handling» og synkfeil lyser rødt.
+
+### Handlinger
+
+- **Gi til butikk** – oppretter et tilbud til butikken admin velger, **uten lagersjekk**.
+  Lageret vårt er maks 15 minutter gammelt og kan være feil på nettopp den varen; når
+  rutingen har gitt opp, er et menneske som ringer butikken en bedre kilde. `qualified_stores`
+  omgås med vilje her, og bare her. Loggføres som `manual_assign` med `uten_lagersjekk: true`
+  og hvem som gjorde det.
+- **Prøv ruting på nytt** – kjører `makeNextOffer` mot dagens lager, for eksempel etter at en
+  butikk har synket inn nytt.
+- **Kanseller** er bare en lenke til ordren i Shopify. Refusjon skal gjøres der, av et
+  menneske.
+
+Tilbudslogikken er delt: `sendOffer` (token, frist, varsling, auto-godkjenning) brukes både av
+`makeNextOffer` og av den manuelle tildelingen. Var den duplisert, ville en manuell tildeling
+fort mistet enten fristen, engangslenka eller auto-godkjenningen.
+
+### Varsling
+
+Eskalering sender e-post i det den skjer (`escalateGroup` → `notifyOps`) – det var på plass
+fra før. Nytt er `ops-digest`: daglig kl. 08 går det ut en e-post hvis noe står i «Trenger
+handling». **Ingenting sendes når lista er tom** – en daglig «alt er fint» blir filtrert bort,
+og da forsvinner også den som betyr noe.
+
+Klokkeslettet sjekkes i funksjonen, ikke i cron: pg_cron går i UTC, og 08:00 i Norge er 06:00
+UTC om sommeren og 07:00 om vinteren. Jobben fyrer på begge, og funksjonen slipper bare
+gjennom den som faktisk er kl. 08 lokalt.
+
+### Hvorfor synken feilet
+
+Mystore svarte **504 Gateway Time-out** på første produktside 30.09 kl. 13:16 og 01.10 kl.
+07:01. Deres server, ikke vår kode – neste kjøring et kvarter senere gikk fint begge ganger,
+og `consecutive_sync_failures` sto på 0 etterpå, så ingen varsling gikk ut (grensen er tre på
+rad). De eldre feilene var noe annet: 27.09 var Shopify-nøklene under butikkflyttingen, 23.09
+var Duell-proxyen utilgjengelig, og 05.09 var en ekte bug som ble rettet.
+
+Mystore-adapteren prøver nå på nytt: opptil tre forsøk ved 429 og 5xx, med 2 s og 4 s
+mellomrom. 4xx prøves ikke – en 401 blir ikke bedre av å spørre igjen. Rekursjonen ved 429 var
+dessuten ubundet før; nå er den begrenset.
+
+### Verifisert mot ekte data
+
+**RLS-grensen, med ekte innlogging som begge roller:**
+
+| | admin | butikkbruker (Garnkilden) |
+|---|---|---|
+| `stores` | Strikkefryd + Garnkilden | bare Garnkilden |
+| `v_admin_stats` / `_orders` / `_sync` / `_settlement` / `_action_needed` | data | **0 rader i alle** |
+| `garnly_admins` | sin egen rad | 0 rader |
+| `store_users` | **0 rader** (admin er ikke en butikk) | sin egen |
+| `POST admin-actions` | virker | **403 «Krever Garnly-admin»** |
+
+Uten token: 401. Ukjent handling: 400. Gruppe som ikke kan rutes: pent avslag, ikke en 500.
+
+**Handlingene, på ekte:** #1002s gruppe ble midlertidig satt til eskalert, og «Gi til butikk»
+ble kjørt mot **Garnkilden, som aldri var kandidat på den ordren**. Resultat: ny tilbudsrad
+(seq 2, status `offered`, med token og frist innenfor åpningstid), gruppen tilbake til
+`routing`, og revisjonsrad `manual_assign` med `av: embrik.skrindo@gmail.com` og
+`uten_lagersjekk: true`. Alt gjenopprettet etterpå.
+
+**Den daglige e-posten, i to trinn:** eskalert **testordre** ga `eskalert: 0, sendt: false`
+(testordrer vekker ingen); samme ordre som ekte ga `eskalert: 1, sendt: true`. Uten `force`
+på et annet klokkeslett: hoppet over med begrunnelse.
+
+**I ekte Chromium, begge roller:** admin ser bare Garnly-fanen (butikkfanene er skjult siden
+hen ikke har butikk), med nøkkeltall der «Trenger handling» og synkfeil lyser rødt, avslag med
+begrunnelse, grønn og rød synkprikk, filtre som virker (3 rader med testordrer, 2 uten, 1 med
+butikkfilter), og begge handlingene sender riktig kall. Butikkbrukeren ser **ikke** fanen.
+Testen ble kjørt med fanen synlig for alle først, og feilet da.
+
+### Fortsatt åpent
+
+`RESEND_API_KEY` og `OPS_EMAIL` er tomme, så både eskaleringsvarselet og den daglige e-posten
+havner bare i funksjonsloggen. Admin-fanen viser det samme uansett, men ingen får beskjed uten
+å åpne panelet.
+
 ## Produktbilde ute av panelet (01.10.2026)
 
 Bildet ble lagt inn dagen før og brukes ikke – butikken plukker på navn, farge og strekkode,

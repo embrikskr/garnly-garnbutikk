@@ -32,6 +32,13 @@ const el = {
   innstillinger: $("innstillinger"), innstillingerDialog: $("innstillinger-dialog"),
   innstillingerLukk: $("innstillinger-lukk"), skriverValg: $("skriver-valg"), skriverLagre: $("skriver-lagre"),
   skriverHjelp: $("skriver-hjelp"), autoGodkjenn: $("auto-godkjenn"),
+  faneGarnly: $("fane-garnly"), visningGarnly: $("visning-garnly"),
+  adminTall: $("admin-tall"), adminHandling: $("admin-handling"), adminHandlingTom: $("admin-handling-tom"),
+  adminSynk: $("admin-synk"), adminOrdrer: $("admin-ordrer"), adminOrdrerTom: $("admin-ordrer-tom"),
+  adminOppgjor: $("admin-oppgjor"), adminOppgjorTom: $("admin-oppgjor-tom"),
+  filterButikk: $("filter-butikk"), filterStatus: $("filter-status"), filterTest: $("filter-test"),
+  giDialog: $("gi-dialog"), giOrdre: $("gi-ordre"), giButikk: $("gi-butikk"),
+  giSend: $("gi-send"), giLukk: $("gi-lukk"),
 };
 
 /** Historikk: standardvindu, og hvor mye «Vis flere» utvider med. */
@@ -55,6 +62,9 @@ let historikkGrense = HISTORIKK_SIDE;
 let historikkRader = [];
 let sokTimer = null;
 let autoGodkjenning = false;
+let erAdmin = false;
+let alleButikker = [];
+let adminTimer = null;
 
 // ---------------------------------------------------------------- oppstart
 
@@ -112,12 +122,36 @@ async function start() {
   el.app.hidden = false;
   el.soundToggle.textContent = soundOn ? "🔔" : "🔕";
 
-  const { data, error } = await sb.from("stores").select("id, name").order("name");
-  if (error || !data?.length) {
-    toast("Brukeren er ikke koblet til en butikk. Ta kontakt med Garnly.", "error");
+  // Admin ser alle butikker (egen RLS-policy), men er ikke selv en butikk. Hvilke faner som
+  // vises styres derfor av medlemskapet i store_users, ikke av butikklista.
+  const [alle, medlem, admin] = await Promise.all([
+    sb.from("stores").select("id, name").order("name"),
+    sb.from("store_users").select("store_id"),
+    sb.from("garnly_admins").select("user_id").maybeSingle(),
+  ]);
+  erAdmin = !!admin.data;
+  alleButikker = alle.data ?? [];
+  const mine = new Set((medlem.data ?? []).map((r) => r.store_id));
+  stores = alleButikker.filter((s) => mine.has(s.id));
+
+  el.faneGarnly.hidden = !erAdmin;
+  if (!stores.length) {
+    if (!erAdmin) {
+      toast("Brukeren er ikke koblet til en butikk. Ta kontakt med Garnly.", "error");
+      return;
+    }
+    // Ren Garnly-bruker: butikkfanene har ingenting å vise.
+    el.faneAktive.hidden = true;
+    el.faneHistorikk.hidden = true;
+    velgFane("garnly");
+    klargjorAdminfiltre();
+    await lastAdmin();
+    adminTimer = setInterval(lastAdmin, 60000);
+    keepAwake();
     return;
   }
-  stores = data;
+  if (erAdmin) klargjorAdminfiltre();
+
   storeId = localStorage.getItem("garnly.store") && stores.some((s) => s.id === localStorage.getItem("garnly.store"))
     ? localStorage.getItem("garnly.store")
     : stores[0].id;
@@ -152,7 +186,7 @@ function teardown() {
   started = false;
   queueSig = assignedSig = null;
   if (channel) { sb.removeChannel(channel); channel = null; }
-  clearInterval(pollTimer); clearInterval(tickTimer);
+  clearInterval(pollTimer); clearInterval(tickTimer); clearInterval(adminTimer);
 }
 
 // ---------------------------------------------------------------- sanntid
@@ -728,20 +762,28 @@ function tegnKoStatus() {
 
 // ---------------------------------------------------------------- faner og historikk
 
-function velgFane(historikk) {
-  el.visningAktive.hidden = historikk;
-  el.visningHistorikk.hidden = !historikk;
-  el.faneAktive.classList.toggle("fane--valgt", !historikk);
-  el.faneHistorikk.classList.toggle("fane--valgt", historikk);
-  el.faneAktive.setAttribute("aria-selected", String(!historikk));
-  el.faneHistorikk.setAttribute("aria-selected", String(historikk));
+const FANER = {
+  aktive: [el.faneAktive, el.visningAktive],
+  historikk: [el.faneHistorikk, el.visningHistorikk],
+  garnly: [el.faneGarnly, el.visningGarnly],
+};
+
+function velgFane(navn) {
+  for (const [n, [fane, visning]] of Object.entries(FANER)) {
+    const valgt = n === navn;
+    visning.hidden = !valgt;
+    fane.classList.toggle("fane--valgt", valgt);
+    fane.setAttribute("aria-selected", String(valgt));
+  }
   // Hentes først når fanen faktisk åpnes: butikken har panelet stående hele dagen, og
   // historikken trenger ikke lastes på nytt hvert 20. sekund sammen med køen.
-  if (historikk) lastHistorikk();
+  if (navn === "historikk") lastHistorikk();
+  if (navn === "garnly") lastAdmin();
 }
 
-el.faneAktive.addEventListener("click", () => velgFane(false));
-el.faneHistorikk.addEventListener("click", () => velgFane(true));
+el.faneAktive.addEventListener("click", () => velgFane("aktive"));
+el.faneHistorikk.addEventListener("click", () => velgFane("historikk"));
+el.faneGarnly.addEventListener("click", () => velgFane("garnly"));
 
 el.sok.addEventListener("input", () => {
   // Debounce: uten den ville hvert tastetrykk blitt et kall til basen.
@@ -943,4 +985,220 @@ function toast(msg, kind = "") {
 
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// ---------------------------------------------------------------- Garnly-admin
+
+/**
+ * Admin-fanen.
+ *
+ * Alt her kommer fra v_admin_*-viewene, som filtrerer på is_garnly_admin() og gir en
+ * butikkbruker null rader. Handlingene går til `admin-actions`, som sjekker rollen på nytt –
+ * et view som returnerer ingenting er nok til å skjule data, men ikke til å hindre en POST.
+ */
+const ORDRESTATUS = {
+  routing: "Ute på tilbud",
+  assigned: "Til pakking",
+  fulfilled: "Sendt",
+  escalated: "Trenger handling",
+  cancelled: "Kansellert",
+};
+
+let adminOrdrer = [];
+let adminHandling = [];
+
+function klargjorAdminfiltre() {
+  el.filterButikk.innerHTML = '<option value="">Alle butikker</option>' +
+    alleButikker.map((b) => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join("");
+  el.filterStatus.innerHTML = '<option value="">Alle statuser</option>' +
+    Object.entries(ORDRESTATUS).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
+  el.giButikk.innerHTML = alleButikker.map((b) => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join("");
+}
+
+async function lastAdmin() {
+  if (!erAdmin) return;
+  const [tall, handling, ordrer, synk, oppgjor] = await Promise.all([
+    sb.from("v_admin_stats").select("*").maybeSingle(),
+    sb.from("v_admin_action_needed").select("*").order("ventet_siden", { ascending: true }),
+    sb.from("v_admin_orders").select("*").order("order_created_at", { ascending: false }).limit(200),
+    sb.from("v_admin_sync").select("*").order("butikk"),
+    sb.from("v_admin_settlement").select("*").limit(24),
+  ]);
+  adminHandling = handling.data ?? [];
+  adminOrdrer = ordrer.data ?? [];
+  tegnTall(tall.data);
+  tegnHandling();
+  tegnSynk(synk.data ?? []);
+  tegnOrdrer();
+  tegnOppgjor(oppgjor.data ?? []);
+}
+
+function tegnTall(t) {
+  if (!t) return;
+  const tall = [
+    ["Trenger handling", t.trenger_handling, t.trenger_handling > 0 ? "alarm" : ""],
+    ["Ute på tilbud", t.ute_pa_tilbud, ""],
+    ["Til pakking", t.til_pakking, ""],
+    ["Venter kassauttrekk", t.venter_kassauttrekk, ""],
+    ["Tildelt i dag", t.tildelt_i_dag, ""],
+    ["Butikker med synkfeil", t.butikker_med_synkfeil, t.butikker_med_synkfeil > 0 ? "alarm" : ""],
+  ];
+  el.adminTall.innerHTML = tall.map(([navn, verdi, kls]) =>
+    `<div class="tall__kort ${kls}"><b>${Number(verdi ?? 0)}</b><span>${navn}</span></div>`).join("");
+}
+
+function tegnHandling() {
+  el.adminHandlingTom.hidden = adminHandling.length > 0;
+  el.adminHandling.innerHTML = adminHandling.map((r) => {
+    const svar = (r.svar ?? []).map((s) =>
+      `<li>${esc(s.butikk)}: ${esc(AVSLAGSTEKST[s.status] ?? s.status)}${s.begrunnelse ? ` – ${esc(s.begrunnelse)}` : ""}</li>`).join("");
+    const ventet = ventetid(r.ventet_siden);
+    return `<article class="card card--late" data-group="${esc(r.group_id)}" data-ordre="${esc(r.order_name ?? "")}" data-shopify="${esc(r.shopify_order_id ?? "")}">
+      <div class="card__head">
+        <span class="card__order">${esc(r.order_name ?? "Ordre")}${r.is_test ? ' <span class="merke">TEST</span>' : ""}</span>
+        <span class="card__meta">${r.arsak === "eskalert" ? "Ingen butikk kunne ta den" : `Frist gikk ut hos ${esc(r.store_name ?? "")}`} · ventet ${ventet}</span>
+      </div>
+      <ul class="lines">${lineItems(r.line_items)}</ul>
+      <p class="addr">${esc(r.kunde ?? "")}${r.kunde_postnr ? ` – ${esc(r.kunde_postnr)} ${esc(r.kunde_sted ?? "")}` : ""}</p>
+      ${svar ? `<ul class="avslag">${svar}</ul>` : ""}
+      <div class="card__actions card__actions--tre">
+        <button class="btn btn--primary btn--sm" data-act="gi">Gi til butikk</button>
+        <button class="btn btn--secondary btn--sm" data-act="ruting">Prøv ruting på nytt</button>
+        <a class="btn btn--ghost btn--sm" data-act="shopify" target="_blank" rel="noopener"
+           href="${esc(shopifyOrdreLenke(r.shopify_order_id))}">Åpne i Shopify</a>
+      </div>
+    </article>`;
+  }).join("");
+}
+
+const AVSLAGSTEKST = {
+  declined: "avslo",
+  declined_stock: "ikke nok på lager",
+  expired: "svarte ikke innen fristen",
+  cancelled: "tilbudet ble trukket",
+};
+
+/** Kansellering og refusjon gjøres av et menneske i Shopify, ikke herfra. */
+function shopifyOrdreLenke(gid) {
+  const id = String(gid ?? "").split("/").pop();
+  return id ? `https://admin.shopify.com/store/${CFG.SHOPIFY_STORE ?? "fhxr10-gu"}/orders/${id}` : "#";
+}
+
+function ventetid(fra) {
+  if (!fra) return "–";
+  const min = Math.round((Date.now() - new Date(fra).getTime()) / 60000);
+  if (min < 60) return `${min} min`;
+  const t = Math.floor(min / 60);
+  return t < 48 ? `${t} t` : `${Math.floor(t / 24)} døgn`;
+}
+
+function tegnSynk(rader) {
+  el.adminSynk.innerHTML = rader.map((r) => {
+    const feiler = r.consecutive_sync_failures > 0 || r.last_sync_status !== "ok";
+    const gammel = r.last_sync_at && Date.now() - new Date(r.last_sync_at).getTime() > 90 * 60000;
+    const niva = feiler ? "feil" : gammel ? "gammel" : "ok";
+    const tekst = feiler
+      ? `Siste forsøk feilet (${r.consecutive_sync_failures} på rad)`
+      : gammel ? "Ingen synk på over en time" : `${r.last_sync_rows ?? 0} varer, oppdatert ${r.last_sync_at ? klokke(r.last_sync_at) : "aldri"}`;
+    return `<article class="synk synk--${niva}">
+      <div class="synk__topp">
+        <span class="synk__prikk" aria-hidden="true"></span>
+        <b>${esc(r.butikk)}</b> <span class="synk__pos">${esc(r.pos_system)}</span>
+      </div>
+      <p class="synk__tekst">${esc(tekst)}</p>
+      ${r.siste_feil?.feil ? `<p class="synk__feil">Siste feil ${tidspunkt(r.siste_feil.nar)}: ${esc(String(r.siste_feil.feil).slice(0, 180))}</p>` : ""}
+      ${r.feil_siste_uke > 0 ? `<p class="synk__tekst">${r.feil_siste_uke} feil siste uke</p>` : ""}
+    </article>`;
+  }).join("");
+}
+
+function tegnOrdrer() {
+  const butikk = el.filterButikk.value, status = el.filterStatus.value, visTest = el.filterTest.checked;
+  const rader = adminOrdrer.filter((r) =>
+    (visTest || !r.is_test) &&
+    (!butikk || r.store_id === butikk) &&
+    (!status || r.group_status === status));
+  el.adminOrdrerTom.hidden = rader.length > 0;
+  el.adminOrdrer.innerHTML = rader.length
+    ? `<table><thead><tr><th>Ordre</th><th>Status</th><th>Butikk</th><th>Frist</th><th>Sporing</th></tr></thead><tbody>${
+      rader.map((r) => `<tr>
+        <td>${esc(r.order_name ?? "")}${r.is_test ? ' <span class="merke">TEST</span>' : ""}<br><span class="svak">${esc(r.kunde ?? "")}</span></td>
+        <td>${esc(ORDRESTATUS[r.group_status] ?? r.group_status)}${r.ship_error ? '<br><span class="svak svak--feil">stoppet ved sending</span>' : ""}</td>
+        <td>${esc(r.store_name ?? r.tilbudt_butikk ?? "–")}</td>
+        <td>${r.deadline_at ? tidspunkt(r.deadline_at) : "–"}</td>
+        <td>${r.tracking_number ? (r.tracking_url ? `<a href="${esc(r.tracking_url)}" target="_blank" rel="noopener">${esc(r.tracking_number)}</a>` : esc(r.tracking_number)) : "–"}</td>
+      </tr>`).join("")}</tbody></table>`
+    : "";
+}
+
+function tegnOppgjor(rader) {
+  el.adminOppgjorTom.hidden = rader.length > 0;
+  el.adminOppgjor.innerHTML = rader.length
+    ? `<table><thead><tr><th>Måned</th><th>Butikk</th><th>Ordrer</th><th>Brutto</th><th>Provisjon</th><th>Til utbetaling</th></tr></thead><tbody>${
+      rader.map((r) => `<tr>
+        <td>${new Date(r.maaned).toLocaleDateString("nb-NO", { month: "long", year: "numeric" })}</td>
+        <td>${esc(r.butikk)}</td>
+        <td>${Number(r.ordrer)}</td>
+        <td>${kroner(r.brutto_inkl_mva)}</td>
+        <td>${kroner(r.garnly_provisjon)}</td>
+        <td><b>${kroner(r.til_utbetaling)}</b></td>
+      </tr>`).join("")}</tbody></table>`
+    : "";
+}
+
+function kroner(v) {
+  return Number(v ?? 0).toLocaleString("nb-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 });
+}
+
+for (const elm of [el.filterButikk, el.filterStatus, el.filterTest]) elm.addEventListener("change", tegnOrdrer);
+
+el.adminHandling.addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-act]");
+  if (!btn) return;
+  const kort = btn.closest("[data-group]");
+  if (!kort) return;
+  if (btn.dataset.act === "gi") {
+    el.giDialog.dataset.group = kort.dataset.group;
+    el.giOrdre.textContent = `${kort.dataset.ordre || "Ordren"} – velg butikken som skal få tilbudet.`;
+    el.giDialog.showModal();
+    return;
+  }
+  if (btn.dataset.act === "ruting") {
+    btn.disabled = true;
+    await adminHandling_kall({ action: "prov_ruting", group_id: kort.dataset.group });
+    btn.disabled = false;
+  }
+});
+
+el.giLukk.addEventListener("click", () => el.giDialog.close());
+el.giSend.addEventListener("click", async () => {
+  el.giSend.disabled = true;
+  const ok = await adminHandling_kall({
+    action: "gi_til_butikk",
+    group_id: el.giDialog.dataset.group,
+    store_id: el.giButikk.value,
+  });
+  el.giSend.disabled = false;
+  if (ok) el.giDialog.close();
+});
+
+async function adminHandling_kall(body) {
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { showLogin(); return false; }
+    const res = await fetch(`${CFG.SUPABASE_URL}/functions/v1/admin-actions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify(body),
+      signal: typeof AbortSignal?.timeout === "function" ? AbortSignal.timeout(45000) : undefined,
+    });
+    const svar = await res.json().catch(() => ({}));
+    toast(svar.melding || (svar.ok ? "Gjort." : "Noe gikk galt."), svar.ok ? undefined : "error");
+    await lastAdmin();
+    return svar.ok === true;
+  } catch (err) {
+    console.error("[admin-actions]", err);
+    toast(`Handlingen feilet: ${String(err?.message ?? err)}`, "error");
+    return false;
+  }
 }

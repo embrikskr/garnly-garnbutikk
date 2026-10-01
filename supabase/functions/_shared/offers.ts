@@ -44,6 +44,25 @@ export async function makeNextOffer(groupId: string): Promise<boolean> {
   const { data: store } = await db.from("stores").select("*").eq("id", nextStoreId).single();
   if (!store) return false;
 
+  await sendOffer(groupId, offer.id, store as StoreRow, group.line_items as LineItem[], group.routing_orders.shopify_order_name ?? "");
+  return true;
+}
+
+/**
+ * Sender ett konkret tilbud: token, frist, varsling, logg – og auto-godkjenning hvis butikken
+ * har skrudd den på.
+ *
+ * Skilt ut fordi admin kan tildele manuelt (se tildelManuelt). Hadde den delen vært duplisert,
+ * ville en manuell tildeling fort mistet enten fristen, engangslenka eller auto-godkjenningen.
+ */
+export async function sendOffer(
+  groupId: string,
+  offerId: string,
+  store: StoreRow,
+  lineItems: LineItem[],
+  orderName: string,
+): Promise<void> {
+  const db = adminClient();
   const token = newToken();
   const now = new Date();
   const deadline = deadlineWithinBusinessHours(now, Number(store.offer_ttl_hours), store.business_hours);
@@ -54,17 +73,90 @@ export async function makeNextOffer(groupId: string): Promise<boolean> {
     offered_at: now.toISOString(),
     deadline_at: deadline.toISOString(),
     sequence_no: (count ?? 0) + 1,
-  }).eq("id", offer.id);
+  }).eq("id", offerId);
 
-  await notifyStoreOffer(store as StoreRow, group.routing_orders.shopify_order_name ?? "", group.line_items as LineItem[], deadline, offerLinks(token));
-  await audit("offer", offer.id, "offered", { store_id: store.id, deadline_at: deadline.toISOString(), group_id: groupId });
+  await notifyStoreOffer(store, orderName, lineItems, deadline, offerLinks(token));
+  await audit("offer", offerId, "offered", { store_id: store.id, deadline_at: deadline.toISOString(), group_id: groupId });
 
   if (store.auto_accept) {
     // Auto-godta: kall offer-respond internt med token
     const { callFunction } = await import("./db.ts");
     await callFunction("offer-respond", { token, action: "accept", auto: true });
   }
-  return true;
+}
+
+/**
+ * Admin gir gruppen til en butikk hen velger selv, uten lagersjekk.
+ *
+ * Lageret i Supabase er maks 15 minutter gammelt og kan være feil på nettopp den varen –
+ * butikken kan ha bestilt inn, eller ha noe stående som kassa ikke teller. Når rutingen har
+ * gitt opp, er et menneske som ringer butikken en bedre kilde enn tallet vårt. Derfor
+ * omgås `qualified_stores` med vilje her, og bare her.
+ *
+ * Gruppen settes tilbake til `routing`, så avslår butikken likevel, går den videre i køen
+ * som normalt.
+ */
+export async function tildelManuelt(groupId: string, storeId: string, av: string): Promise<{ ok: boolean; melding: string }> {
+  const db = adminClient();
+  const { data: group } = await db
+    .from("routing_groups")
+    .select("*, routing_orders!inner(shopify_order_name)")
+    .eq("id", groupId).single();
+  if (!group) return { ok: false, melding: "Fant ikke gruppen" };
+  if (!["escalated", "routing"].includes(group.status)) {
+    return { ok: false, melding: `Gruppen er ${group.status} og kan ikke tilbys på nytt.` };
+  }
+
+  const { data: store } = await db.from("stores").select("*").eq("id", storeId).single();
+  if (!store) return { ok: false, melding: "Fant ikke butikken" };
+  if (!store.active) return { ok: false, melding: `${store.name} er ikke aktiv.` };
+
+  // Et åpent tilbud på samme gruppe ville gitt to butikker samme ordre.
+  const { data: apent } = await db.from("offers").select("id").eq("routing_group_id", groupId).eq("status", "offered").limit(1);
+  if (apent?.length) return { ok: false, melding: "Gruppen har alt et tilbud ute. Vent til fristen går ut." };
+
+  // Butikken var kanskje aldri kandidat; da finnes ingen pending-rad å flippe.
+  let offerId = (await db.from("offers").select("id").eq("routing_group_id", groupId).eq("store_id", storeId).eq("status", "pending").maybeSingle()).data?.id;
+  if (!offerId) {
+    const { count } = await db.from("offers").select("id", { count: "exact", head: true }).eq("routing_group_id", groupId);
+    const { data: ny, error } = await db.from("offers")
+      .insert({ routing_group_id: groupId, store_id: storeId, sequence_no: (count ?? 0) + 1, status: "pending" })
+      .select("id").single();
+    if (error || !ny) return { ok: false, melding: error?.message ?? "Fikk ikke opprettet tilbudet" };
+    offerId = ny.id;
+  }
+
+  await db.from("routing_groups").update({ status: "routing" }).eq("id", groupId);
+  await refreshOrderStatus(group.routing_order_id);
+  await audit("routing_group", groupId, "manual_assign", {
+    av,
+    store_id: storeId,
+    butikk: store.name,
+    order: group.routing_orders?.shopify_order_name ?? null,
+    // Lagersjekken er bevisst hoppet over. Det skal stå i loggen.
+    uten_lagersjekk: true,
+  });
+  await sendOffer(groupId, offerId!, store as StoreRow, group.line_items as LineItem[], group.routing_orders?.shopify_order_name ?? "");
+  return { ok: true, melding: `Tilbudet er sendt til ${store.name}.` };
+}
+
+/**
+ * Admin ber om ny ruting mot dagens lager. Brukes når en butikk har synket inn nytt lager
+ * etter at gruppen ble eskalert.
+ */
+export async function provRutingPaNytt(groupId: string, av: string): Promise<{ ok: boolean; melding: string }> {
+  const db = adminClient();
+  const { data: group } = await db.from("routing_groups").select("id, status").eq("id", groupId).single();
+  if (!group) return { ok: false, melding: "Fant ikke gruppen" };
+  if (!["escalated", "routing"].includes(group.status)) {
+    return { ok: false, melding: `Gruppen er ${group.status} og kan ikke rutes på nytt.` };
+  }
+  await db.from("routing_groups").update({ status: "routing" }).eq("id", groupId);
+  await audit("routing_group", groupId, "manual_reroute", { av });
+  const sendt = await makeNextOffer(groupId);
+  return sendt
+    ? { ok: true, melding: "Tilbudet er sendt til neste butikk i køen." }
+    : { ok: false, melding: "Ingen butikk har varene på lager nå. Ordren står fortsatt som eskalert." };
 }
 
 export async function escalateGroup(group: RoutingGroupRow & { routing_orders?: { shopify_order_name?: string } }, reason: string) {

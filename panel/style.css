@@ -294,3 +294,52 @@ button { font: inherit; }
 .tider { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; font-size: 15px; }
 .tider dt { color: var(--ink-soft); }
 .tider dd { margin: 0; }
+
+/* ---------------------------------------------------------------- Garnly-admin */
+.admin {
+  padding: 24px max(16px, env(safe-area-inset-left)) 64px;
+  max-width: 1100px; margin: 0 auto; display: grid; gap: 32px;
+}
+.admin section { display: grid; gap: 14px; }
+
+/* Nøkkeltall. «Trenger handling» og synkfeil er de to som skal rive i øyet. */
+.tall { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.tall__kort {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  padding: 14px 16px; display: grid; gap: 2px;
+}
+.tall__kort b { font-size: 30px; line-height: 1; font-variant-numeric: tabular-nums; }
+.tall__kort span { font-size: 14px; color: var(--ink-soft); }
+.tall__kort.alarm { border-color: var(--red); }
+.tall__kort.alarm b { color: var(--red); }
+
+/* Hvem som har sagt nei, og hvorfor. Uten det må man gjette hvorfor ordren står fast. */
+.avslag { list-style: none; margin: 0; padding: 12px 14px; display: grid; gap: 4px;
+  font-size: 14px; color: var(--ink-soft); background: #FBF8F3; border-radius: 10px; }
+.card__actions--tre { grid-template-columns: repeat(3, 1fr); }
+.card__actions--tre .btn { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+@media (max-width: 620px) { .card__actions--tre { grid-template-columns: 1fr; } }
+
+/* Synkstatus: grønt når alt går, rødt når det ikke gjør det. */
+.synk { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; display: grid; gap: 4px; }
+.synk__topp { display: flex; align-items: center; gap: 8px; }
+.synk__prikk { width: 12px; height: 12px; border-radius: 50%; background: var(--green); flex: none; }
+.synk--feil { border-color: var(--red); }
+.synk--feil .synk__prikk { background: var(--red); }
+.synk--gammel .synk__prikk { background: var(--amber); }
+.synk__pos { font-size: 14px; color: var(--ink-soft); }
+.synk__tekst { margin: 0; font-size: 15px; color: var(--ink-soft); }
+.synk__feil { margin: 0; font-size: 14px; color: var(--red); word-break: break-word; }
+
+.filtre { display: flex; gap: 16px; flex-wrap: wrap; align-items: end; }
+.filtre .felt { min-width: 180px; }
+.bryter--inline { padding: 10px 14px; align-items: center; }
+
+.tabell { overflow-x: auto; background: var(--card); border: 1px solid var(--border); border-radius: 14px; }
+.tabell table { border-collapse: collapse; width: 100%; font-size: 15px; }
+.tabell th, .tabell td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.tabell th { font-size: 14px; color: var(--ink-soft); font-weight: 600; }
+.tabell tr:last-child td { border-bottom: none; }
+.tabell a { color: var(--wine); }
+.svak { font-size: 14px; color: var(--ink-soft); }
+.svak--feil { color: var(--red); }

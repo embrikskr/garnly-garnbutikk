@@ -35,3 +35,18 @@ export function normalizeEan(v: unknown): string | null {
   // Strip leading zeros used to pad UPC to EAN-13 so both forms match
   return s.replace(/^0+(?=\d{12,13}$)/, "");
 }
+
+/**
+ * Skal dette svaret prøves på nytt?
+ *
+ * REN logikk. Mystore svarte 504 Gateway Time-out på første produktside 30.09 og 01.10 2026,
+ * og synken feilet begge ganger – selv om neste kjøring et kvarter senere gikk fint. Det er
+ * deres server som bruker for lang tid, ikke noe hos oss, og et nytt forsøk er alt som skal
+ * til. Feilen ble stående i loggen som om noe var galt med synken.
+ *
+ * 5xx og 429 prøves på nytt. 4xx gjør vi ikke: en 401 blir ikke bedre av å spørre igjen, og
+ * en 400 betyr at spørringen vår er feil.
+ */
+export function borProveIgjen(status: number): boolean {
+  return status === 429 || (status >= 500 && status < 600);
+}

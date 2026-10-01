@@ -57,6 +57,7 @@
   <nav class="faner" role="tablist">
     <button id="fane-aktive" class="fane fane--valgt" role="tab" aria-selected="true" aria-controls="visning-aktive">Aktive ordrer</button>
     <button id="fane-historikk" class="fane" role="tab" aria-selected="false" aria-controls="visning-historikk">Tidligere ordrer</button>
+    <button id="fane-garnly" class="fane" role="tab" aria-selected="false" aria-controls="visning-garnly" hidden>Garnly</button>
   </nav>
 
   <main id="visning-aktive" class="cols" role="tabpanel" aria-labelledby="fane-aktive">
@@ -85,7 +86,58 @@
     <p id="historikk-empty" class="empty" hidden>Ingen tidligere ordrer i perioden.</p>
     <button id="vis-flere" class="btn btn--secondary btn--block" hidden>Vis flere</button>
   </main>
+  <main id="visning-garnly" class="admin" role="tabpanel" aria-labelledby="fane-garnly" hidden>
+    <div id="admin-tall" class="tall"></div>
+
+    <section>
+      <h2 class="col__title">Trenger handling</h2>
+      <div id="admin-handling" class="cards"></div>
+      <p id="admin-handling-tom" class="empty" hidden>Ingenting venter på Garnly akkurat nå.</p>
+    </section>
+
+    <section>
+      <h2 class="col__title">Synkstatus</h2>
+      <div id="admin-synk" class="cards"></div>
+    </section>
+
+    <section>
+      <h2 class="col__title">Alle ordrer</h2>
+      <div class="filtre">
+        <label class="felt">Butikk <select id="filter-butikk"><option value="">Alle</option></select></label>
+        <label class="felt">Status <select id="filter-status"><option value="">Alle</option></select></label>
+        <label class="bryter bryter--inline">
+          <input type="checkbox" id="filter-test">
+          <span><b>Vis testordrer</b></span>
+        </label>
+      </div>
+      <div id="admin-ordrer" class="tabell"></div>
+      <p id="admin-ordrer-tom" class="empty" hidden>Ingen ordrer i utvalget.</p>
+    </section>
+
+    <section>
+      <h2 class="col__title">Oppgjør per butikk</h2>
+      <div id="admin-oppgjor" class="tabell"></div>
+      <p id="admin-oppgjor-tom" class="empty" hidden>Ingen salg å gjøre opp ennå.</p>
+    </section>
+  </main>
 </div>
+
+<!-- Gi en eskalert ordre til en butikk -->
+<dialog id="gi-dialog" class="detalj">
+  <h2 class="detalj__tittel">Gi ordren til en butikk</h2>
+  <p id="gi-ordre" class="hjelp"></p>
+  <label class="felt">Butikk
+    <select id="gi-butikk"></select>
+  </label>
+  <p class="hjelp">
+    Tilbudet sendes selv om lageret vårt viser 0 – butikken kan ha bestilt inn, eller ha noe
+    kassa ikke teller. Avslår de, går ordren videre i køen som vanlig.
+  </p>
+  <div class="card__actions">
+    <button id="gi-send" class="btn btn--primary">Send tilbud</button>
+    <button id="gi-lukk" class="btn btn--secondary">Avbryt</button>
+  </div>
+</dialog>
 
 <!-- Butikkens innstillinger -->
 <dialog id="innstillinger-dialog" class="detalj">
