@@ -2,6 +2,49 @@
 
 Oppdatert: 2026-10-01
 
+## Etikettskriveren er Garnlys oppsett, ikke butikkens (01.10.2026)
+
+Valget lå i butikkpanelets innstillinger. Butikkene skal ikke forholde seg til DirectPrint i
+det hele tatt – de merker bare forskjellen på om etiketten kommer ut av seg selv eller må
+hentes med ikonet på kortet.
+
+- `stores.label_printer_id` → **`stores.directprint_printer_id`** (navnet DirectPrint faktisk
+  har). Settes bare av Garnly; admin-visningen får en skriverliste fra Cargonizer
+  `/printers`, og inntil den er bygget settes den direkte i databasen.
+- `label_printer_name` er **droppet**. Den ble bare brukt til å vise valget i
+  panelinnstillingene, og den siden finnes ikke lenger. En kolonne ingenting skriver til blir
+  lest som sannhet av noen senere – samme grunn som produktbildet ble tatt helt ut.
+- `store-settings` snakker ikke med Cargonizer lenger og svarer bare `{ ok, auto_accept }`.
+- Innstillinger-vinduet har bare «Godta nye ordrer automatisk».
+
+Toasten etter sending: **«Sendt. Etiketten skrives ut.»** når skriveren er satt, ellers
+«Sendt. Du finner den under Tidligere ordrer.»
+
+### Verifisert
+
+- **Ekte endepunkt:** `store-settings` svarer `{"ok":true,"auto_accept":true}` – ingen
+  skriverfelt i svaret.
+- **Databasen:** ingen `label_printer*`-kolonner igjen; begge butikker har
+  `directprint_printer_id = null`.
+- **I ekte Chromium, begge tilfeller:** med skriver satt er toasten nøyaktig «Sendt. Etiketten
+  skrives ut.» og ingen PDF lastes ned; uten skriver «Sendt. Du finner den under Tidligere
+  ordrer.». Innstillingsdialogen har **ingen skriverfelt**, og ordet «skriver» finnes ikke i
+  teksten. Lagringen sender bare `auto_accept`. Testen ble kjørt med «skriver» nevnt i
+  dialogen igjen, og feilet da.
+- Admin-fanen og resten av panelet er uendret og fortsatt grønt.
+
+### Merk
+
+Cargonizer-kontoen har **ingen DirectPrint-skrivere** ennå (`/printers` er tom), så
+automatisk utskrift er bare verifisert i nettleser mot en stubb, ikke mot ekte maskinvare.
+
+`hentPrintere`/`parsePrintere` i `shipping/cargonizer.ts` er beholdt – admin-visningen skal
+bruke dem til å velge skriver for en butikk.
+
+**Garnkilden har automatisk godkjenning PÅ** siden 01.10 kl. 10:48, satt av
+`garnkilden@garnly.no` selv (står i `audit_log`). Ordrer de får tilbud om blir deres uten at
+noen trykker Godta.
+
 ## Garnly-admin i butikkpanelet (01.10.2026)
 
 Egen fane «Garnly», bare for brukere i `garnly_admins`. Rollen er en egen tabell og ikke

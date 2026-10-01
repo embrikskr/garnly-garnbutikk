@@ -30,8 +30,8 @@ const el = {
   sok: $("sok"), visFlere: $("vis-flere"),
   detalj: $("ordre-detalj"), detaljInnhold: $("detalj-innhold"), detaljLukk: $("detalj-lukk"),
   innstillinger: $("innstillinger"), innstillingerDialog: $("innstillinger-dialog"),
-  innstillingerLukk: $("innstillinger-lukk"), skriverValg: $("skriver-valg"), skriverLagre: $("skriver-lagre"),
-  skriverHjelp: $("skriver-hjelp"), autoGodkjenn: $("auto-godkjenn"),
+  innstillingerLukk: $("innstillinger-lukk"), innstillingerLagre: $("innstillinger-lagre"),
+  autoGodkjenn: $("auto-godkjenn"),
   faneGarnly: $("fane-garnly"), visningGarnly: $("visning-garnly"),
   adminTall: $("admin-tall"), adminHandling: $("admin-handling"), adminHandlingTom: $("admin-handling-tom"),
   adminSynk: $("admin-synk"), adminOrdrer: $("admin-ordrer"), adminOrdrerTom: $("admin-ordrer-tom"),
@@ -652,11 +652,11 @@ async function sendOrdre(btn, groupId, kunUttrekk = false) {
     if (kunUttrekk) {
       toast("Kassauttrekket er registrert.");
     } else {
-      // Etiketten lastes IKKE ned av seg selv. Har butikken skriver, er den alt på vei dit.
-      // Har de ikke, skal de hente den når de vil – en PDF som åpner seg i en ny fane midt i
-      // pakkingen er i veien, og de fleste butikkene har skriver.
+      // Etiketten lastes IKKE ned av seg selv. Har Garnly satt opp en DirectPrint-skriver for
+      // butikken, er den alt på vei dit. Er den ikke satt, henter butikken PDF-en med ikonet
+      // på kortet når de vil – en PDF som åpner seg i en ny fane midt i pakkingen er i veien.
       toast(svar.etikett === "skriver"
-        ? "Sendt. Etiketten skrives ut. Du finner ordren under Tidligere ordrer."
+        ? "Sendt. Etiketten skrives ut."
         : "Sendt. Du finner den under Tidligere ordrer.");
     }
   } catch (err) {
@@ -674,16 +674,18 @@ async function sendOrdre(btn, groupId, kunUttrekk = false) {
 // ---------------------------------------------------------------- innstillinger
 
 /**
- * Butikkens egne innstillinger: etikettskriver og automatisk godkjenning.
+ * Butikkens egen innstilling: automatisk godkjenning.
  *
- * Alt går via serveren. Skriverlista hentes der fordi Cargonizer-nøkkelen ikke skal innom
- * nettleseren, og lagringen fordi panelet ikke har – og ikke skal ha – skriverett på
- * `stores`. Serveren sjekker også at skriver-id-en finnes i lista den nettopp hentet.
+ * Lagringen går via serveren, ikke rett på tabellen: panelet har ikke skriverett på `stores`,
+ * og endringen skal i revisjonsloggen.
+ *
+ * Etikettskriveren lå her før. DirectPrint er Garnlys oppsett, ikke noe butikken skal
+ * forholde seg til – de merker bare forskjellen på om etiketten kommer ut av seg selv eller
+ * må hentes med ikonet på kortet.
  */
 let autoVarFor = false;
 
 el.innstillinger.addEventListener("click", async () => {
-  el.skriverValg.disabled = true;
   el.autoGodkjenn.disabled = true;
   el.innstillingerDialog.showModal();
   const svar = await kallInnstillinger({ action: "les" });
@@ -693,7 +695,7 @@ el.innstillinger.addEventListener("click", async () => {
 
 el.innstillingerLukk.addEventListener("click", () => el.innstillingerDialog.close());
 
-el.skriverLagre.addEventListener("click", async () => {
+el.innstillingerLagre.addEventListener("click", async () => {
   const auto = el.autoGodkjenn.checked;
   // Å skru PÅ automatisk godkjenning betyr at ordrer blir butikkens uten at noen ser på dem,
   // og de kan ikke avslå etterpå. Det skal ikke skje med et uhell på et nettbrett.
@@ -701,28 +703,16 @@ el.skriverLagre.addEventListener("click", async () => {
       !confirm("Skru på automatisk godkjenning?\n\nOrdrer dere får tilbud om blir deres med en gang, og dere kan ikke avslå dem etterpå.")) {
     return;
   }
-  el.skriverLagre.disabled = true;
-  const svar = await kallInnstillinger({ action: "lagre", printer_id: el.skriverValg.value, auto_accept: auto });
-  el.skriverLagre.disabled = false;
+  el.innstillingerLagre.disabled = true;
+  const svar = await kallInnstillinger({ action: "lagre", auto_accept: auto });
+  el.innstillingerLagre.disabled = false;
   if (!svar) return;
   tegnInnstillinger(svar);
-  toast([
-    svar.valgt ? `Etiketten sendes til ${svar.valgt_navn}.` : "Etiketten hentes som PDF.",
-    svar.auto_accept ? "Nye ordrer godtas automatisk." : "Nye ordrer må godtas manuelt.",
-  ].join(" "));
+  toast(svar.auto_accept ? "Nye ordrer godtas automatisk." : "Nye ordrer må godtas manuelt.");
   el.innstillingerDialog.close();
 });
 
 function tegnInnstillinger(svar) {
-  const valgt = svar.valgt ?? "";
-  el.skriverValg.innerHTML = ['<option value="">Ingen – skriv ut PDF selv</option>']
-    .concat((svar.printere ?? []).map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`))
-    .join("");
-  el.skriverValg.value = valgt;
-  // Får vi ikke tak i skriverlista, skal resten av innstillingene likevel kunne endres.
-  el.skriverValg.disabled = !!svar.skriverfeil;
-  if (svar.skriverfeil) el.skriverHjelp.textContent = `Fikk ikke hentet skriverlista: ${svar.skriverfeil}`;
-
   autoVarFor = svar.auto_accept === true;
   el.autoGodkjenn.checked = autoVarFor;
   el.autoGodkjenn.disabled = false;

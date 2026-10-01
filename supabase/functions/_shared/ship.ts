@@ -9,7 +9,8 @@
  *   2. sendingen i Cargonizer, med pakkeboks, vekt, SMS-varsling og overføring til PostNord
  *   3. lagring av sendings-id, sendingsnummer, sporingsnummer og sporingslenke
  *   4. fulfillment i Shopify med sporing, som varsler kunden
- *   5. etiketten: til DirectPrint-skriveren hvis butikken har en, ellers PDF i panelet
+ *   5. etiketten: til DirectPrint-skriveren hvis Garnly har satt en opp for butikken, ellers
+ *      ingenting – butikken henter PDF-en med ikonet på kortet når de vil
  *
  * **Hvert steg tåler å kjøres på nytt.** Feiler steg 2, 3 eller 4, står det som er gjort, og
  * butikken kan trykke «Prøv igjen». Før vi lager en sending, leter vi etter en som finnes
@@ -81,7 +82,7 @@ interface Kontekst {
     shipping_sender_id: string | null;
     shipping_transport_agreement: string | null;
     shipping_product: string | null;
-    label_printer_id: string | null;
+    directprint_printer_id: string | null;
   };
 }
 
@@ -140,9 +141,9 @@ export async function sendOrdre(groupId: string, jwt: string, bareUttrekk = fals
 
   // ---- 5. etiketten --------------------------------------------------------
   let etikett: "skriver" | "pdf" = "pdf";
-  if (k.butikk.label_printer_id && k.butikk.shipping_sender_id) {
+  if (k.butikk.directprint_printer_id && k.butikk.shipping_sender_id) {
     try {
-      await skrivUtEtikett(sending.id, k.butikk.label_printer_id, k.butikk.shipping_sender_id);
+      await skrivUtEtikett(sending.id, k.butikk.directprint_printer_id, k.butikk.shipping_sender_id);
       etikett = "skriver";
     } catch (e) {
       // Etiketten er det eneste steget butikken kan ordne selv: PDF-en ligger på kortet.
@@ -176,7 +177,7 @@ async function hentKontekst(groupId: string): Promise<Kontekst | null> {
       "id, routing_order_id, created_at, line_items, shopify_fulfillment_order_id, pos_deducted_at, fulfilled_at, " +
         "cargonizer_consignment_id, shipped_at, " +
         "routing_orders(shopify_order_name, is_test, customer), " +
-        "stores:assigned_store_id(name, shipping_sender_id, shipping_transport_agreement, shipping_product, label_printer_id)",
+        "stores:assigned_store_id(name, shipping_sender_id, shipping_transport_agreement, shipping_product, directprint_printer_id)",
     )
     .eq("id", groupId)
     .maybeSingle();

@@ -338,7 +338,13 @@ export function parsePrintere(xml: string): Printer[] {
     .filter((p) => p.id);
 }
 
-/** DirectPrint-skriverne på kontoen. Krever nøkkel, men ikke avsender. */
+/**
+ * DirectPrint-skriverne på kontoen. Krever nøkkel, men ikke avsender.
+ *
+ * Brukes av Garnly-admin til å velge skriver for en butikk (`stores.directprint_printer_id`).
+ * Butikkene ser ingenting om skrivere – for dem er forskjellen bare om etiketten kommer ut av
+ * seg selv eller må hentes med ikonet på kortet.
+ */
 export async function hentPrintere(senderId: string): Promise<Printer[]> {
   const res = await fetch(`${BASE}/printers.xml`, { headers: headers(senderId) });
   if (!res.ok) throw new Error(`Fikk ikke hentet skrivere: ${res.status} ${(await res.text()).slice(0, 200)}`);

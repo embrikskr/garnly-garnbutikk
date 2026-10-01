@@ -142,16 +142,6 @@
 <!-- Butikkens innstillinger -->
 <dialog id="innstillinger-dialog" class="detalj">
   <h2 class="detalj__tittel">Innstillinger</h2>
-  <label class="felt">Etikettskriver
-    <select id="skriver-valg">
-      <option value="">Ingen – skriv ut PDF selv</option>
-    </select>
-  </label>
-  <p id="skriver-hjelp" class="hjelp">
-    Har butikken en DirectPrint-skriver koblet til Cargonizer, sendes fraktetiketten rett dit
-    når dere trykker «Slått ut og klar til sending». Ellers henter dere den med skriverikonet.
-  </p>
-
   <label class="bryter">
     <input type="checkbox" id="auto-godkjenn">
     <span>
@@ -164,7 +154,7 @@
     </span>
   </label>
   <div class="card__actions">
-    <button id="skriver-lagre" class="btn btn--primary">Lagre</button>
+    <button id="innstillinger-lagre" class="btn btn--primary">Lagre</button>
     <button id="innstillinger-lukk" class="btn btn--secondary">Lukk</button>
   </div>
 </dialog>

@@ -6,8 +6,8 @@ Dette repoet er backend for Garnlys felles nettbutikk for lokale garnbutikker. L
 
 1. **Lagersynk**: leser lager fra partnerbutikkenes kassesystemer (Duell, Mystore, CSV) hvert 15. minutt på dagtid og hver time mellom 22 og 08 (lokal tid, `_shared/schedule.ts`), matcher mot Garnlys produkter på EAN → alias (`product_aliases`) → SKU → navn, og skriver antall til butikkens *location* i Garnlys Shopify (`fhxr10-gu.myshopify.com`).
 2. **Ordreruting**: når en kunde betaler i Shopify, settes ordren på hold, og den tilbys én butikk om gangen (round-robin på `last_assigned_at`). Butikken svarer i **butikkpanelet** (`panel/`, garnly-butikkpanel.vercel.app) innen en frist (i åpningstid). Ved aksept flyttes fulfillment order til butikkens location.
-3. **Sending**: butikken trykker **«Slått ut og klar til sending»** i panelet, og `ship-order` gjør alt (`_shared/ship.ts`): kassauttrekk → sending i Cargonizer (pakkeboks, vekt, SMS-varsling, `transfer=true`) → lagring av sporing → `fulfillmentCreate` i Shopify med sporing → etikett til DirectPrint-skriver, ellers ingenting (etiketten hentes som PDF fra ikonet når butikken vil). Kortet forsvinner fra pakkelista med én gang, og ordren ligger under «Tidligere ordrer». Hvert steg tåler å kjøres på nytt. **Butikkene har ikke Shopify-tilgang**, og CargonizerConnect overførte aldri sendingen til PostNord – derfor gjør Garnly begge deler selv. Testordrer får `transfer=false`. `transfer_sync.ts` er backstop for sendinger som ikke ble overført.
-4. **Butikkpanel**: en side butikken har oppe på nettbrettet. Sanntid via Supabase Realtime på `offers`, innlogging med Supabase Auth, tilgang styrt av `store_users` + RLS. E-post per tilbud er AV som standard (`stores.notify_offers`); det skalerer ikke når en butikk får titalls ordrer om dagen. Butikken styrer selv etikettskriver og **automatisk godkjenning** (`stores.auto_accept`) via `store-settings`; endringene havner i `audit_log`.
+3. **Sending**: butikken trykker **«Slått ut og klar til sending»** i panelet, og `ship-order` gjør alt (`_shared/ship.ts`): kassauttrekk → sending i Cargonizer (pakkeboks, vekt, SMS-varsling, `transfer=true`) → lagring av sporing → `fulfillmentCreate` i Shopify med sporing → etikett til DirectPrint-skriver hvis Garnly har satt en opp for butikken (`stores.directprint_printer_id`), ellers ingenting – butikken henter PDF-en fra ikonet på kortet når de vil. Kortet forsvinner fra pakkelista med én gang, og ordren ligger under «Tidligere ordrer». Hvert steg tåler å kjøres på nytt. **Butikkene har ikke Shopify-tilgang**, og CargonizerConnect overførte aldri sendingen til PostNord – derfor gjør Garnly begge deler selv. Testordrer får `transfer=false`. `transfer_sync.ts` er backstop for sendinger som ikke ble overført.
+4. **Butikkpanel**: en side butikken har oppe på nettbrettet. Sanntid via Supabase Realtime på `offers`, innlogging med Supabase Auth, tilgang styrt av `store_users` + RLS. E-post per tilbud er AV som standard (`stores.notify_offers`); det skalerer ikke når en butikk får titalls ordrer om dagen. Butikken styrer selv **automatisk godkjenning** (`stores.auto_accept`) via `store-settings`; endringene havner i `audit_log`. Butikkene ser ingenting om etikettskrivere.
 5. **Garnly-admin**: egen fane «Garnly» i panelet, bare for brukere i `garnly_admins` (egen tabell – en admin er ikke en butikk og har ingen rad i `store_users`). Viser «Trenger handling» (eskalerte grupper og tilbud med utløpt frist, med hvem som avslo og hvorfor), alle ordrer på tvers av butikker med filter, oppgjør, nøkkeltall og synkstatus per butikk. Handlinger via `admin-actions`: gi ordren til en butikk **uten lagersjekk** (butikken kan ha bestilt inn), eller prøv ruting på nytt mot dagens lager. Kansellering er bare en lenke til Shopify – refusjon gjøres av et menneske. Alle `v_admin_*`-view filtrerer på `is_garnly_admin()` og gir butikkbrukere null rader.
 6. **Regler som aldri brytes**: hele antallet av én varelinje kommer fra samme butikk (garnparti). Hele ordren fra én butikk foretrekkes; kan splittes per varelinje hvis ingen har alt. Aktivt avslag straffes ikke; timeout gir 24 t nedvekting (maks 3).
 
@@ -29,7 +29,7 @@ supabase/migrations/      001 schema, 002 cron, 003 exclude_from_sync, 004 inven
                           020 mark_pos_deducted fulfilled, 021 panel-historikk,
                           022 cargonizer-overføring, 023 panelsending,
                           024 kort forsvinner ved sending, 025 garnly-admin,
-                          026 cron ops-digest
+                          026 cron ops-digest, 027 directprint bare Garnly
 supabase/seed/            product_aliases.sql (varer uten brukbar EAN, kjøres etter første sync-products)
 panel/                    butikkpanelet (statisk side, Vercel med rot `panel/`).
                           garnly-butikkpanel.vercel.app – deployes av git push
@@ -61,7 +61,7 @@ supabase/functions/
   reconcile-inventory/    nattlig cron: leser on_hand fra Shopify og retter avvik
   shipping-label/         fraktetikett som PDF til panelet (Cargonizer, bruker-JWT)
   ship-order/             panelknappen «Slått ut og klar til sending» (bruker-JWT)
-  store-settings/         butikkens egne innstillinger: etikettskriver, auto-godkjenning (bruker-JWT)
+  store-settings/         butikkens egen innstilling: auto-godkjenning (bruker-JWT)
   backfill-lines/         vedlikehold: etterfyller varelinjer med felt som kom til senere
   admin-actions/          Garnly-admin: gi ordren til en butikk, prøv ruting på nytt (admin-JWT)
   ops-digest/             daglig cron kl. 08: e-post hvis noe står i «Trenger handling»
@@ -82,7 +82,7 @@ shopify-app/              Shopify Function: kassevalidering «ett parti fra én 
 - **Panelet skal aldri gjøre forretningslogikk.** Godta/avslå går via `offer-respond`, sending via `ship-order`. Serveren eier lagersjekk, Shopify-flytting, fraktbestilling og fulfillment. Panelet leser, viser og trykker.
 - **Admin-tilgang sjekkes to steder.** Viewene filtrerer på `is_garnly_admin()`, men et endepunkt som *endrer* noe (`admin-actions`) må sjekke `garnly_admins` eksplisitt – et view som gir null rader skjuler data, men stopper ingen POST.
 - **Butikkens innstillinger lagres via `store-settings`**, aldri rett på tabellen: panelet har ikke skriverett på `stores`, og endringer som auto-godkjenning skal i revisjonsloggen.
-- **Fraktoppsett ligger i `stores`**, ikke i koden: `shipping_sender_id`, `shipping_transport_agreement`, `shipping_product`, `label_printer_id`. Avtale-id-ene er ulike per butikk, og et transportørbytte skal ikke kreve ny utrulling.
+- **Fraktoppsett ligger i `stores`**, ikke i koden: `shipping_sender_id`, `shipping_transport_agreement`, `shipping_product`, `directprint_printer_id`. Skriveren settes bare av Garnly, aldri av butikken. Avtale-id-ene er ulike per butikk, og et transportørbytte skal ikke kreve ny utrulling.
 - **Varelinjene skal kunne plukkes uten oppslag.** `line_items` lagrer variant, SKU, strekkode og garnpakkeinnhold ved ordremottak (`_shared/lines.ts`). Produktbilde ble prøvd og tatt bort igjen: butikken plukker på navn, farge og strekkode. Nye felt der krever en kjøring av `backfill-lines` for ordrer som alt ligger i panelet.
 - **Ikke legg kundedata i panel-viewene** utover det butikken trenger for å pakke og sende. `routing_orders.raw_order` skal aldri eksponeres.
 - **Ikke gjett på kassesystem-API-er.** Begge adaptere er verifisert mot ekte data (sept. 2026); feltnavn står i filhodene. Ved avvik: logg en rå eksempelrad og juster.
