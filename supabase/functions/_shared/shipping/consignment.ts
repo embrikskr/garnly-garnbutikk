@@ -22,18 +22,38 @@ export const EMBALLASJE_GRAM = 150;
  * veier mer kan bli det.
  */
 export const FALLBACK_VARE_GRAM = 100;
-/** Grensen for Parcel Locker, fra transportavtalen. */
+/**
+ * Vektgrenser per PostNord-produkt, i kg.
+ *
+ * Parcel Locker oppgir 10 kg i transport_agreements.xml. Service Point oppgir ingen der, så
+ * grensen er funnet ved å spørre Cargonizer selv: /consignment_costs.xml tar samme XML som en
+ * ekte sending, men oppretter ingenting. Sjekket 01.10.2026 mot begge butikkenes avtaler
+ * (37187 og 37185):
+ *   postnord_mypack_small  10,00 kg godtatt, 10,01 kg avvist («kan ikke veie mer enn 10 Kg»)
+ *   mypack                 35,00 kg godtatt, 35,01 kg avvist («Kolli … mer enn 35 Kg»)
+ * Metoden ble kalibrert mot pakkeboksgrensen først, som vi kjente fra avtalen.
+ */
 export const MAKS_VEKT_KG = 10;
+export const MAKS_VEKT_KG_HENTESTED = 35;
+
+/** Vektgrensen for et produkt, eller null når vi ikke kjenner den. REN logikk. */
+export function maksVektKg(produkt: string): number | null {
+  if (produkt === "postnord_mypack_small") return MAKS_VEKT_KG;
+  if (produkt === "mypack") return MAKS_VEKT_KG_HENTESTED;
+  return null;
+}
 
 /**
- * Vektgrensen for et produkt, eller null når avtalen ikke oppgir noen.
+ * Produktene som tar en pakke på denne vekten, i prioritert rekkefølge. REN logikk.
  *
- * REN logikk. Bare Parcel Locker har `max_weight` i transport_agreements.xml (10 kg).
- * Service Point (`mypack`) har ingen – da håndhever vi ingen grense selv, og lar Cargonizer
- * avvise hvis PostNord har en. Å gjette en grense ville stoppet pakker som kunne gått.
+ * Pakkeboks først, så hentested. Er pakken over 10 kg, faller pakkeboksen ut av lista før vi
+ * leter etter pakkested – ellers ville vi funnet en boks som ikke tar den, og stoppet.
  */
-export function maksVektKg(produkt: string): number | null {
-  return produkt === "postnord_mypack_small" ? MAKS_VEKT_KG : null;
+export function produkterForVekt(vektKg: number, produkter: string[]): string[] {
+  return produkter.filter((p) => {
+    const maks = maksVektKg(p);
+    return maks === null || vektKg <= maks;
+  });
 }
 
 export interface VektLinje {

@@ -8,6 +8,7 @@ import {
   innholdstekst,
   maksVektKg,
   mobilnummer,
+  produkterForVekt,
   sporingsnummer,
   vektKg,
 } from "./consignment.ts";
@@ -143,9 +144,39 @@ Deno.test("vekt fra Shopify regnes om til gram", () => {
   assertEquals(gramFraShopify(50, "STEIN"), null);
 });
 
-Deno.test("vektgrensen gjelder pakkeboks, ikke hentested", () => {
-  // Bare Parcel Locker har max_weight i transportavtalen. Service Point har ingen oppgitt
-  // grense, og da gjetter vi ikke – Cargonizer får avvise hvis PostNord har en.
+Deno.test("vektgrenser per produkt, slik Cargonizer håndhever dem", () => {
+  // Funnet via /consignment_costs.xml 01.10.2026: 10,00 godtatt / 10,01 avvist for
+  // pakkeboks, 35,00 godtatt / 35,01 avvist for hentested, for begge butikkenes avtaler.
   assertEquals(maksVektKg("postnord_mypack_small"), 10);
-  assertEquals(maksVektKg("mypack"), null);
+  assertEquals(maksVektKg("mypack"), 35);
+  assertEquals(maksVektKg("noe_annet"), null);
+});
+
+const BEGGE = ["postnord_mypack_small", "mypack"];
+
+Deno.test("lett pakke: pakkeboks først, hentested som reserve", () => {
+  assertEquals(produkterForVekt(0.4, BEGGE), BEGGE);
+  assertEquals(produkterForVekt(10, BEGGE), BEGGE);
+});
+
+Deno.test("over 10 kg: rett til hentested, selv om det finnes pakkeboks i nærheten", () => {
+  // Pakkeboksen må ut av lista FØR vi leter etter pakkested. Ellers finner vi en boks som
+  // ikke tar pakken, og stopper.
+  assertEquals(produkterForVekt(10.01, BEGGE), ["mypack"]);
+  assertEquals(produkterForVekt(15, BEGGE), ["mypack"]);
+  assertEquals(produkterForVekt(35, BEGGE), ["mypack"]);
+});
+
+Deno.test("over 35 kg: ingen PostNord-produkt tar den", () => {
+  assertEquals(produkterForVekt(35.01, BEGGE), []);
+  assertEquals(produkterForVekt(50, BEGGE), []);
+});
+
+Deno.test("uten reserve: bare pakkeboks, og over 10 kg tar ingen den", () => {
+  assertEquals(produkterForVekt(5, ["postnord_mypack_small"]), ["postnord_mypack_small"]);
+  assertEquals(produkterForVekt(12, ["postnord_mypack_small"]), []);
+});
+
+Deno.test("ukjent produkt slipper gjennom – vi gjetter ikke på en grense", () => {
+  assertEquals(produkterForVekt(80, ["bring2_business_parcel"]), ["bring2_business_parcel"]);
 });

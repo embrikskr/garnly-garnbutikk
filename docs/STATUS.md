@@ -2,6 +2,58 @@
 
 Oppdatert: 2026-10-01
 
+## Tunge pakker til hentested, ikke stopp (01.10.2026)
+
+Pakker over **10 kg** går nå til nærmeste PostNord-**hentested** (`mypack`) i stedet for å
+stoppe. Over **35 kg** – grensen for hentested – stopper sendingen med «Kontakt Garnly», og
+ordren havner i admin under «Trenger handling» som før.
+
+Vekten regnes nå ut **før** vi leter etter pakkested, og produktene som ikke tar vekten faller
+ut (`produkterForVekt` i `_shared/shipping/consignment.ts`). Ellers ville vi funnet en pakkeboks
+i nærheten, sett at pakken er for tung, og stoppet – selv om et hentested to gater bort tar den.
+
+| Vekt | Går til |
+|---|---|
+| ≤ 10 kg | pakkeboks; finnes ingen i nærheten, hentested (som før) |
+| 10–35 kg | hentested, også der det finnes pakkebokser |
+| > 35 kg | stopper: «Pakken veier X kg, og PostNord tar maks 35 kg. Kontakt Garnly.» |
+
+**Hvor 35 kg kommer fra.** `transport_agreements.xml` oppgir bare grensen for Parcel Locker.
+For Service Point spurte vi Cargonizer selv via `/consignment_costs.xml`, som tar nøyaktig
+samme XML som en ekte sending, men **ikke oppretter noe**. Metoden ble kalibrert mot grensen vi
+kjente først:
+
+| Produkt | Godtatt | Avvist | Avtale |
+|---|---|---|---|
+| `postnord_mypack_small` (pakkeboks) | 10,00 kg | 10,01 kg | 37187 og 37185 |
+| `mypack` (hentested) | 35,00 kg | 35,01 kg («Kolli … mer enn 35 Kg») | 37187 og 37185 |
+
+Grensene står i `maksVektKg`. Endrer PostNord dem, er det én linje.
+
+**Mobilnummer: uendret.** Hentested krever ikke mobil, men en ordre uten mobil stopper
+fortsatt med «Kontakt Garnly». Mobil er påkrevd i kassen, så mangler det, er noe galt med
+ordren, og det skal Garnly se. Teksten sa før «PostNord pakkeboks krever det», og det stemmer
+ikke lenger for tunge pakker. Nå: «Ordren mangler mobilnummer, som er påkrevd i kassen.
+Kontakt Garnly.»
+
+### Verifisert mot ekte data
+
+Gjennom den ekte `sendOrdre` på testordren #1004, med øyeblikksbilde før og nøyaktig
+gjenoppretting etter:
+
+- **15,15 kg i Trondheim** (300 nøster), der det finnes pakkebokser: gikk rett til hentested,
+  **Rema 1000 Ladetorget**, som `mypack`. Cargonizer godtok den (sending **76315793**,
+  `#1004-TUNG`), `state=open`, ikke overført. Revisjonsraden har `vekt_kg` og `produkt`.
+- **37,65 kg** (750 nøster): «Pakken veier 37.65 kg, og PostNord tar maks 35 kg. Kontakt
+  Garnly.» Ingen sending opprettet – null treff i Cargonizer på referansen.
+- **Uten mobilnummer, lett pakke:** stopper før noe kall til Cargonizer, null treff på
+  referansen.
+
+### Rydd
+
+Testsending **76315793** (`#1004-TUNG`) i Cargonizer bør slettes sammen med 76315379. Ingen av
+dem er overført.
+
 ## Hentested når det ikke finnes pakkeboks, og «sendt manuelt» (01.10.2026)
 
 ### 1. Vanlig hentested som reserve
@@ -17,7 +69,8 @@ pakkebokser, men fem hentesteder hver. 6997 har ingen av delene, og feiler forts
 Reserveproduktet ligger i `stores.shipping_product_fallback` (= `mypack` for begge), som
 resten av fraktoppsettet. Lest ut av `transport_agreements.xml`: Service Point krever pakkested
 og vekt, men **ikke** mobilnummer, og har både SMS- og e-postvarsling. Bare Parcel Locker har
-`max_weight` (10 kg); Service Point oppgir ingen, så vi håndhever ingen grense der selv.
+`max_weight` (10 kg); Service Point oppgir ingen der. Grensen for hentested (35 kg) er funnet
+senere samme dag – se «Tunge pakker til hentested» over.
 
 Produktet som ble brukt lagres i `service_partner.produkt` og i revisjonsloggen, så det står
 hvorfor kunden fikk hentested og ikke boks. Testordrer får fortsatt `transfer=false`.
@@ -70,7 +123,7 @@ så kortet lå igjen i pakkelista med de samme to knappene, og Shopify fikk aldr
 fulfillment – kunden fikk aldri beskjed om at pakken var sendt.
 
 Nå har kortet bare den ene knappen. Feiler sendingen – kunden mangler mobilnummer, pakken er
-over 10 kg, eller det finnes ingen pakkeboks i nærheten – sier feilboksen **«Kontakt
+for tung (i dag: over 35 kg), eller det finnes ikke pakkested i nærheten – sier feilboksen **«Kontakt
 Garnly»**, og ordren havner i admin under **«Trenger handling»** med feilmeldingen. Garnly
 sender den manuelt og fulfiller i Shopify; webhooken setter gruppen til `fulfilled`, og den
 forsvinner fra både pakkelista og admin av seg selv.

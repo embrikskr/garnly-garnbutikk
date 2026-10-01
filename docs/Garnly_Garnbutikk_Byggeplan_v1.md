@@ -222,7 +222,10 @@ sending», se `_shared/ship.ts`):
 1. kassauttrekket registreres (`mark_pos_deducted`, med butikkbrukerens egen JWT)
 2. sendingen opprettes i Cargonizer: `POST /consignments.xml` med butikkens avsender-ID,
    butikkens transportavtale, produkt Parcel Locker (`postnord_mypack_small`), nærmeste
-   pakkeboks fra `/service_partners.xml`, vekt fra varene, SMS-varsling, og `transfer=true`
+   pakkeboks fra `/service_partners.xml`, vekt fra varene, SMS-varsling, og `transfer=true`.
+   Finnes ingen pakkeboks i nærheten, eller pakken er over 10 kg, går den til nærmeste
+   hentested (`mypack`, `stores.shipping_product_fallback`). Over 35 kg, eller uten
+   mobilnummer, stopper den med «Kontakt Garnly» (STATUS.md, 01.10.2026)
 3. sendings-id, sendingsnummer, sporingsnummer og sporingslenke lagres
 4. Shopify fulfilles med sporing (`fulfillmentCreate`, `notifyCustomer`)
 5. etiketten skrives ut på butikkens DirectPrint-skriver, eller åpnes som PDF i panelet

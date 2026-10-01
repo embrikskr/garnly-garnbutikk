@@ -39,6 +39,7 @@ import {
   innholdstekst,
   maksVektKg,
   mobilnummer,
+  produkterForVekt,
   sporingsnummer,
   vektKg,
 } from "./shipping/consignment.ts";
@@ -242,21 +243,35 @@ async function sikreSending(k: Kontekst): Promise<{ sending: CargonizerConsignme
 
   const mobil = mobilnummer(kunde.phone);
   if (!mobil) {
-    // Produktet krever mobilnummer (consignee_mobile_required). Uten det svarer Cargonizer
-    // med en feil butikken ikke kan gjøre noe med, så vi sier det tydelig i stedet.
-    throw new Error("Ordren mangler mobilnummer, og PostNord pakkeboks krever det. Kontakt Garnly.");
+    // Pakkeboks krever mobilnummer (consignee_mobile_required). Hentested gjør ikke det, men
+    // vi stopper likevel, med vilje: mobil er påkrevd i kassen, så en ordre uten mobil betyr at
+    // noe er galt med ordren. Det skal Garnly se på, ikke sendingen gå rundt (Embrik 01.10.2026).
+    throw new Error("Ordren mangler mobilnummer, som er påkrevd i kassen. Kontakt Garnly.");
   }
 
   const ta = k.butikk.shipping_transport_agreement;
   const hovedprodukt = k.butikk.shipping_product;
   if (!ta || !hovedprodukt) throw new Error("Butikken mangler transportavtale for frakt. Kontakt Garnly.");
 
+  // Vekten avgjør hvilke produkter som er aktuelle, og må derfor regnes ut FØR vi leter
+  // etter pakkested. Over 10 kg tar ikke pakkeboksen den, og da skal vi rett til hentested –
+  // ikke finne en boks i nærheten og stoppe der.
+  const vekt = await beregnVekt(k);
+  const reserve = k.butikk.shipping_product_fallback;
+  const alle = [hovedprodukt, ...(reserve && reserve !== hovedprodukt ? [reserve] : [])];
+  const produkter = produkterForVekt(vekt, alle);
+  if (!produkter.length) {
+    const grenser = alle.map(maksVektKg).filter((m): m is number => m !== null);
+    const maks = grenser.length ? Math.max(...grenser) : null;
+    throw new Error(maks !== null
+      ? `Pakken veier ${vekt} kg, og PostNord tar maks ${maks} kg. Kontakt Garnly.`
+      : `Pakken veier ${vekt} kg, og ingen av fraktproduktene tar den. Kontakt Garnly.`);
+  }
+
   // Pakkeboks først. Finnes ingen i nærheten, vanlig hentested (Service Point / MyPack
   // Collect) på samme avtale. Pakkebokser finnes ikke overalt: 9990 Båtsfjord, 9760
   // Honningsvåg og 8700 Nesna har ingen, men fem hentesteder hver (sjekket 01.10.2026).
-  const reserve = k.butikk.shipping_product_fallback;
-  const produkter = [hovedprodukt, ...(reserve && reserve !== hovedprodukt ? [reserve] : [])];
-  let produkt = hovedprodukt;
+  let produkt = produkter[0];
   let pakkeboks: ServicePartnerRad | null = null;
   for (const p of produkter) {
     const partnere = await finnServicePartnere(senderId, {
@@ -274,15 +289,14 @@ async function sikreSending(k: Kontekst): Promise<{ sending: CargonizerConsignme
     }
   }
   if (!pakkeboks) {
-    throw new Error(produkter.length > 1
-      ? `Fant verken pakkeboks eller hentested nær ${postnr}. Kontakt Garnly.`
-      : `Fant ingen pakkeboks nær ${postnr}. Kontakt Garnly.`);
-  }
-
-  const vekt = await beregnVekt(k);
-  const maks = maksVektKg(produkt);
-  if (maks !== null && vekt > maks) {
-    throw new Error(`Pakken veier ${vekt} kg, og PostNord pakkeboks tar maks ${maks} kg. Kontakt Garnly.`);
+    const bareHentested = !produkter.includes(hovedprodukt);
+    throw new Error(
+      produkter.length > 1
+        ? `Fant verken pakkeboks eller hentested nær ${postnr}. Kontakt Garnly.`
+        : bareHentested
+        ? `Pakken veier ${vekt} kg, for tungt for pakkeboks, og det finnes ikke hentested nær ${postnr}. Kontakt Garnly.`
+        : `Fant ingen pakkeboks nær ${postnr}. Kontakt Garnly.`,
+    );
   }
 
   const xml = byggConsignmentXml({
