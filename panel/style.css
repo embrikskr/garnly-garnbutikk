@@ -172,6 +172,7 @@ button { font: inherit; }
 
 /* Hvor pakken havner. Butikken skal slippe å lure på hvilken pakkeboks kunden valgte. */
 .pakkeboks { font-size: 15px; margin: 0; color: var(--ink-soft); }
+.etikett-ok { font-size: 15px; margin: 0; color: var(--green); font-weight: 600; }
 
 /* Feilen fra forrige forsøk. Rød ramme og ikke bare rød tekst: den skal være umulig å
    overse når butikken står med pakken og lurer på hvorfor det ikke gikk. */

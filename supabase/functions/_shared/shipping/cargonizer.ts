@@ -45,11 +45,17 @@ export interface CargonizerConsignment {
 }
 
 /**
- * Hvor langt bakover i tid vi ber Cargonizer søke når vi ikke har sendings-id-en fra før.
- * Deres standardvindu for consignments.xml er ikke dokumentert, så vi ber om et vindu selv.
- * Verifisert 30.09.2026: `from=` treffer minst tre år tilbake.
+ * Fra hvilken dato vi søker etter en gruppes sending på ordrenummeret. REN logikk.
+ *
+ * Sendingen lages alltid etter at gruppen kom inn, så vi søker aldri bakover i tid – bare én
+ * dag slingringsmonn for tidssonen (`from=` er en dato). Ordrenummer gjentar seg: Shopify-
+ * butikken ble byttet i september 2026, og #1008–#1010 finnes to ganger. Et vindu bakover kunne
+ * gitt oss en annen ordres sending – og butikken feil etikett, eller PostNord feil pakke.
+ * Verifisert 30.09.2026: `from=` virker, og standardvinduet uten den er ikke dokumentert.
  */
-export const SOKEVINDU_DAGER = 60;
+export function sokFra(gruppeOpprettet: string): Date {
+  return new Date(new Date(gruppeOpprettet).getTime() - 86400_000);
+}
 
 /**
  * Sendingen som hører til ordren, av alle søket returnerte.
@@ -65,15 +71,23 @@ export function velgConsignment(
   kandidater: CargonizerConsignment[],
   ordrereferanse: string | string[],
 ): CargonizerConsignment | null {
+  const treff = velgAlleConsignments(kandidater, ordrereferanse);
+  if (!treff.length) return null;
+  return treff.reduce((a, b) => (b.id > a.id ? b : a));
+}
+
+/** Alle sendingene med eksakt lik referanse. REN logikk. */
+export function velgAlleConsignments(
+  kandidater: CargonizerConsignment[],
+  ordrereferanse: string | string[],
+): CargonizerConsignment[] {
   // Flere godtatte skrivemåter fordi vi ikke vet om CargonizerConnect skriver «#1002» eller
   // «1002» i avsenders referanse. Begge godtas; det er fortsatt eksakt likhet, ikke delstreng.
   const refs = (Array.isArray(ordrereferanse) ? ordrereferanse : [ordrereferanse])
     .map((r) => r.trim())
     .filter(Boolean);
-  if (!refs.length) return null;
-  const treff = kandidater.filter((c) => refs.includes((c.consignorReference ?? "").trim()));
-  if (!treff.length) return null;
-  return treff.reduce((a, b) => (b.id > a.id ? b : a));
+  if (!refs.length) return [];
+  return kandidater.filter((c) => refs.includes((c.consignorReference ?? "").trim()));
 }
 
 /**
@@ -139,13 +153,17 @@ export async function finnConsignment(
   senderId: string,
   fra?: Date,
 ): Promise<CargonizerConsignment | null> {
+  return velgConsignment(await sok(orderName, senderId, fra), referanseVarianter(orderName));
+}
+
+async function sok(orderName: string, senderId: string, fra?: Date): Promise<CargonizerConsignment[]> {
   const url = new URL(`${BASE}/consignments.xml`);
   url.searchParams.set("text", sokeord(orderName));
   if (fra) url.searchParams.set("from", fra.toISOString().slice(0, 10));
 
   const res = await fetch(url, { headers: headers(senderId) });
   if (!res.ok) throw new Error(`Cargonizer-søk feilet: ${res.status} ${(await res.text()).slice(0, 200)}`);
-  return velgConsignment(parseConsignments(await res.text()), referanseVarianter(orderName));
+  return parseConsignments(await res.text());
 }
 
 /** Henter etiketten som PDF. Virker også når sendingen ikke er overført ennå. */
@@ -335,6 +353,45 @@ export async function opprettConsignment(xml: string, senderId: string): Promise
     throw new Error(feil.length ? feil.join("; ") : `Cargonizer svarte uten sending: ${kropp.slice(0, 300)}`);
   }
   return laget;
+}
+
+/** Tilstander som betyr at sendingen er borte i praksis. Alt annet regnes som at den står. */
+const BORTE = new Set(["deleted", "destroyed", "cancelled", "canceled", "void", "voided"]);
+
+/** Er sendingen slettet? REN logikk. Ikke funnet (null) teller som slettet. */
+export function erSlettet(c: Pick<CargonizerConsignment, "state"> | null): boolean {
+  if (!c) return true;
+  return BORTE.has((c.state ?? "").trim().toLowerCase());
+}
+
+/**
+ * Sletter en sending som ikke er overført.
+ *
+ * Ikke dokumentert i Cargonizers API-wiki (sjekket 04.10.2026). Vi prøver REST-varianten
+ * `DELETE /consignments/<id>.xml` og stoler ikke på svaret: sendingen leses på nytt etterpå,
+ * og først når den er borte, regnes den som slettet. Ellers kommer feilen tilbake, og Garnly
+ * får den under «Trenger handling».
+ *
+ * Kaster aldri for en avvist sletting – den returnerer grunnen. Bare nettfeil i oppslaget etterpå
+ * kaster.
+ */
+export async function slettConsignment(consignmentId: number, senderId: string): Promise<{ slettet: boolean; melding: string }> {
+  const res = await fetch(`${BASE}/consignments/${consignmentId}.xml`, {
+    method: "DELETE",
+    headers: headers(senderId),
+    redirect: "manual",
+  });
+  const kropp = await res.text().catch(() => "");
+  // Feilsvaret kan like gjerne være en HTML-side som XML. Parseren skal ikke få velte oss.
+  let feiltekst = "";
+  try { feiltekst = parseErrors(kropp).join("; "); } catch { /* ikke XML */ }
+  const svar = `${res.status}${kropp ? " " + (feiltekst || kropp.replace(/\s+/g, " ").slice(0, 160)) : ""}`;
+  const etter = await hentConsignment(consignmentId, senderId);
+  if (erSlettet(etter)) return { slettet: true, melding: `Cargonizer svarte ${svar}` };
+  return {
+    slettet: false,
+    melding: `Cargonizer slettet ikke sending ${consignmentId} (svarte ${svar}); den står fortsatt som «${etter?.state ?? "ukjent"}»`,
+  };
 }
 
 export interface Printer {

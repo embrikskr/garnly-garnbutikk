@@ -29,7 +29,7 @@ import {
   finnConsignment,
   hentConsignment,
   overfoerConsignments,
-  SOKEVINDU_DAGER,
+  sokFra,
   transferBeslutning,
 } from "./shipping/cargonizer.ts";
 
@@ -57,7 +57,7 @@ interface GruppeRad {
   carrier: string | null;
   manually_shipped_at: string | null;
   assigned_store_id: string | null;
-  routing_orders: { shopify_order_name: string | null; is_test: boolean } | null;
+  routing_orders: { shopify_order_name: string | null; is_test: boolean; status: string | null } | null;
   stores: { name: string | null; shipping_sender_id: string | null } | null;
 }
 
@@ -78,7 +78,7 @@ export async function overfoerGruppe(groupId: string): Promise<TransferUtfall> {
     .select(
       "id, created_at, transferred_at, transfer_attempts, transfer_alerted_at, cargonizer_consignment_id, assigned_store_id, " +
         "carrier, manually_shipped_at, " +
-        "routing_orders(shopify_order_name, is_test), stores:assigned_store_id(name, shipping_sender_id)",
+        "routing_orders(shopify_order_name, is_test, status), stores:assigned_store_id(name, shipping_sender_id)",
     )
     .eq("id", groupId)
     .maybeSingle();
@@ -94,6 +94,9 @@ export async function overfoerGruppe(groupId: string): Promise<TransferUtfall> {
   if (g.transferred_at) return { status: "allerede", consignmentId: g.cargonizer_consignment_id ?? 0 };
   if (g.manually_shipped_at) return { status: "manuelt", grunn: "alt merket som sendt manuelt" };
   if (g.routing_orders?.is_test) return { status: "hoppet_over", grunn: "testordre" };
+  // Kansellert i Shopify: å melde inn sendingen nå ville bestilt PostNord-henting av en pakke
+  // som ikke skal sendes. Sendingen slettes i stedet (se annullering.ts).
+  if (g.routing_orders?.status === "cancelled") return { status: "hoppet_over", grunn: "ordren er kansellert" };
 
   const orderName = g.routing_orders?.shopify_order_name ?? "";
 
@@ -170,8 +173,9 @@ async function finnSending(g: GruppeRad, orderName: string, senderId: string) {
     if (kjent) return kjent;
     // Lagret id som ikke finnes lenger: sendingen er slettet og laget om igjen. Søk på nytt.
   }
-  const fra = new Date(new Date(g.created_at).getTime() - SOKEVINDU_DAGER * 86400_000);
-  const funnet = await finnConsignment(orderName, senderId, fra);
+  // Aldri bakover i tid: ordrenummer gjentar seg, og å overføre en annen ordres sending ville
+  // bestilt PostNord-henting av feil pakke (se sokFra).
+  const funnet = await finnConsignment(orderName, senderId, sokFra(g.created_at));
   if (funnet) {
     await adminClient().from("routing_groups").update({ cargonizer_consignment_id: funnet.id }).eq("id", g.id);
   }
@@ -262,12 +266,13 @@ export async function overfoerEtterslep(db: ReturnType<typeof adminClient>, gren
 
   const { data: kandidater } = await db
     .from("routing_groups")
-    .select("id, routing_orders!inner(is_test)")
+    .select("id, routing_orders!inner(is_test, status)")
     .in("status", ["assigned", "fulfilled"])
     .not("fulfilled_at", "is", null)
     .is("transferred_at", null)
     .is("manually_shipped_at", null)
     .eq("routing_orders.is_test", false)
+    .neq("routing_orders.status", "cancelled")
     .or(`transfer_checked_at.is.null,transfer_checked_at.lt.${sjekketFør}`)
     .limit(grense);
 

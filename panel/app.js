@@ -302,11 +302,12 @@ function renderAssigned(rows) {
     <article class="card ${sendt ? "card--packing" : "card--klar"}${etterlyst(r) ? " card--reminder" : ""}" data-group="${r.group_id}">
       <div class="card__head">
         <span class="card__order">${esc(r.order_name ?? "Ordre")}${r.is_test ? ' <span class="merke">TEST</span>' : ""}${sendt ? ' <span class="merke">Sendt</span>' : ""}</span>
-        <span class="card__meta">${r.assigned_at ? klokke(r.assigned_at) : ""}${r.shipped_at || r.fulfilled_at ? etikettIkon() : ""}</span>
+        <span class="card__meta">${r.assigned_at ? klokke(r.assigned_at) : ""}${etikettIkon()}</span>
       </div>
       <ul class="lines">${lineItems(r.line_items)}</ul>
       <p class="addr">${esc(r.ship_name ?? "")}<br>${esc(r.ship_address1 ?? "")}${r.ship_address2 ? "<br>" + esc(r.ship_address2) : ""}<br>${esc(r.ship_zip ?? "")} ${esc(r.ship_city ?? "")}</p>
       ${pakkeboks(r)}
+      ${etikettStatus(r, sendt)}
       ${r.tracking_number ? `<p class="track">Sporing: ${r.tracking_url ? `<a href="${esc(r.tracking_url)}" target="_blank" rel="noopener">${esc(r.tracking_number)}</a>` : esc(r.tracking_number)}</p>` : ""}
       ${fraktStatus(r)}
       ${feilboks(r)}
@@ -333,6 +334,15 @@ function handlinger(r, sendt) {
   return `<div class="card__actions card__actions--etikett">
       <button class="btn btn--primary" data-act="send">${r.ship_error ? "Prøv igjen" : "Slått ut og klar til sending"}</button>
     </div>`;
+}
+
+/**
+ * Etiketten kan skrives ut med ikonet før pakken er slått ut. Da skal kortet si det, så de
+ * ikke skriver den ut to ganger – og «Slått ut og klar til sending» skriver den ikke ut igjen.
+ */
+function etikettStatus(r, sendt) {
+  if (!r.label_printed_at || sendt) return "";
+  return `<p class="etikett-ok">Etikett skrevet ut ${klokke(r.label_printed_at)}</p>`;
 }
 
 /** Feilen fra forrige forsøk, med det som faktisk ble gjort. */
@@ -564,10 +574,12 @@ el.queue.addEventListener("click", async (e) => {
 });
 
 /**
- * Fraktetikett som PDF, for butikker uten etikettskriver.
+ * Fraktetiketten fra ikonet på kortet.
  *
- * Sendingen lages i CargonizerConnect som før; backenden slår den opp og henter PDF-en.
- * API-nøkkelen ligger på serveren – Cargonizers PDF-URL-er kan uansett ikke lenkes til direkte.
+ * I «Til pakking» lager serveren sendingen i Cargonizer hvis den ikke finnes – uten å melde den
+ * inn til PostNord; det skjer først ved «Slått ut og klar til sending». Har Garnly satt opp en
+ * DirectPrint-skriver for butikken, går etiketten dit og svaret er JSON. Ellers kommer PDF-en,
+ * som åpnes i ny fane. API-nøkkelen ligger på serveren.
  */
 async function hentEtikett(btn, groupId) {
   // Ikonknappen har en SVG inni seg, ikke tekst. Skrev vi «Henter …» der, ville ikonet
@@ -592,6 +604,11 @@ async function hentEtikett(btn, groupId) {
       toast(body.message || "Fikk ikke hentet etiketten.", "error");
       return;
     }
+    if ((res.headers.get("content-type") ?? "").includes("application/json")) {
+      const svar = await res.json().catch(() => ({}));
+      if (svar.etikett === "skriver") toast("Etiketten skrives ut.");
+      return;
+    }
     // Åpnes i ny fane så butikken kan skrive ut eller lagre. Uten window.open-sjekken
     // forsvinner etiketten sporløst hvis nettleseren blokkerer popup.
     url = URL.createObjectURL(await res.blob());
@@ -612,6 +629,8 @@ async function hentEtikett(btn, groupId) {
     if (original !== null) btn.textContent = original;
     // Gi nettleseren tid til å åpne fila før vi frigjør den.
     if (url) setTimeout(() => URL.revokeObjectURL(url), 60000);
+    // Kortet i «Til pakking» skal vise «Etikett skrevet ut», sporing og pakkeboks med en gang.
+    if (btn.closest("#assigned")) { assignedSig = null; await refresh(); }
   }
 }
 
@@ -689,6 +708,7 @@ async function sendOrdre(btn, groupId) {
     // Etiketten lastes IKKE ned av seg selv. Har Garnly satt opp en DirectPrint-skriver for
     // butikken, er den alt på vei dit. Er den ikke satt, henter butikken PDF-en med ikonet
     // på kortet når de vil – en PDF som åpner seg i en ny fane midt i pakkingen er i veien.
+    // Skrevet ut alt fra «Til pakking» («allerede»): da sier vi ingenting om etiketten.
     toast(svar.etikett === "skriver"
       ? "Sendt. Etiketten skrives ut."
       : "Sendt. Du finner den under Tidligere ordrer.");
@@ -1086,8 +1106,10 @@ function tegnHandling() {
     const svar = (r.svar ?? []).map((s) =>
       `<li>${esc(s.butikk)}: ${esc(AVSLAGSTEKST[s.status] ?? s.status)}${s.begrunnelse ? ` – ${esc(s.begrunnelse)}` : ""}</li>`).join("");
     const ventet = ventetid(r.ventet_siden);
-    const feilet = r.arsak === "sending_feilet";
+    const slettes = r.arsak === "sending_ma_slettes";
+    const feilet = r.arsak === "sending_feilet" || slettes;
     const hva = r.arsak === "eskalert" ? "Ingen butikk kunne ta den"
+      : slettes ? `Kansellert – sendingen hos ${esc(r.store_name ?? "")} må slettes i Cargonizer`
       : feilet ? `Sendingen stoppet hos ${esc(r.store_name ?? "")}`
       : `Frist gikk ut hos ${esc(r.store_name ?? "")}`;
     const shopify = `<a class="btn btn--ghost btn--sm" data-act="shopify" target="_blank" rel="noopener"

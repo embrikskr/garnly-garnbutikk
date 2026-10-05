@@ -6,7 +6,7 @@ Dette repoet er backend for Garnlys felles nettbutikk for lokale garnbutikker. L
 
 1. **Lagersynk**: leser lager fra partnerbutikkenes kassesystemer (Duell, Mystore, CSV) hvert 15. minutt på dagtid og hver time mellom 22 og 08 (lokal tid, `_shared/schedule.ts`), matcher mot Garnlys produkter på EAN → alias (`product_aliases`) → SKU → navn, og skriver antall til butikkens *location* i Garnlys Shopify (`fhxr10-gu.myshopify.com`).
 2. **Ordreruting**: når en kunde betaler i Shopify, settes ordren på hold, og den tilbys én butikk om gangen (round-robin på `last_assigned_at`). Butikken svarer i **butikkpanelet** (`panel/`, garnly-butikkpanel.vercel.app) innen en frist (i åpningstid). Ved aksept flyttes fulfillment order til butikkens location.
-3. **Sending**: butikken trykker **«Slått ut og klar til sending»** i panelet, og `ship-order` gjør alt (`_shared/ship.ts`): kassauttrekk → sending i Cargonizer (pakkeboks – eller vanlig hentested når det ikke finnes pakkeboks i nærheten eller pakken er over 10 kg; over 35 kg stopper den –, vekt, SMS-varsling, `transfer=true`) → lagring av sporing → `fulfillmentCreate` i Shopify med sporing → etikett til DirectPrint-skriver hvis Garnly har satt en opp for butikken (`stores.directprint_printer_id`), ellers ingenting – butikken henter PDF-en fra ikonet på kortet når de vil. Kortet forsvinner fra pakkelista med én gang, og ordren ligger under «Tidligere ordrer». Hvert steg tåler å kjøres på nytt. Kortet har bare den ene knappen; feiler sendingen, sier kortet «Kontakt Garnly» og ordren havner i admin under «Trenger handling». **Butikkene har ikke Shopify-tilgang**, og CargonizerConnect overførte aldri sendingen til PostNord – derfor gjør Garnly begge deler selv. Testordrer får `transfer=false`. `transfer_sync.ts` er backstop for sendinger som ikke ble overført; er ordren fulfillet med et annet fraktselskap enn PostNord, eller finnes det ingen Cargonizer-sending, merkes den «sendt manuelt» (`manually_shipped_at`) uten forsøk eller driftsvarsel.
+3. **Sending**: butikken kan skrive ut etiketten mens ordren ligger i «Til pakking» (ikonet på kortet, `shipping-label` → `_shared/etikett.ts`): finnes ingen sending i Cargonizer, lages den der og da, **alltid med `transfer=false`**, og kortet viser «Etikett skrevet ut». Så trykker butikken **«Slått ut og klar til sending»**, og `ship-order` gjør resten (`_shared/ship.ts`): kassauttrekk → sendingen (den fra etiketten, ellers en ny – `_shared/sending.ts`: pakkeboks, eller vanlig hentested når det ikke finnes pakkeboks i nærheten eller pakken er over 10 kg; over 35 kg stopper den; vekt, SMS-varsling) → lagring av sporing → `fulfillmentCreate` i Shopify med sporing → **overføring til PostNord** (`transfer_sync.ts`, ikke for testordrer) → etikett til DirectPrint-skriver hvis Garnly har satt en opp for butikken (`stores.directprint_printer_id`) og den ikke alt er skrevet ut, ellers ingenting. Én sending per ordre: opprettelsen er låst per gruppe, og et kall som møter låsen venter og bruker samme sending. Kanselleres ordren før overføring, slettes den uoverførte sendingen i Cargonizer (`_shared/annullering.ts`, verifisert 04.10.2026); går ikke det, står den under «Trenger handling». Kortet forsvinner fra pakkelista med én gang, og ordren ligger under «Tidligere ordrer». Hvert steg tåler å kjøres på nytt. Kortet har etikett-ikonet og den ene knappen; feiler sendingen, sier kortet «Kontakt Garnly» og ordren havner i admin under «Trenger handling». **Butikkene har ikke Shopify-tilgang**, og CargonizerConnect overførte aldri sendingen til PostNord – derfor gjør Garnly begge deler selv. Testordrer overføres aldri. `transfer_sync.ts` er også backstop for sendinger som ikke ble overført; er ordren fulfillet med et annet fraktselskap enn PostNord, eller finnes det ingen Cargonizer-sending, merkes den «sendt manuelt» (`manually_shipped_at`) uten forsøk eller driftsvarsel.
 4. **Butikkpanel**: en side butikken har oppe på nettbrettet. Sanntid via Supabase Realtime på `offers`, innlogging med Supabase Auth, tilgang styrt av `store_users` + RLS. E-post per tilbud er AV som standard (`stores.notify_offers`); det skalerer ikke når en butikk får titalls ordrer om dagen. Butikken styrer selv **automatisk godkjenning** (`stores.auto_accept`) via `store-settings`; endringene havner i `audit_log`. Butikkene ser ingenting om etikettskrivere.
 5. **Oppgjør**: butikken får varebeløpet minus `commission_pct`; frakt er Garnlys og aldri med; testordrer telles aldri. Refusjoner fra Shopify (`refunds/create` → `order-refunded`, nattlig backstop) blir trekk i `settlement_adjustments` (minus refundert varebeløp × (100 − provisjon) / 100), i refusjonsmåneden eller neste ubetalte. Alt leses fra én regnebok, `settlement_ledger`, gjennom `settlement_lines` / `settlement_summary` / `settlement_months`. Fanen «Oppgjør» i panelet: Garnly ser alle butikker, laster ned CSV og markerer måneder som utbetalt (`mark_settlement_paid`); butikken ser bare seg selv. «Refundert» står på ordren i Tidligere ordrer.
 6. **Garnly-admin**: egen fane «Garnly» i panelet, bare for brukere i `garnly_admins` (egen tabell – en admin er ikke en butikk og har ingen rad i `store_users`). Viser «Trenger handling» (eskalerte grupper, tilbud med utløpt frist, og sendinger som stoppet hos butikken – med hvem som avslo og hvorfor, eller feilmeldingen), alle ordrer på tvers av butikker med filter, nøkkeltall og synkstatus per butikk (oppgjøret har egen fane, se 5). Handlinger via `admin-actions`: gi ordren til en butikk **uten lagersjekk** (butikken kan ha bestilt inn), eller prøv ruting på nytt mot dagens lager. Kansellering er bare en lenke til Shopify – refusjon gjøres av et menneske. Alle `v_admin_*`-view filtrerer på `is_garnly_admin()` og gir butikkbrukere null rader.
@@ -33,7 +33,8 @@ supabase/migrations/      001 schema, 002 cron, 003 exclude_from_sync, 004 inven
                           026 cron ops-digest, 027 directprint bare Garnly,
                           028 feilet sending til admin, 029 hentested + manuell sending,
                           030 view- og funksjonstilgang (anon ut),
-                          031 oppgjør: refusjoner, utbetalinger, regnebok
+                          031 oppgjør: refusjoner, utbetalinger, regnebok,
+                          032 etikett i «Til pakking» + sletting ved kansellering
 supabase/seed/            product_aliases.sql (varer uten brukbar EAN, kjøres etter første sync-products)
 panel/                    butikkpanelet (statisk side, Vercel med rot `panel/`).
                           garnly-butikkpanel.vercel.app – deployes av git push
@@ -48,7 +49,10 @@ supabase/functions/
   _shared/testorder.ts    REN logikk: er ordren en testordre (tag TEST / order.test)
   _shared/fulfillment_sync.ts  henter fulfilled_at fra Shopify (webhook + backstop)
   _shared/transfer_sync.ts     overfører Cargonizer-sendingen til transportøren (webhook + backstop), eller merker «sendt manuelt»
-  _shared/ship.ts              «Slått ut og klar til sending»: uttrekk → sending → fulfillment → etikett
+  _shared/ship.ts              «Slått ut og klar til sending»: uttrekk → sending → fulfillment → overføring → etikett
+  _shared/sending.ts           sendingen i Cargonizer for én gruppe: finn eller lag (alltid transfer=false), låst per gruppe
+  _shared/etikett.ts           etikett-ikonet: lager sendingen i «Til pakking», skriver ut eller gir PDF
+  _shared/annullering.ts       kansellert ordre → slett uoverført sending, ellers «Trenger handling» (+ backstop)
   _shared/shipping/consignment.ts  REN logikk: consignment-XML, vekt, sporingsnummer, mobilnummer
   _shared/lines.ts        REN logikk: varelinja butikken plukker fra (variant, EAN, SKU, garnpakkeinnhold)
   _shared/settlement.ts   REN logikk: hvor mye refundert varebeløp som trekkes fra hvilken gruppe/butikk
@@ -60,13 +64,13 @@ supabase/functions/
   order-intake/           webhook orders/paid → hold → planGroups → offers
   offer-respond/          svar fra panelet (POST + bruker-JWT), engangslenke (GET) og internt kall
   timeout-sweeper/        cron hvert minutt
-  order-cancelled/        webhook orders/cancelled
+  order-cancelled/        webhook orders/cancelled; sletter uoverført sending (+ backstop-cron)
   order-refunded/         webhook refunds/create → trekk i oppgjøret; nattlig backstop (cron 04:50 UTC)
   fulfillment-webhook/    webhook fulfillments/create → fulfilled_at (CargonizerConnect fulfiller)
   pos-webhook/            Mystore products/update → trigger synk
   pos-catalog/            daglig cron: Duells product/list → pos_catalog (strekkoder)
   reconcile-inventory/    nattlig cron: leser on_hand fra Shopify og retter avvik
-  shipping-label/         fraktetikett som PDF til panelet (Cargonizer, bruker-JWT)
+  shipping-label/         etikett-ikonet: lager sendingen i «Til pakking», PDF eller DirectPrint (bruker-JWT)
   ship-order/             panelknappen «Slått ut og klar til sending» (bruker-JWT)
   store-settings/         butikkens egen innstilling: auto-godkjenning (bruker-JWT)
   backfill-lines/         vedlikehold: etterfyller varelinjer med felt som kom til senere

@@ -6,11 +6,13 @@
  * (appen har bare automatisk overføring på Home Small). Ett trykk i panelet gjør nå alt:
  *
  *   1. kassauttrekket (mark_pos_deducted, med butikkbrukerens egen JWT – samme tilgangssjekk)
- *   2. sendingen i Cargonizer, med pakkeboks, vekt, SMS-varsling og overføring til PostNord
+ *   2. sendingen i Cargonizer, med pakkeboks, vekt og SMS-varsling – den fra etiketten hvis
+ *      den finnes, ellers en ny
  *   3. lagring av sendings-id, sendingsnummer, sporingsnummer og sporingslenke
  *   4. fulfillment i Shopify med sporing, som varsler kunden
- *   5. etiketten: til DirectPrint-skriveren hvis Garnly har satt en opp for butikken, ellers
- *      ingenting – butikken henter PDF-en med ikonet på kortet når de vil
+ *   4b. overføring til PostNord (transfer_sync)
+ *   5. etiketten: til DirectPrint-skriveren hvis Garnly har satt en opp for butikken og den
+ *      ikke alt er skrevet ut, ellers ingenting – butikken henter PDF-en med ikonet på kortet
  *
  * **Hvert steg tåler å kjøres på nytt.** Feiler steg 2, 3 eller 4, står det som er gjort, og
  * butikken kan trykke «Prøv igjen». Før vi lager en sending, leter vi etter en som finnes
@@ -18,37 +20,20 @@
  * Shopify om det gjenstår noe. Uten de to sjekkene ville et nytt trykk gitt kunden to pakker
  * og to sporingsnumre.
  *
- * Testordrer får `transfer=false`: sendingen opprettes i Cargonizer, men ingenting går til
- * PostNord.
+ * Etiketten kan skrives ut før dette, fra ikonet i «Til pakking» (_shared/etikett.ts). Da finnes
+ * sendingen alt, uten å være overført, og den gjenbrukes her. **Overføringen til PostNord skjer
+ * først her**, etter fulfillment – ikke når etiketten skrives ut, for da er pakken ikke klar.
+ * Etiketten skrives ikke ut på nytt hvis den alt er skrevet ut.
+ *
+ * Testordrer overføres aldri: sendingen opprettes i Cargonizer, men ingenting går til PostNord.
  */
 import { adminClient, audit, userClient } from "./db.ts";
 import { createFulfillment, getFulfillmentOrder } from "./shopify.ts";
-import {
-  finnConsignment,
-  finnServicePartnere,
-  hentConsignment,
-  opprettConsignment,
-  type CargonizerConsignment,
-  type ServicePartnerRad,
-  skrivUtEtikett,
-  SOKEVINDU_DAGER,
-  transferBeslutning,
-} from "./shipping/cargonizer.ts";
-import {
-  byggConsignmentXml,
-  innholdstekst,
-  maksVektKg,
-  mobilnummer,
-  produkterForVekt,
-  sporingsnummer,
-  vektKg,
-} from "./shipping/consignment.ts";
+import { type CargonizerConsignment, type ServicePartnerRad, skrivUtEtikett } from "./shipping/cargonizer.ts";
+import { sporingsnummer } from "./shipping/consignment.ts";
 import { reconcileFulfilledAt } from "./fulfillment_sync.ts";
-
-/** Transportøren vi sender med. Navnet må skrives slik Shopify kjenner det igjen. */
-const TRANSPORTOR = "PostNord";
-/** Tjenester på sendingen. Parcel Locker tilbyr bare denne ene. */
-const TJENESTER = ["postnord_notification_sms"];
+import { overfoerGruppe, type TransferUtfall } from "./transfer_sync.ts";
+import { erKansellert, hentKontekst, KANSELLERT, type Kontekst, sikreSending, TRANSPORTOR } from "./sending.ts";
 
 export type Steg = "uttrekk" | "sending" | "fulfillment" | "etikett";
 
@@ -56,40 +41,18 @@ export interface SendUtfall {
   ok: boolean;
   steg?: Steg;
   melding?: string;
-  /** Hvor etiketten havnet: skrevet ut direkte, eller klar som PDF i panelet. */
-  etikett?: "skriver" | "pdf";
+  /**
+   * Etiketten: skrevet ut direkte nå, klar som PDF i panelet, eller alt skrevet ut fra
+   * «Til pakking» – da skrives den ikke ut en gang til, og panelet sier ingenting om den.
+   */
+  etikett?: "skriver" | "pdf" | "allerede";
+  /** Overføringen til transportør: overført nå, alt overført, hoppet over (testordre), eller feilet. */
+  overforing?: TransferUtfall["status"];
   utfort: { uttrekk: boolean; sending: boolean; fulfillment: boolean };
   consignment_id?: number | null;
   tracking_number?: string | null;
   tracking_url?: string | null;
   pakkeboks?: { name: string; address1: string; postcode: string; city: string } | null;
-}
-
-interface Kontekst {
-  group: {
-    id: string;
-    routing_order_id: string;
-    created_at: string;
-    line_items: Array<{ qty: number; title?: string | null; product_id?: string | null }> | null;
-    shopify_fulfillment_order_id: string | null;
-    pos_deducted_at: string | null;
-    fulfilled_at: string | null;
-    cargonizer_consignment_id: number | null;
-    shipped_at: string | null;
-  };
-  ordre: { shopify_order_name: string | null; is_test: boolean; customer: Record<string, unknown> | null };
-  butikk: {
-    name: string | null;
-    shipping_sender_id: string | null;
-    shipping_transport_agreement: string | null;
-    shipping_product: string | null;
-    shipping_product_fallback: string | null;
-    directprint_printer_id: string | null;
-  };
-}
-
-function ett<T>(v: T | T[] | null | undefined): T | null {
-  return (Array.isArray(v) ? v[0] : v) ?? null;
 }
 
 /**
@@ -105,6 +68,8 @@ export async function sendOrdre(groupId: string, jwt: string): Promise<SendUtfal
   const db = adminClient();
   const k = await hentKontekst(groupId);
   if (!k) return { ok: false, steg: "uttrekk", melding: "Fant ikke ordren", utfort: tomt() };
+  // Kansellert etter at etiketten ble laget: ingenting skal skje, heller ikke kassauttrekket.
+  if (erKansellert(k)) return { ok: false, steg: "uttrekk", melding: KANSELLERT, utfort: tomt() };
 
   const utfort = {
     uttrekk: !!k.group.pos_deducted_at,
@@ -120,12 +85,16 @@ export async function sendOrdre(groupId: string, jwt: string): Promise<SendUtfal
   utfort.uttrekk = true;
 
   // ---- 2 og 3. sending i Cargonizer, og lagring ----------------------------
+  // Finnes sendingen fra etiketten, brukes den. Ellers lages den nå – uten overføring, den
+  // kommer i steg 4b, etter fulfillment, for alle sendinger likt.
   let sending: CargonizerConsignment;
   let pakkeboks: ServicePartnerRad | null = null;
+  let nySending = false;
   try {
     const r = await sikreSending(k);
     sending = r.sending;
     pakkeboks = r.pakkeboks;
+    nySending = r.ny;
   } catch (e) {
     return await feil(k, "sending", e instanceof Error ? e.message : String(e), utfort);
   }
@@ -143,12 +112,32 @@ export async function sendOrdre(groupId: string, jwt: string): Promise<SendUtfal
   }
   utfort.fulfillment = true;
 
+  // ---- 4b. overføring til PostNord ------------------------------------------
+  // Etter fulfillment, ikke før: feiler overføringen, er gruppen sendt, og backstoppen i
+  // timeout-sweeper prøver videre (den ser bare på sendte grupper). Webhooken for fulfillment
+  // kan treffe samme gruppe i samme sekund; overfoerGruppe tar forsøket med en betinget
+  // oppdatering, så bare én melder den inn. Testordrer hoppes over der.
+  let overforing: TransferUtfall["status"];
+  try {
+    overforing = (await overfoerGruppe(groupId)).status;
+  } catch (e) {
+    // Pakken er sendt og kunden varslet; overføringen tar backstoppen. Ikke stopp her.
+    console.error("[ship] overføring feilet", groupId, e instanceof Error ? e.message : e);
+    overforing = "feilet";
+  }
+
   // ---- 5. etiketten --------------------------------------------------------
-  let etikett: "skriver" | "pdf" = "pdf";
-  if (k.butikk.directprint_printer_id && k.butikk.shipping_sender_id) {
+  let etikett: "skriver" | "pdf" | "allerede" = "pdf";
+  if (k.group.label_printed_at && !nySending) {
+    // Skrevet ut fra «Til pakking». En etikett til ville bare blitt liggende ved skriveren.
+    // Er sendingen ny, gjaldt den utskriften en annen (slettet) sending, og da skrives den ut.
+    etikett = "allerede";
+  } else if (k.butikk.directprint_printer_id && k.butikk.shipping_sender_id) {
     try {
       await skrivUtEtikett(sending.id, k.butikk.directprint_printer_id, k.butikk.shipping_sender_id);
       etikett = "skriver";
+      await db.from("routing_groups")
+        .update({ label_printed_at: new Date().toISOString(), label_printed_via: "skriver" }).eq("id", groupId);
     } catch (e) {
       // Etiketten er det eneste steget butikken kan ordne selv: PDF-en ligger på kortet.
       // Å la hele sendingen framstå som mislykket fordi skriveren er av, ville vært verre.
@@ -160,6 +149,7 @@ export async function sendOrdre(groupId: string, jwt: string): Promise<SendUtfal
   return {
     ok: true,
     etikett,
+    overforing,
     utfort,
     consignment_id: sending.id,
     tracking_number: nummer,
@@ -174,25 +164,6 @@ function tomt() {
   return { uttrekk: false, sending: false, fulfillment: false };
 }
 
-async function hentKontekst(groupId: string): Promise<Kontekst | null> {
-  const { data } = await adminClient()
-    .from("routing_groups")
-    .select(
-      "id, routing_order_id, created_at, line_items, shopify_fulfillment_order_id, pos_deducted_at, fulfilled_at, " +
-        "cargonizer_consignment_id, shipped_at, " +
-        "routing_orders(shopify_order_name, is_test, customer), " +
-        "stores:assigned_store_id(name, shipping_sender_id, shipping_transport_agreement, shipping_product, shipping_product_fallback, directprint_printer_id)",
-    )
-    .eq("id", groupId)
-    .maybeSingle();
-  if (!data) return null;
-  const rå = data as unknown as Record<string, unknown>;
-  const ordre = ett(rå.routing_orders as Kontekst["ordre"] | Kontekst["ordre"][]);
-  const butikk = ett(rå.stores as Kontekst["butikk"] | Kontekst["butikk"][]);
-  if (!ordre || !butikk) return null;
-  return { group: rå as unknown as Kontekst["group"], ordre, butikk };
-}
-
 /** Skriver feilen på gruppen, så panelet kan vise den, og gir svaret tilbake. */
 async function feil(k: Kontekst, steg: Steg, melding: string, utfort: SendUtfall["utfort"]): Promise<SendUtfall> {
   console.error("[ship]", steg, k.ordre.shopify_order_name ?? k.group.id, melding);
@@ -201,176 +172,6 @@ async function feil(k: Kontekst, steg: Steg, melding: string, utfort: SendUtfall
     .eq("id", k.group.id);
   await audit("routing_group", k.group.id, "ship_failed", { steg, error: melding, order: k.ordre.shopify_order_name });
   return { ok: false, steg, melding, utfort };
-}
-
-/**
- * Sendingen for denne gruppen – den som finnes, eller en ny.
- *
- * Rekkefølgen er kravet: lagret id først, så oppslag på ordrenummeret, og først hvis ingen
- * av delene gir treff lager vi en ny. Cargonizers søk treffer delstreng, så oppslaget krever
- * eksakt lik referanse (se velgConsignment).
- */
-async function sikreSending(k: Kontekst): Promise<{ sending: CargonizerConsignment; pakkeboks: ServicePartnerRad | null }> {
-  const db = adminClient();
-  const senderId = k.butikk.shipping_sender_id;
-  if (!senderId) throw new Error("Butikken mangler Cargonizer-avsender. Kontakt Garnly.");
-  const orderName = k.ordre.shopify_order_name ?? "";
-
-  if (k.group.cargonizer_consignment_id) {
-    const kjent = await hentConsignment(k.group.cargonizer_consignment_id, senderId);
-    if (kjent) {
-      // Lagres på nytt selv om sendingen fantes fra før. Steg 3 skal tåle å kjøres om igjen:
-      // stoppet forrige forsøk mellom «sending laget» og «sending lagret», er det her det
-      // blir rettet. Det samme gjelder sendinger CargonizerConnect laget i overgangen –
-      // de har verken sendingsnummer eller transportør hos oss.
-      await lagreSending(k, kjent, null);
-      return { sending: kjent, pakkeboks: null };
-    }
-    // Lagret id som ikke finnes lenger: sendingen er slettet i Cargonizer. Da lager vi ny.
-  }
-  const fra = new Date(new Date(k.group.created_at).getTime() - SOKEVINDU_DAGER * 86400_000);
-  const funnet = await finnConsignment(orderName, senderId, fra);
-  if (funnet) {
-    await lagreSending(k, funnet, null);
-    return { sending: funnet, pakkeboks: null };
-  }
-
-  // ---- ingen sending finnes: lag en ----
-  const kunde = (k.ordre.customer ?? {}) as Record<string, string | null>;
-  const land = (kunde.countryCodeV2 || "NO").toUpperCase();
-  const postnr = (kunde.zip ?? "").trim();
-  if (!postnr) throw new Error("Ordren mangler postnummer, så vi finner ingen pakkeboks.");
-
-  const mobil = mobilnummer(kunde.phone);
-  if (!mobil) {
-    // Pakkeboks krever mobilnummer (consignee_mobile_required). Hentested gjør ikke det, men
-    // vi stopper likevel, med vilje: mobil er påkrevd i kassen, så en ordre uten mobil betyr at
-    // noe er galt med ordren. Det skal Garnly se på, ikke sendingen gå rundt (Embrik 01.10.2026).
-    throw new Error("Ordren mangler mobilnummer, som er påkrevd i kassen. Kontakt Garnly.");
-  }
-
-  const ta = k.butikk.shipping_transport_agreement;
-  const hovedprodukt = k.butikk.shipping_product;
-  if (!ta || !hovedprodukt) throw new Error("Butikken mangler transportavtale for frakt. Kontakt Garnly.");
-
-  // Vekten avgjør hvilke produkter som er aktuelle, og må derfor regnes ut FØR vi leter
-  // etter pakkested. Over 10 kg tar ikke pakkeboksen den, og da skal vi rett til hentested –
-  // ikke finne en boks i nærheten og stoppe der.
-  const vekt = await beregnVekt(k);
-  const reserve = k.butikk.shipping_product_fallback;
-  const alle = [hovedprodukt, ...(reserve && reserve !== hovedprodukt ? [reserve] : [])];
-  const produkter = produkterForVekt(vekt, alle);
-  if (!produkter.length) {
-    const grenser = alle.map(maksVektKg).filter((m): m is number => m !== null);
-    const maks = grenser.length ? Math.max(...grenser) : null;
-    throw new Error(maks !== null
-      ? `Pakken veier ${vekt} kg, og PostNord tar maks ${maks} kg. Kontakt Garnly.`
-      : `Pakken veier ${vekt} kg, og ingen av fraktproduktene tar den. Kontakt Garnly.`);
-  }
-
-  // Pakkeboks først. Finnes ingen i nærheten, vanlig hentested (Service Point / MyPack
-  // Collect) på samme avtale. Pakkebokser finnes ikke overalt: 9990 Båtsfjord, 9760
-  // Honningsvåg og 8700 Nesna har ingen, men fem hentesteder hver (sjekket 01.10.2026).
-  let produkt = produkter[0];
-  let pakkeboks: ServicePartnerRad | null = null;
-  for (const p of produkter) {
-    const partnere = await finnServicePartnere(senderId, {
-      transportAgreementId: ta,
-      product: p,
-      postcode: postnr,
-      country: land,
-      address: kunde.address1,
-      city: kunde.city,
-    });
-    if (partnere[0]) {
-      produkt = p;
-      pakkeboks = partnere[0];
-      break;
-    }
-  }
-  if (!pakkeboks) {
-    const bareHentested = !produkter.includes(hovedprodukt);
-    throw new Error(
-      produkter.length > 1
-        ? `Fant verken pakkeboks eller hentested nær ${postnr}. Kontakt Garnly.`
-        : bareHentested
-        ? `Pakken veier ${vekt} kg, for tungt for pakkeboks, og det finnes ikke hentested nær ${postnr}. Kontakt Garnly.`
-        : `Fant ingen pakkeboks nær ${postnr}. Kontakt Garnly.`,
-    );
-  }
-
-  const xml = byggConsignmentXml({
-    transportAgreementId: ta,
-    product: produkt,
-    // Testordrer opprettes, men meldes aldri inn til PostNord.
-    transfer: !k.ordre.is_test,
-    reference: orderName,
-    consignee: {
-      name: kunde.name ?? "",
-      address1: kunde.address1,
-      address2: kunde.address2,
-      postcode: postnr,
-      city: kunde.city ?? "",
-      country: land,
-      email: kunde.email,
-      mobile: mobil,
-    },
-    servicePartner: {
-      number: pakkeboks.number,
-      name: pakkeboks.name,
-      address1: pakkeboks.address1,
-      postcode: pakkeboks.postcode,
-      city: pakkeboks.city,
-      country: pakkeboks.country,
-    },
-    vektKg: vekt,
-    innhold: innholdstekst(k.group.line_items ?? []),
-    services: TJENESTER,
-  });
-
-  const laget = await opprettConsignment(xml, senderId);
-  // Produktet følger med pakkestedet, så det står hvorfor kunden fikk hentested og ikke boks.
-  await lagreSending(k, laget, { ...pakkeboks, produkt } as ServicePartnerRad);
-  await audit("routing_group", k.group.id, "consignment_created", {
-    produkt,
-    consignment_id: laget.id,
-    order: orderName,
-    vekt_kg: vekt,
-    pakkeboks: pakkeboks.name,
-    overfort: !k.ordre.is_test,
-  });
-  return { sending: laget, pakkeboks };
-}
-
-async function lagreSending(k: Kontekst, c: CargonizerConsignment, pakkeboks: ServicePartnerRad | null) {
-  const nummer = sporingsnummer(c.trackingUrl, c.numberWithChecksum);
-  const beslutning = transferBeslutning(c);
-  await adminClient().from("routing_groups").update({
-    cargonizer_consignment_id: c.id,
-    shipment_id: c.numberWithChecksum,
-    tracking_number: nummer,
-    tracking_url: c.trackingUrl,
-    carrier: TRANSPORTOR,
-    // Er den alt meldt inn, står tidspunktet. Er den ikke det, tar backstoppen i
-    // timeout-sweeper den – vi later ikke som om den er overført.
-    ...(beslutning.handling === "allerede" ? { transferred_at: beslutning.tidspunkt ?? new Date().toISOString() } : {}),
-    ...(pakkeboks ? { service_partner: pakkeboks } : {}),
-  }).eq("id", k.group.id);
-  // Tidspunktet skal være da sendingen ble laget, ikke da vi sist så på den.
-  await adminClient().from("routing_groups")
-    .update({ shipped_at: new Date().toISOString() }).eq("id", k.group.id).is("shipped_at", null);
-}
-
-/** Vekt fra Shopify (products.grams), med fallback per vare. Se shipping/consignment.ts. */
-async function beregnVekt(k: Kontekst): Promise<number> {
-  const linjer = k.group.line_items ?? [];
-  const ids = linjer.map((l) => l.product_id).filter(Boolean) as string[];
-  const gram = new Map<string, number | null>();
-  if (ids.length) {
-    const { data } = await adminClient().from("products").select("id, grams").in("id", ids);
-    for (const p of (data ?? []) as Array<{ id: string; grams: number | null }>) gram.set(p.id, p.grams);
-  }
-  return vektKg(linjer.map((l) => ({ qty: l.qty, grams: l.product_id ? gram.get(l.product_id) ?? null : null })));
 }
 
 /**

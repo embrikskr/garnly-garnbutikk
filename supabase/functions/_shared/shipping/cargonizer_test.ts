@@ -2,13 +2,16 @@ import { assertEquals } from "jsr:@std/assert@1";
 import {
   type CargonizerConsignment,
   erPostNord,
+  erSlettet,
   parseConsignments,
   parseErrors,
   parsePrintere,
   parseServicePartners,
   referanseVarianter,
   sokeord,
+  sokFra,
   transferBeslutning,
+  velgAlleConsignments,
   velgConsignment,
 } from "./cargonizer.ts";
 
@@ -230,4 +233,32 @@ Deno.test("ukjent transportør er «vet ikke», ikke «annen transportør»", ()
   assertEquals(erPostNord(undefined), null);
   assertEquals(erPostNord(""), null);
   assertEquals(erPostNord("   "), null);
+});
+
+Deno.test("kansellering: ALLE sendinger med eksakt referanse, ikke bare den nyeste", () => {
+  // Ble sendingen laget to ganger, skal begge bort når ordren kanselleres.
+  const svar = [c(10, "#1010"), c(11, "#10101"), c(12, "1010"), c(13, "#1010")];
+  assertEquals(velgAlleConsignments(svar, referanseVarianter("#1010")).map((x) => x.id), [10, 12, 13]);
+  // Delstreng skal fortsatt aldri telle: #10101 er en annen kundes ordre.
+  assertEquals(velgAlleConsignments([c(11, "#10101")], referanseVarianter("#1010")), []);
+  assertEquals(velgAlleConsignments(svar, ""), []);
+  // velgConsignment er fortsatt den nyeste av de samme.
+  assertEquals(velgConsignment(svar, referanseVarianter("#1010"))?.id, 13);
+});
+
+Deno.test("slettet: ikke funnet, eller en tilstand som betyr borte", () => {
+  assertEquals(erSlettet(null), true);
+  assertEquals(erSlettet(c(1, "x", "deleted")), true);
+  assertEquals(erSlettet(c(1, "x", "Cancelled")), true);
+  assertEquals(erSlettet(c(1, "x", "open")), false);
+  // Overført er IKKE slettet – da står den hos PostNord.
+  assertEquals(erSlettet(c(1, "x", "transferred")), false);
+  assertEquals(erSlettet(c(1, "x", "")), false);
+});
+
+Deno.test("sokFra: aldri bakover i tid, bare én dag for tidssonen", () => {
+  // Ordrenummer gjentar seg: #1009 fra 10.09 og #1009 fra 04.10 er to ulike ordrer. Søket for
+  // den nye skal ikke nå tilbake til den gamle.
+  assertEquals(sokFra("2026-10-04T18:17:26Z").toISOString().slice(0, 10), "2026-10-03");
+  assertEquals(sokFra("2026-10-04T00:30:00+02:00").toISOString().slice(0, 10), "2026-10-02");
 });

@@ -1,6 +1,75 @@
 # Status – garnly-garnbutikk
 
-Oppdatert: 2026-10-01
+Oppdatert: 2026-10-05
+
+## Etikett i «Til pakking», og kansellering rydder i Cargonizer (04.10.2026)
+
+Butikken kan skrive ut fraktetiketten mens de pakker, ikke bare etter at ordren er sendt.
+
+1. **Ikonet på kortet i «Til pakking»** (40×40, «Skriv ut fraktetikett») kaller `shipping-label`.
+   Finnes ingen sending i Cargonizer, lages den der og da med samme oppsett som sendeknappen
+   (butikkens avsender og avtale, pakkeboks eller hentested etter vekt, SMS) – men **alltid
+   `transfer=false`**. Sendings-id og sporing lagres på gruppen. Med DirectPrint-skriver går
+   etiketten dit, ellers åpnes PDF-en. Kortet viser «Etikett skrevet ut HH:MM» etterpå.
+2. **«Slått ut og klar til sending»** gjenbruker sendingen, fulfiller i Shopify og *overfører*
+   den så til PostNord (`transfer_sync.ts`). Testordrer overføres ikke. Var etiketten skrevet ut,
+   skrives den ikke ut igjen, og toasten sier bare «Sendt. Du finner den under Tidligere ordrer.»
+3. **Én sending per ordre.** Opprettelsen er låst per gruppe (`consignment_lock_at`). Trykker
+   butikken på etiketten og sendeknappen samtidig, venter det ene kallet på det andre og bruker
+   samme sending – det stopper ikke med «Kontakt Garnly».
+4. **Kansellert i Shopify før overføring:** `order-cancelled` sletter den uoverførte sendingen
+   (`DELETE /consignments/<id>.xml`, udokumentert, men virker). Går det ikke, står ordren under
+   «Trenger handling» som «Kansellert – sendingen hos X må slettes i Cargonizer», og Garnly får
+   én e-post. Cron `void-consignments` (hver halvtime) prøver igjen og lukker saken når sendingen
+   er borte, også om den er slettet for hånd. Etikett og sendeknapp nekter på kansellerte ordrer.
+
+Migrasjon 032: `label_printed_at`, `label_printed_via`, `consignment_lock_at`,
+`consignment_voided_at`, `consignment_void_error` på `routing_groups`; `v_panel_assigned` med
+etikettstatus; fjerde årsak i `v_admin_action_needed`; cron `void-consignments`.
+
+### Funnet underveis: ordrenummer gjentar seg
+
+#1008, #1009 og #1010 finnes to ganger i `routing_orders` – fra den gamle Shopify-butikken
+(10.09) og den nye (04.10). Oppslaget i Cargonizer går på ordrenummer, og søkte 60 dager bakover.
+Det kunne gitt butikken en annen ordres etikett, latt `transfer_sync` melde inn feil pakke, og
+latt slettingen ta feil sending. Nå:
+
+- søket starter dagen før gruppen ble laget, aldri lenger bakover (`sokFra`, testet)
+- slettingen tar bare sendingen som er lagret på gruppen og de `audit_log` sier Garnly laget –
+  aldri et søketreff
+
+### Verifisert mot ekte data (04.10.2026)
+
+Uten butikkinnlogging: aksept via `offer-respond` med nytt engangstoken, kassauttrekk via den
+ekte `mark_pos_deducted` som butikkbrukeren («test via Claude» i loggen), og etikett/sending via
+en midlertidig funksjon som kalte `lagEtikett` og `sendOrdre` direkte. Antall sendinger er talt
+i Cargonizer hos begge avsendere.
+
+| Ordre | Butikk | Hva | Resultat |
+|---|---|---|---|
+| #1009 | Strikkefryd | etikett ×2 samtidig | én sending (76350439), det andre kallet stoppet på låsen (før venting ble lagt inn) |
+| #1009 | Strikkefryd | etikett igjen | samme sending, `ny: false` |
+| #1009 | Strikkefryd | «Slått ut» | gjenbrukt, fulfillet, `etikett: allerede`, overføring hoppet over (testordre) |
+| #1008 | Strikkefryd | etikett fra Tidligere ordrer | eksisterende 76350373, ingen ny |
+| #1010 | Garnkilden | etikett → kansellert → slett | 76350445 slettet i Cargonizer, borte fra søket |
+| #1010 | Garnkilden | etikett og «Slått ut» samtidig | én ny sending (76350489); etikett-kallet ventet og brukte den |
+| alle | begge | sendinger i Cargonizer | nøyaktig én per ordre, ingen hos feil avsender |
+
+«Trenger handling» med `sending_ma_slettes` er sjekket i en tilbakerullet transaksjon: admin ser
+raden med beskjeden, butikkbrukeren ser ingenting. Paneltestene (Playwright) dekker etikettstatus
+på kortet, ikonet i «Til pakking», toasten i alle tre tilfeller og den nye admin-raden.
+
+#1010 ligger hos **Garnkilden**, ikke Strikkefryd: Strikkefryd avslo den 18:19, før testen.
+
+### Rydd – trenger Embrik
+
+- `test-etikett` er satt til å svare 410 og krever JWT, men står som funksjon. Slett den:
+  `supabase functions delete test-etikett` (MCP-en kan ikke slette funksjoner).
+- Testsendingene 76350373 (#1008), 76350439 (#1009) og 76350489 (#1010) er åpne i Cargonizer,
+  ikke overført. Slett dem der når du vil.
+- `fulfillment-webhook` og `timeout-sweeper` kjører fortsatt forrige `transfer_sync` (60 dager
+  bakover, ingen kanselleringssjekk) til de deployes neste gang. Begge rører bare fulfillede
+  grupper, så risikoen er liten, men de bør deployes.
 
 ## Oppgjør og salg per butikk (01.10.2026)
 

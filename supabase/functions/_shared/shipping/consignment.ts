@@ -145,7 +145,7 @@ export interface ConsignmentInput {
   transportAgreementId: string;
   /** Produktidentifikator fra transportavtalen, f.eks. postnord_mypack_small. */
   product: string;
-  /** true = meld inn til transportøren med én gang. false for testordrer. */
+  /** true = meld inn til transportøren med én gang. Garnly sender alltid false; overføringen gjør transfer_sync. */
   transfer: boolean;
   /** Avsenders referanse. Ordrenummeret, i Shopify-format («#1004»). */
   reference: string;

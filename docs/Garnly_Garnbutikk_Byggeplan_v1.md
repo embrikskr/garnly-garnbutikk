@@ -222,17 +222,35 @@ sending», se `_shared/ship.ts`):
 1. kassauttrekket registreres (`mark_pos_deducted`, med butikkbrukerens egen JWT)
 2. sendingen opprettes i Cargonizer: `POST /consignments.xml` med butikkens avsender-ID,
    butikkens transportavtale, produkt Parcel Locker (`postnord_mypack_small`), nærmeste
-   pakkeboks fra `/service_partners.xml`, vekt fra varene, SMS-varsling, og `transfer=true`.
+   pakkeboks fra `/service_partners.xml`, vekt fra varene, SMS-varsling, og `transfer=false`.
+   Er etiketten alt skrevet ut fra «Til pakking», finnes sendingen og gjenbrukes (se under).
    Finnes ingen pakkeboks i nærheten, eller pakken er over 10 kg, går den til nærmeste
    hentested (`mypack`, `stores.shipping_product_fallback`). Over 35 kg, eller uten
    mobilnummer, stopper den med «Kontakt Garnly» (STATUS.md, 01.10.2026)
 3. sendings-id, sendingsnummer, sporingsnummer og sporingslenke lagres
 4. Shopify fulfilles med sporing (`fulfillmentCreate`, `notifyCustomer`)
-5. etiketten skrives ut på butikkens DirectPrint-skriver, eller åpnes som PDF i panelet
+5. sendingen overføres til PostNord (`POST /consignments/transfer.xml`, `transfer_sync.ts`),
+   bortsett fra testordrer
+6. etiketten skrives ut på butikkens DirectPrint-skriver hvis den ikke alt er skrevet ut
 
 Hvert steg tåler å kjøres på nytt: før vi lager en sending leter vi etter en som finnes, og
-før vi fulfiller spør vi Shopify om det gjenstår noe. Testordrer opprettes med
-`transfer=false`, så ingenting går til transportøren.
+før vi fulfiller spør vi Shopify om det gjenstår noe. Testordrer overføres aldri, så
+ingenting går til transportøren.
+
+**Endret 04.10.2026: etiketten kan skrives ut i «Til pakking».** Butikken teiper etiketten på
+mens de pakker, ikke etterpå. Ikonet på kortet (`shipping-label`, `_shared/etikett.ts`) lager
+sendingen hvis den ikke finnes – samme oppsett som over, alltid `transfer=false` – og skriver
+den ut (DirectPrint) eller åpner PDF-en. Overføringen til PostNord skjer først i steg 5, når
+pakken faktisk er slått ut. Én sending per ordre: opprettelsen er låst per gruppe
+(`consignment_lock_at`), og et kall som møter låsen venter på den andre i stedet for å feile.
+Oppslag på ordrenummer går aldri bakover i tid (`sokFra`): ordrenummer gjentar seg etter
+butikkbyttet i september.
+
+Kanselleres ordren mellom etikett og overføring, slettes den uoverførte sendingen
+(`DELETE /consignments/<id>.xml` – udokumentert, men verifisert på #1010 04.10.2026: sendingen
+forsvant fra søket). Bare sendinger Garnly vet hører til gruppen slettes: den lagrede, og de
+`audit_log` sier vi laget. Går slettingen ikke, står ordren under «Trenger handling» med
+beskjed om å slette den for hånd, og en backstop (cron hver halvtime) prøver igjen.
 
 Transportavtale og produkt ligger per butikk i `stores` (`shipping_transport_agreement`,
 `shipping_product`), ikke i koden: avtale-id-ene er ulike per butikk, og et transportørbytte
