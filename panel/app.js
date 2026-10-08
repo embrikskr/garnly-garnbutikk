@@ -21,7 +21,7 @@ const el = {
   app: $("app"), storeName: $("store-name"), storeSwitch: $("store-switch"),
   queue: $("queue"), queueEmpty: $("queue-empty"),
   assigned: $("assigned"), assignedEmpty: $("assigned-empty"),
-  acceptAll: $("accept-all"), logout: $("logout"), toast: $("toast"),
+  logout: $("logout"), toast: $("toast"),
   conn: $("conn"), soundToggle: $("sound-toggle"),
   faneAktive: $("fane-aktive"), faneHistorikk: $("fane-historikk"),
   visningAktive: $("visning-aktive"), visningHistorikk: $("visning-historikk"),
@@ -244,7 +244,6 @@ async function refresh() {
   renderAssigned(assigned.data ?? []);
 
   document.title = rows.length ? `(${rows.length}) Garnly butikkpanel` : "Garnly butikkpanel";
-  el.acceptAll.hidden = rows.length < 2;
 }
 
 // ---------------------------------------------------------------- visning
@@ -867,21 +866,8 @@ el.detaljInnhold.addEventListener("click", async (e) => {
   }
 });
 
-el.acceptAll.addEventListener("click", async () => {
-  const ids = [...el.queue.querySelectorAll("[data-offer]")].map((c) => c.dataset.offer);
-  if (!ids.length || !confirm(`Godta alle ${ids.length} ordrene?`)) return;
-  el.acceptAll.disabled = true;
-  let ok = 0, failed = 0;
-  for (const id of ids) {
-    const r = await respond(id, "accept", true);
-    r ? ok++ : failed++;
-  }
-  el.acceptAll.disabled = false;
-  toast(failed ? `${ok} godtatt, ${failed} gikk ikke gjennom.` : `${ok} ordrer godtatt.`, failed ? "error" : "");
-  await refresh();
-});
-
-async function respond(offerId, action, quiet = false) {
+// «Godta alle» er fjernet (Embrik 08.10.2026): hver ordre godtas på sitt eget kort.
+async function respond(offerId, action) {
   if (busy.has(offerId)) return false;
   busy.add(offerId);
   try {
@@ -896,14 +882,14 @@ async function respond(offerId, action, quiet = false) {
       signal: typeof AbortSignal?.timeout === "function" ? AbortSignal.timeout(20000) : undefined,
     });
     const body = await res.json().catch(() => ({}));
-    if (!quiet) toast(body.message || (res.ok ? "Sendt." : "Noe gikk galt."), body.ok ? "" : "error");
+    toast(body.message || (res.ok ? "Sendt." : "Noe gikk galt."), body.ok ? "" : "error");
     return Boolean(body.ok);
   } catch (err) {
     // Ikke skjul årsaken: CORS-blokkering, avbrutt kall og nedlagt nett gir alle
     // samme unntak her, og uten teksten er de umulige å skille fra hverandre.
     console.error("[offer-respond]", err);
     const grunn = err?.name === "TimeoutError" ? "Svaret tok for lang tid." : String(err?.message ?? err);
-    if (!quiet) toast(`Fikk ikke kontakt med Garnly: ${grunn}`, "error");
+    toast(`Fikk ikke kontakt med Garnly: ${grunn}`, "error");
     return false;
   } finally {
     busy.delete(offerId);

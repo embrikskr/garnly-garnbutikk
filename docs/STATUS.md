@@ -2,9 +2,9 @@
 
 Oppdatert: 2026-10-08
 
-## Panelet: bort med tallene i toppen og fanen «Oppgjør» (08.10.2026)
+## Panelet: bort med tallene i toppen, fanen «Oppgjør» og «Godta alle» (08.10.2026)
 
-Embrik ba om å fjerne to ting, for både butikkene og Garnly-admin:
+Embrik ba om å fjerne tre ting, for både butikkene og Garnly-admin:
 
 - **«0 nye / 0 å pakke / 0 i dag»** i toppen. Fanene og kolonnene viser det samme, og tre
   nuller var bare støy. Toppen har nå butikknavnet til venstre og varsel/innstillinger/Logg ut
@@ -12,6 +12,8 @@ Embrik ba om å fjerne to ting, for både butikkene og Garnly-admin:
   i Garnly-fanen (`v_admin_stats`) er ikke rørt.
 - **Fanen «Oppgjør»**, med månedsoversikten, linjene, CSV-nedlastingen og «Marker som
   utbetalt». Butikkene ser bare «Aktive ordrer» og «Tidligere ordrer»; Garnly ser bare «Garnly».
+- **«Godta alle»** over «Nye ordrer» (vistes ved to eller flere tilbud). Hver ordre godtas
+  eller avslås nå på sitt eget kort. Automatisk godkjenning (`stores.auto_accept`) er ikke rørt.
 
 **Står igjen i databasen, uendret:** `settlement_ledger`, `settlement_adjustments`
 (refusjonstrekk, webhooken og nattlig backstop går som før), `settlement_payouts` og
