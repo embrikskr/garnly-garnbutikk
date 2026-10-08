@@ -13,7 +13,7 @@ Bygger videre på `Garnly_Ordreruting_Teknisk_Oppsett.md` (v0.1) og `Garnly_Ordr
 | Database | Supabase/Postgres (evt. Airtable i fase 0) | **Eget Supabase-prosjekt for garnbutikken**, adskilt fra app-/oppskriftsdatabasen |
 | Lagerkilde | Lager vedlikeholdes i Shopify per location | **Butikkenes kassesystemer er kilden.** Garnly leser Duell, Mystore m.fl. og skriver til Shopify |
 | Hele ordren fra én butikk | Absolutt krav, ellers eskalering | **Foretrukket, ikke absolutt.** Ufravikelig regel: hele antallet av én varelinje fra samme butikk (garnparti). Ordren kan splittes per varelinje mellom butikker hvis ingen har alt |
-| Frist for butikk | 60 min | **Noen timer** (konfigurerbar, foreslått 3 t i åpningstid) |
+| Frist for butikk | 60 min | **Noen timer** (konfigurerbar; 5 t i åpningstid fra 08.10.2026, var 3 t) |
 
 Alt annet står: Garnly er merchant of record i én sentral Shopify, butikkene er locations, tilbud går sekvensielt til én butikk om gangen, round-robin på `last_assigned_at`, timeout gir nedvekting, avslag straffes ikke, kunden betaler frakt, Shipmondo (eller Cargonizer) via API.
 
@@ -174,7 +174,7 @@ Ingen butikk har alt → del linjene i færrest mulig grupper (grådig: velg but
 Per gruppe: kandidater sorteres med spørringen fra `Garnly_Ordrefordeling_Logikk.md` §2 (`last_assigned_at` eldst først, `timeout_streak` × 24 t, `created_at` tiebreak). Tilbud til én butikk om gangen, `deadline_at = now + frist`. Ved aksept: `last_assigned_at = now()`, `assigned_count += 1`, `timeout_streak = 0`. En butikk som tar én gruppe i en splittet ordre teller som én tildeling.
 
 ### 8.4 Frist
-Konfig `offer_ttl_hours` (foreslått 3) og `business_hours` per butikk. Fristen løper kun i åpningstid; et tilbud sendt kl. 17 med stengt kl. 18 fortsetter kl. 10 neste dag. Kunden får uansett ordrebekreftelse med en gang og en forventet leveringstid som tar høyde for dette.
+Konfig `offer_ttl_hours` (5 fra 08.10.2026, startet på 3) og `business_hours` per butikk. Fristen løper kun i åpningstid; et tilbud sendt kl. 17 med stengt kl. 18 fortsetter kl. 10 neste dag. Kunden får uansett ordrebekreftelse med en gang og en forventet leveringstid som tar høyde for dette.
 
 ### 8.5 Aksept
 `offer-respond` (signert engangs-token i lenken):

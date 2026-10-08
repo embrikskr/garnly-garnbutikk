@@ -2,6 +2,25 @@
 
 Oppdatert: 2026-10-08
 
+## Svarfrist 5 timer i stedet for 3 (08.10.2026)
+
+Embrik vil gi butikkene mer tid. Migrasjon 033 setter `offer_ttl_hours = 5` for begge
+butikkene og som standard for nye. Fristen løper fortsatt bare i åpningstid (man–fre 10–17,
+lør 10–15, søndag stengt), regnet av `deadlineWithinBusinessHours`. Ingen tilbud var ute da
+endringen ble gjort.
+
+| Ordren kommer | Frist med 3 t | Frist med 5 t |
+|---|---|---|
+| Tirsdag 10:00 | tirsdag 13:00 | tirsdag 15:00 |
+| Tirsdag 14:00 | tirsdag 17:00 | onsdag 12:00 |
+| Tirsdag 22:00 | onsdag 13:00 | onsdag 15:00 |
+| Fredag 14:00 | fredag 17:00 | lørdag 12:00 |
+| Lørdag 12:00 | lørdag 15:00 | mandag 12:00 |
+
+Konsekvens: på hverdager går alt som kommer etter kl. 12 over til neste dag. Svarer ikke
+butikken, får neste butikk ordren først da, og kunden venter lenger. Svarer butikken med
+en gang, endrer fristen ingenting.
+
 ## Panelet: bort med tallene i toppen, fanen «Oppgjør» og «Godta alle» (08.10.2026)
 
 Embrik ba om å fjerne tre ting, for både butikkene og Garnly-admin:
