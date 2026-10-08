@@ -16,6 +16,15 @@ import { matchLines } from "../_shared/matching.ts";
 import { sellableQty } from "../_shared/inventory.ts";
 import { dueCutoff, isDue, scheduleFromEnv } from "../_shared/schedule.ts";
 
+/**
+ * Aktivering av nye varer på locationen koster to Shopify-kall per vare. Åpnes mange produkter
+ * på en gang (35 utkast og ~1 000 farger 09.10.2026), rekkes det ikke i én kjøring. Da aktiveres
+ * det i bolker til kjøringen har brukt så lang tid, og hver bolk markeres med en gang. Resten
+ * er «strandet» (lager, men ikke aktivert) og tas av neste kjøring.
+ */
+const AKTIVER_TIL_MS = 240_000;
+const AKTIVER_BOLK = 25;
+
 Deno.serve(async (req) => {
   const unauthorized = requireInternalSecret(req);
   if (unauthorized) return unauthorized;
@@ -60,6 +69,7 @@ Deno.serve(async (req) => {
 
 async function syncOne(store: StoreRow, dryRun: boolean) {
   const db = adminClient();
+  const start = Date.now();
   // Claim: sett last_sync_at med en gang så en overlappende cron-kjøring (synken går i
   // bakgrunnen og kan ta > 5 min) hopper over butikken via due-filteret i stedet for å
   // kjøre parallelt og klippe diffen. Ekte kjøring; dry_run rører ikke butikkstatus.
@@ -208,14 +218,19 @@ async function syncOne(store: StoreRow, dryRun: boolean) {
       // første synk; en vare uten inventory level på locationen vises uansett som utsolgt der.
       // Én gang per (butikk, produkt), sporet i inventory.shopify_activated.
       const toActivate = withItem.filter((c) => c.qty > 0 && !activatedSet.has(c.product.id));
-      if (toActivate.length) {
-        const itemIds = toActivate.map((c) => c.product.shopify_inventory_item_id!);
+      let aktivert = 0;
+      for (let i = 0; i < toActivate.length && Date.now() - start < AKTIVER_TIL_MS; i += AKTIVER_BOLK) {
+        const bolk = toActivate.slice(i, i + AKTIVER_BOLK);
+        const itemIds = bolk.map((c) => c.product.shopify_inventory_item_id!);
         await enableTracking(itemIds);
         await activateInventoryAtLocation(itemIds, store.shopify_location_id);
-        for (let i = 0; i < toActivate.length; i += 500) {
-          await db.from("inventory").update({ shopify_activated: true }).eq("store_id", store.id).in("product_id", toActivate.slice(i, i + 500).map((c) => c.product.id));
-        }
-        for (const c of toActivate) activatedSet.add(c.product.id);
+        const { error } = await db.from("inventory").update({ shopify_activated: true }).eq("store_id", store.id).in("product_id", bolk.map((c) => c.product.id));
+        if (error) throw new Error("inventory shopify_activated: " + error.message);
+        for (const c of bolk) activatedSet.add(c.product.id);
+        aktivert += bolk.length;
+      }
+      if (aktivert < toActivate.length) {
+        console.log(`[sync] ${store.name}: aktiverte ${aktivert} av ${toActivate.length} nye varer, resten tas neste kjøring`);
       }
       // Skriv lager for varer som er aktivert (nå eller før). 0-varer som aldri ble aktivert
       // hoppes over – de har ingen inventory level på locationen og skal ikke ha det.
