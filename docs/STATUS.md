@@ -61,6 +61,10 @@ på 25 innenfor 240 s per kjøring (2 Shopify-kall per vare); det som ikke rekke
   farger. Den ble delt i to bare fordi Shopify hadde maks 100 varianter per produkt; grensen er
   2 048 siden 15.10.2025, og temaet viser opptil 250. «Finull (2)» står igjen som utkast.
   Arkivering eller sletting av den venter på Embriks bekreftelse.
+- Etter åpningen og to synkrunder (09.10 01:42 og 01:48): Garnkilden kobler 1 912 varianter
+  (1 345 før), Strikkefryd 2 467 (1 799 før i går). Alle nye varer med lager er aktivert på
+  butikkenes locations, ingen står igjen. De 37 nye Finull-fargene har lager hos begge
+  (Garnkilden 37 farger / 501 nøster, Strikkefryd 33 / 617), verifisert i Shopify.
 - Utsolgte farger skjules ikke. Hele fargekartet vises, og lageret oppdateres selv når en
   butikk får inn varen.
 
