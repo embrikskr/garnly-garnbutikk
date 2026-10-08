@@ -1,6 +1,29 @@
 # Status – garnly-garnbutikk
 
-Oppdatert: 2026-10-05
+Oppdatert: 2026-10-08
+
+## Panelet: bort med tallene i toppen og fanen «Oppgjør» (08.10.2026)
+
+Embrik ba om å fjerne to ting, for både butikkene og Garnly-admin:
+
+- **«0 nye / 0 å pakke / 0 i dag»** i toppen. Fanene og kolonnene viser det samme, og tre
+  nuller var bare støy. Toppen har nå butikknavnet til venstre og varsel/innstillinger/Logg ut
+  til høyre. Panelet leser ikke lenger `v_panel_stats` (viewet står, ubrukt). Nøkkeltallene
+  i Garnly-fanen (`v_admin_stats`) er ikke rørt.
+- **Fanen «Oppgjør»**, med månedsoversikten, linjene, CSV-nedlastingen og «Marker som
+  utbetalt». Butikkene ser bare «Aktive ordrer» og «Tidligere ordrer»; Garnly ser bare «Garnly».
+
+**Står igjen i databasen, uendret:** `settlement_ledger`, `settlement_adjustments`
+(refusjonstrekk, webhooken og nattlig backstop går som før), `settlement_payouts` og
+funksjonene `settlement_lines` / `settlement_summary` / `settlement_months` /
+`mark_settlement_paid`. «Refundert» på ordren i Tidligere ordrer er beholdt. Uten fanen leses
+oppgjøret med SQL rett fra `settlement_ledger` (funksjonene gir null rader uten innlogget
+admin), og en utbetaling føres i `settlement_payouts`. Fanen kan hentes fram igjen fra
+commit 3372359 (`panel/`).
+
+Testet i Chromium mot panelet med stubbet Supabase: butikk og admin, brukerbytte, etikett i
+tre varianter, avslag, admin-handlinger – ingen JS-feil, og toppen ligger riktig på 1280 og
+390 px bredde.
 
 ## Etikett i «Til pakking», og kansellering rydder i Cargonizer (04.10.2026)
 

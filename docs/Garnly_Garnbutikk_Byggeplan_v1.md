@@ -279,8 +279,11 @@ Refundert frakt trekkes ikke. Trekket gjøres opp i måneden refusjonen skjedde,
 ubetalte måned hvis den alt er markert som utbetalt (`settlement_payouts`).
 
 Én regnebok (`settlement_ledger`) med én linje per ordre og per justering, provisjonen regnet
-per linje. Garnly-admin og butikkpanelet leser den samme gjennom `settlement_*`-funksjonene.
-Måneder følger norsk tid. Detaljer i STATUS.md.
+per linje. Måneder følger norsk tid. Detaljer i STATUS.md.
+
+**Panelet viser ikke oppgjøret (08.10.2026).** Fanen «Oppgjør» er tatt bort for både butikker
+og Garnly; regneboka, refusjonstrekkene og `settlement_*`-funksjonene står i databasen og
+regnes som før. Hvordan butikkene skal se oppgjøret, bestemmes før det bygges inn igjen.
 
 ---
 

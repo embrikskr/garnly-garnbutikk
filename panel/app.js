@@ -21,7 +21,6 @@ const el = {
   app: $("app"), storeName: $("store-name"), storeSwitch: $("store-switch"),
   queue: $("queue"), queueEmpty: $("queue-empty"),
   assigned: $("assigned"), assignedEmpty: $("assigned-empty"),
-  statQueue: $("stat-queue"), statQueueLabel: $("stat-queue-label"), statPack: $("stat-pack"), statToday: $("stat-today"),
   acceptAll: $("accept-all"), logout: $("logout"), toast: $("toast"),
   conn: $("conn"), soundToggle: $("sound-toggle"),
   faneAktive: $("fane-aktive"), faneHistorikk: $("fane-historikk"),
@@ -35,14 +34,6 @@ const el = {
   faneGarnly: $("fane-garnly"), visningGarnly: $("visning-garnly"),
   adminTall: $("admin-tall"), adminHandling: $("admin-handling"), adminHandlingTom: $("admin-handling-tom"),
   adminSynk: $("admin-synk"), adminOrdrer: $("admin-ordrer"), adminOrdrerTom: $("admin-ordrer-tom"),
-  faneOppgjor: $("fane-oppgjor"), visningOppgjor: $("visning-oppgjor"),
-  oppgjorButikk: $("oppgjor-butikk"), oppgjorButikkFelt: $("oppgjor-butikk-felt"), oppgjorPeriode: $("oppgjor-periode"),
-  oppgjorFra: $("oppgjor-fra"), oppgjorFraFelt: $("oppgjor-fra-felt"), oppgjorTil: $("oppgjor-til"), oppgjorTilFelt: $("oppgjor-til-felt"),
-  oppgjorCsv: $("oppgjor-csv"), oppgjorPeriodetekst: $("oppgjor-periodetekst"), oppgjorSum: $("oppgjor-sum"),
-  oppgjorLinjerSeksjon: $("oppgjor-linjer-seksjon"), oppgjorLinjerTittel: $("oppgjor-linjer-tittel"), oppgjorLinjer: $("oppgjor-linjer"),
-  oppgjorMaaneder: $("oppgjor-maaneder"),
-  utbetaltDialog: $("utbetalt-dialog"), utbetaltHva: $("utbetalt-hva"), utbetaltDato: $("utbetalt-dato"),
-  utbetaltLagre: $("utbetalt-lagre"), utbetaltLukk: $("utbetalt-lukk"),
   filterButikk: $("filter-butikk"), filterStatus: $("filter-status"), filterTest: $("filter-test"),
   giDialog: $("gi-dialog"), giOrdre: $("gi-ordre"), giButikk: $("gi-butikk"),
   giSend: $("gi-send"), giLukk: $("gi-lukk"),
@@ -160,20 +151,15 @@ async function start() {
   stores = alleButikker.filter((s) => mine.has(s.id));
 
   el.faneGarnly.hidden = !erAdmin;
-  // Oppgjør: Garnly ser alle butikker og kan markere utbetalinger; en butikk ser seg selv.
-  el.faneOppgjor.hidden = !(erAdmin || stores.length);
-  el.oppgjorButikkFelt.hidden = !erAdmin;
   if (!stores.length) {
     if (!erAdmin) {
       toast("Brukeren er ikke koblet til en butikk. Ta kontakt med Garnly.", "error");
       return;
     }
-    // Ren Garnly-bruker: butikkfanene har ingenting å vise. Toppen viser Garnly admin, og
-    // tallene der er på tvers av alle butikker (fra v_admin_stats, se lastAdmin) – ikke
-    // en tilfeldig butikks.
+    // Ren Garnly-bruker: butikkfanene har ingenting å vise. Toppen viser «Garnly admin»,
+    // ikke en tilfeldig butikks navn.
     el.storeSwitch.hidden = true;
     el.storeName.textContent = "admin";
-    el.statQueueLabel.textContent = "på tilbud";
     document.title = "Garnly admin";
     el.faneAktive.hidden = true;
     el.faneHistorikk.hidden = true;
@@ -201,7 +187,6 @@ async function start() {
       firstLoad = true;
       subscribe();
       refresh();
-      if (!el.visningOppgjor.hidden) lastOppgjor();
     };
   }
   el.storeName.textContent = stores.find((s) => s.id === storeId)?.name ?? "";
@@ -242,10 +227,11 @@ function subscribe() {
 
 async function refresh() {
   if (!storeId) return;
-  const [queue, assigned, stats] = await Promise.all([
+  // Tallene i toppen («nye / å pakke / i dag») er fjernet (Embrik 08.10.2026): fanene og
+  // kolonnene viser det samme, og tre nuller i toppen var bare støy.
+  const [queue, assigned] = await Promise.all([
     sb.from("v_panel_queue").select("*").eq("store_id", storeId).order("deadline_at", { ascending: true }),
     sb.from("v_panel_assigned").select("*").eq("store_id", storeId).order("assigned_at", { ascending: false }),
-    sb.from("v_panel_stats").select("*").eq("store_id", storeId).maybeSingle(),
   ]);
 
   const rows = queue.data ?? [];
@@ -257,11 +243,6 @@ async function refresh() {
   renderQueue(rows, fresh.map((r) => r.offer_id));
   renderAssigned(assigned.data ?? []);
 
-  el.statQueue.textContent = stats.data?.queue ?? rows.length;
-  // «Å pakke» teller bare ordrer som ennå ikke er sendt. Sendte ordrer som venter på at
-  // butikken bekrefter kassauttrekket telles for seg – de skal ikke pakkes en gang til.
-  el.statPack.textContent = stats.data?.to_pack ?? (assigned.data?.length ?? 0);
-  el.statToday.textContent = stats.data?.assigned_today ?? 0;
   document.title = rows.length ? `(${rows.length}) Garnly butikkpanel` : "Garnly butikkpanel";
   el.acceptAll.hidden = rows.length < 2;
 }
@@ -809,7 +790,6 @@ const FANER = {
   aktive: [el.faneAktive, el.visningAktive],
   historikk: [el.faneHistorikk, el.visningHistorikk],
   garnly: [el.faneGarnly, el.visningGarnly],
-  oppgjor: [el.faneOppgjor, el.visningOppgjor],
 };
 
 function velgFane(navn) {
@@ -823,13 +803,11 @@ function velgFane(navn) {
   // historikken trenger ikke lastes på nytt hvert 20. sekund sammen med køen.
   if (navn === "historikk") lastHistorikk();
   if (navn === "garnly") lastAdmin();
-  if (navn === "oppgjor") lastOppgjor();
 }
 
 el.faneAktive.addEventListener("click", () => velgFane("aktive"));
 el.faneHistorikk.addEventListener("click", () => velgFane("historikk"));
 el.faneGarnly.addEventListener("click", () => velgFane("garnly"));
-el.faneOppgjor.addEventListener("click", () => velgFane("oppgjor"));
 
 el.sok.addEventListener("input", () => {
   // Debounce: uten den ville hvert tastetrykk blitt et kall til basen.
@@ -1059,8 +1037,6 @@ function klargjorAdminfiltre() {
   el.filterStatus.innerHTML = '<option value="">Alle statuser</option>' +
     Object.entries(ORDRESTATUS).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
   el.giButikk.innerHTML = alleButikker.map((b) => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join("");
-  el.oppgjorButikk.innerHTML = '<option value="">Alle butikker</option>' +
-    alleButikker.map((b) => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join("");
 }
 
 async function lastAdmin() {
@@ -1073,13 +1049,6 @@ async function lastAdmin() {
   ]);
   adminHandling = handling.data ?? [];
   adminOrdrer = ordrer.data ?? [];
-  // Toppen er butikkens så lenge brukeren også er en butikk; bare en ren admin får
-  // Garnly-tallene der.
-  if (!stores.length && tall.data) {
-    el.statQueue.textContent = tall.data.ute_pa_tilbud ?? 0;
-    el.statPack.textContent = tall.data.til_pakking ?? 0;
-    el.statToday.textContent = tall.data.tildelt_i_dag ?? 0;
-  }
   tegnTall(tall.data);
   tegnHandling();
   tegnSynk(synk.data ?? []);
@@ -1201,6 +1170,11 @@ function kroner(v) {
   return Number(v ?? 0).toLocaleString("nb-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 });
 }
 
+/** Kroner med øre. Refusjonen skal stemme på øret; kroner() runder til hele kroner. */
+function kr(v) {
+  return Number(v ?? 0).toLocaleString("nb-NO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " kr";
+}
+
 for (const elm of [el.filterButikk, el.filterStatus, el.filterTest]) elm.addEventListener("change", tegnOrdrer);
 
 el.adminHandling.addEventListener("click", async (e) => {
@@ -1253,286 +1227,3 @@ async function adminHandling_kall(body) {
     return false;
   }
 }
-
-// ---------------------------------------------------------------- oppgjør
-
-/**
- * «Oppgjør». Samme fane for Garnly og butikk.
- *
- * Tallene kommer ferdig regnet fra databasen: settlement_summary (per butikk for perioden),
- * settlement_lines (hver ordre og hver refusjon) og settlement_months (måned for måned, med
- * utbetalingsstatus) – se migrasjon 031. Panelet summerer ingenting selv. Det viser tallene,
- * og lager CSV av linjene slik de kom. Funksjonene bestemmer også hvem som ser hva: Garnly
- * ser alle butikker, en butikk bare seg selv, uansett hva panelet ber om.
- */
-let oppgjorDetalj = null; // butikken hvis ordrer vises under sammendraget, når «Alle» er valgt
-let oppgjorSumRader = [];
-let oppgjorMndRader = [];
-
-const LINJETYPE = { salg: "Salg", refusjon: "Refusjon", justering: "Justering" };
-
-/** Kroner med øre. Oppgjøret skal stemme på øret; kroner() runder til hele kroner. */
-function kr(v) {
-  return Number(v ?? 0).toLocaleString("nb-NO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " kr";
-}
-
-/** Lokal dato som YYYY-MM-DD. toISOString() ville gitt gårsdagen hver natt etter kl. 22 om sommeren. */
-function isoDag(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function datoNorsk(iso) {
-  const [y, m, d] = String(iso).slice(0, 10).split("-");
-  return `${d}.${m}.${y}`;
-}
-
-function maanedNavn(iso) {
-  const [y, m] = String(iso).slice(0, 7).split("-").map(Number);
-  return new Date(y, m - 1, 1).toLocaleDateString("nb-NO", { month: "long", year: "numeric" });
-}
-
-function maanedsgrenser(forskyv) {
-  const n = new Date();
-  return { fra: isoDag(new Date(n.getFullYear(), n.getMonth() + forskyv, 1)), til: isoDag(new Date(n.getFullYear(), n.getMonth() + forskyv + 1, 0)) };
-}
-
-function oppgjorsPeriode() {
-  const v = el.oppgjorPeriode.value;
-  if (v === "egen") return { fra: el.oppgjorFra.value, til: el.oppgjorTil.value };
-  return maanedsgrenser(v === "forrige" ? -1 : 0);
-}
-
-/** Garnly velger butikk (tom = alle); en butikkbruker er alltid sin egen butikk. */
-function oppgjorsbutikk() {
-  return erAdmin ? (el.oppgjorButikk.value || null) : storeId;
-}
-
-async function lastOppgjor() {
-  const { fra, til } = oppgjorsPeriode();
-  if (!fra || !til || fra > til) {
-    el.oppgjorPeriodetekst.textContent = "Velg en periode der fra-datoen kommer før til-datoen.";
-    return;
-  }
-  const butikk = oppgjorsbutikk();
-  el.oppgjorPeriodetekst.textContent = `${datoNorsk(fra)} – ${datoNorsk(til)}`;
-  const [sum, mnd] = await Promise.all([
-    sb.rpc("settlement_summary", { p_from: fra, p_to: til, p_store: butikk }),
-    sb.rpc("settlement_months", { p_store: butikk, p_months: 12 }),
-  ]);
-  if (sum.error || mnd.error) {
-    console.error("[oppgjør]", sum.error ?? mnd.error);
-    toast("Fikk ikke hentet oppgjøret.", "error");
-    return;
-  }
-  oppgjorSumRader = sum.data ?? [];
-  oppgjorMndRader = mnd.data ?? [];
-  // Én butikk valgt, eller en butikkbruker: ordrene vises med en gang. «Alle»: når man
-  // trykker på en butikk i sammendraget.
-  const detalj = butikk ?? (oppgjorSumRader.some((r) => r.store_id === oppgjorDetalj) ? oppgjorDetalj : null);
-  tegnOppgjorSum(detalj);
-  tegnMaaneder();
-  await lastOppgjorLinjer(detalj, fra, til);
-}
-
-function tegnOppgjorSum(valgt) {
-  const r = oppgjorSumRader;
-  const pct = [...new Set(r.map((x) => Number(x.provisjon_pct)))];
-  const garnly = pct.length === 1 ? `Garnly (${pct[0].toLocaleString("nb-NO")} %)` : "Garnly";
-  const klikk = erAdmin && r.length > 1;
-  const rad = (x, kls = "") => `<tr class="${kls}${klikk && x.store_id ? " klikkbar" : ""}${x.store_id && x.store_id === valgt && r.length > 1 ? " valgt" : ""}" ${x.store_id ? `data-store="${esc(x.store_id)}"` : ""}>
-      <td>${esc(x.butikk)}</td>
-      <td class="num">${Number(x.ordrer)}</td>
-      <td class="num">${kr(x.varesalg)}</td>
-      <td class="num">${kr(x.provisjon)}</td>
-      <td class="num">${kr(x.justeringer)}</td>
-      <td class="num"><b>${kr(x.til_utbetaling)}</b></td>
-    </tr>`;
-  // Summeringsraden er bare til øyet når flere butikker vises; den er ikke et tall noen betaler.
-  const total = r.length > 1 ? rad({
-    butikk: "Sum", ordrer: r.reduce((s, x) => s + Number(x.ordrer), 0),
-    varesalg: r.reduce((s, x) => s + Number(x.varesalg), 0), provisjon: r.reduce((s, x) => s + Number(x.provisjon), 0),
-    justeringer: r.reduce((s, x) => s + Number(x.justeringer), 0), til_utbetaling: r.reduce((s, x) => s + Number(x.til_utbetaling), 0),
-  }, "sum") : "";
-  el.oppgjorSum.innerHTML = `<table><thead><tr>
-      <th>Butikk</th><th class="num">Ordrer</th><th class="num">Varesalg</th><th class="num">${garnly}</th>
-      <th class="num">Refusjoner/justeringer</th><th class="num">Til utbetaling</th>
-    </tr></thead><tbody>${r.map((x) => rad(x)).join("")}${total}</tbody></table>`;
-}
-
-async function lastOppgjorLinjer(butikk, fra, til) {
-  oppgjorDetalj = butikk;
-  if (!butikk) { el.oppgjorLinjerSeksjon.hidden = true; return; }
-  const { data, error } = await sb.rpc("settlement_lines", { p_from: fra, p_to: til, p_store: butikk }).range(0, 999);
-  if (error) { console.error("[oppgjør]", error); toast("Fikk ikke hentet ordrene.", "error"); return; }
-  const rader = data ?? [];
-  const navn = oppgjorSumRader.find((x) => x.store_id === butikk)?.butikk ?? alleButikker.find((b) => b.id === butikk)?.name ?? "";
-  el.oppgjorLinjerTittel.textContent = `Ordrer – ${navn}`;
-  el.oppgjorLinjerSeksjon.hidden = false;
-  el.oppgjorLinjer.innerHTML = rader.length
-    ? `<table><thead><tr><th>Dato</th><th>Ordrenr</th><th>Type</th><th class="num">Varebeløp</th><th class="num">Provisjon</th><th class="num">Til butikk</th></tr></thead><tbody>${
-      rader.map((x) => {
-        // Et trekk som ble flyttet fordi måneden alt var betalt ut, skal si det – ellers
-        // står det en refusjon fra september i oktober uten forklaring.
-        const flyttet = x.art !== "salg" && String(x.maaned).slice(0, 7) !== String(x.dato).slice(0, 7);
-        return `<tr class="${x.art === "salg" ? "" : "minus"}">
-          <td>${datoNorsk(x.dato)}</td>
-          <td>${esc(x.order_name ?? "–")}</td>
-          <td>${LINJETYPE[x.art] ?? esc(x.art)}${flyttet ? `<br><span class="svak">trukket i ${maanedNavn(x.maaned)}</span>` : ""}</td>
-          <td class="num">${kr(x.varebelop)}</td>
-          <td class="num">${kr(x.provisjon)}</td>
-          <td class="num">${kr(x.til_butikk)}</td>
-        </tr>`;
-      }).join("")}</tbody></table>${rader.length >= 1000 ? '<p class="svak">Viser de første 1000. Last ned CSV for alle.</p>' : ""}`
-    : '<p class="empty">Ingen ordrer i perioden.</p>';
-}
-
-function tegnMaaneder() {
-  const r = oppgjorMndRader;
-  const denne = maanedsgrenser(0).fra;
-  const flere = erAdmin && new Set(r.map((x) => x.store_id)).size > 1;
-  el.oppgjorMaaneder.innerHTML = r.length
-    ? `<table><thead><tr><th>Måned</th>${flere ? "<th>Butikk</th>" : ""}<th class="num">Ordrer</th><th class="num">Varesalg</th>
-        <th class="num">Garnly</th><th class="num">Refusjoner/justeringer</th><th class="num">Til utbetaling</th><th>Utbetalt</th></tr></thead><tbody>${
-      r.map((x) => {
-        let status;
-        if (x.utbetalt_dato) {
-          const avvik = erAdmin && x.utbetalt_belop !== null && Number(x.utbetalt_belop) !== Number(x.til_utbetaling)
-            ? `<br><span class="svak svak--feil">Markert med ${kr(x.utbetalt_belop)}</span>` : "";
-          status = `<span class="utbetalt">Utbetalt ${datoNorsk(x.utbetalt_dato)}</span>${avvik}${
-            erAdmin ? ` <button class="btn btn--ghost btn--sm" data-act="angre">Angre</button>` : ""}`;
-        } else if (x.kan_markeres) {
-          status = `<button class="btn btn--primary btn--sm" data-act="utbetal">Marker som utbetalt</button>`;
-        } else {
-          status = `<span class="svak">${String(x.maaned).slice(0, 10) === denne ? "Løpende måned" : "Ikke utbetalt ennå"}</span>`;
-        }
-        return `<tr class="klikkbar" data-store="${esc(x.store_id)}" data-maaned="${esc(String(x.maaned).slice(0, 10))}">
-          <td>${maanedNavn(x.maaned)}</td>${flere ? `<td>${esc(x.butikk)}</td>` : ""}
-          <td class="num">${Number(x.ordrer)}</td>
-          <td class="num">${kr(x.varesalg)}</td>
-          <td class="num">${kr(x.provisjon)}</td>
-          <td class="num">${kr(x.justeringer)}</td>
-          <td class="num"><b>${kr(x.til_utbetaling)}</b></td>
-          <td>${status}</td>
-        </tr>`;
-      }).join("")}</tbody></table>`
-    : '<p class="empty">Ingen salg ennå.</p>';
-}
-
-function visEgenPeriode(on) {
-  el.oppgjorFraFelt.hidden = !on;
-  el.oppgjorTilFelt.hidden = !on;
-}
-
-el.oppgjorPeriode.addEventListener("change", () => {
-  const egen = el.oppgjorPeriode.value === "egen";
-  if (egen && !el.oppgjorFra.value) {
-    el.oppgjorFra.value = maanedsgrenser(0).fra;
-    el.oppgjorTil.value = isoDag(new Date());
-  }
-  visEgenPeriode(egen);
-  lastOppgjor();
-});
-for (const f of [el.oppgjorFra, el.oppgjorTil]) f.addEventListener("change", lastOppgjor);
-el.oppgjorButikk.addEventListener("change", () => { oppgjorDetalj = null; lastOppgjor(); });
-
-el.oppgjorSum.addEventListener("click", (e) => {
-  const tr = e.target.closest("tr[data-store]");
-  if (!tr || !erAdmin || oppgjorSumRader.length < 2) return;
-  const { fra, til } = oppgjorsPeriode();
-  tegnOppgjorSum(tr.dataset.store);
-  lastOppgjorLinjer(tr.dataset.store, fra, til);
-});
-
-el.oppgjorMaaneder.addEventListener("click", async (e) => {
-  const tr = e.target.closest("tr[data-maaned]");
-  if (!tr) return;
-  const navn = oppgjorMndRader.find((x) => x.store_id === tr.dataset.store)?.butikk ?? "";
-  const mnd = tr.dataset.maaned;
-  const btn = e.target.closest("button[data-act]");
-  if (btn?.dataset.act === "utbetal") {
-    const rad = oppgjorMndRader.find((x) => x.store_id === tr.dataset.store && String(x.maaned).slice(0, 10) === mnd);
-    el.utbetaltHva.textContent = `${navn} – ${maanedNavn(mnd)}: ${kr(rad?.til_utbetaling)} til utbetaling.`;
-    el.utbetaltDato.value = isoDag(new Date());
-    el.utbetaltDato.max = isoDag(new Date());
-    el.utbetaltDialog.dataset.store = tr.dataset.store;
-    el.utbetaltDialog.dataset.maaned = mnd;
-    el.utbetaltDialog.showModal();
-    return;
-  }
-  if (btn?.dataset.act === "angre") {
-    if (!confirm(`Angre utbetalingen for ${navn}, ${maanedNavn(mnd)}?\n\nMåneden regnes som ubetalt igjen. Markeringen blir stående i historikken.`)) return;
-    btn.disabled = true;
-    const { error } = await sb.rpc("unmark_settlement_paid", { p_store: tr.dataset.store, p_month: mnd });
-    if (error) toast(error.message, "error"); else toast("Utbetalingen er angret.");
-    await lastOppgjor();
-    return;
-  }
-  // Trykk på en måned: vis den måneden, for den butikken.
-  const denne = maanedsgrenser(0), forrige = maanedsgrenser(-1);
-  if (mnd === denne.fra) el.oppgjorPeriode.value = "denne";
-  else if (mnd === forrige.fra) el.oppgjorPeriode.value = "forrige";
-  else {
-    const [y, m] = mnd.split("-").map(Number);
-    el.oppgjorPeriode.value = "egen";
-    el.oppgjorFra.value = mnd;
-    el.oppgjorTil.value = isoDag(new Date(y, m, 0));
-  }
-  visEgenPeriode(el.oppgjorPeriode.value === "egen");
-  if (erAdmin) { el.oppgjorButikk.value = tr.dataset.store; }
-  await lastOppgjor();
-  el.oppgjorLinjerSeksjon.scrollIntoView({ behavior: "smooth", block: "start" });
-});
-
-el.utbetaltLukk.addEventListener("click", () => el.utbetaltDialog.close());
-el.utbetaltLagre.addEventListener("click", async () => {
-  el.utbetaltLagre.disabled = true;
-  const { error } = await sb.rpc("mark_settlement_paid", {
-    p_store: el.utbetaltDialog.dataset.store,
-    p_month: el.utbetaltDialog.dataset.maaned,
-    p_paid_on: el.utbetaltDato.value || null,
-  });
-  el.utbetaltLagre.disabled = false;
-  if (error) { toast(error.message, "error"); return; }
-  el.utbetaltDialog.close();
-  toast("Markert som utbetalt.");
-  await lastOppgjor();
-});
-
-/**
- * CSV til regnskap og utbetaling: én linje per ordre og per refusjon, for valgt butikk og
- * periode. Semikolon og desimalkomma, og BOM først, så norsk Excel åpner den riktig.
- */
-el.oppgjorCsv.addEventListener("click", async () => {
-  const { fra, til } = oppgjorsPeriode();
-  if (!fra || !til || fra > til) return;
-  const butikk = oppgjorsbutikk();
-  el.oppgjorCsv.disabled = true;
-  try {
-    const alle = [];
-    // PostgREST gir høyst 1000 rader per kall; CSV-en skal ha alt.
-    for (let fraRad = 0; ; fraRad += 1000) {
-      const { data, error } = await sb.rpc("settlement_lines", { p_from: fra, p_to: til, p_store: butikk }).range(fraRad, fraRad + 999);
-      if (error) { toast("Fikk ikke hentet linjene til CSV.", "error"); return; }
-      alle.push(...(data ?? []));
-      if ((data ?? []).length < 1000) break;
-    }
-    const tall = (v) => Number(v ?? 0).toFixed(2).replace(".", ",");
-    const felt = (v) => { const t = String(v ?? ""); return /[;"\r\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
-    const hode = ["Butikk", "Dato", "Oppgjørsmåned", "Ordrenr", "Type", "Varebeløp inkl. mva", "Provisjon %", "Provisjon", "Til butikk", "Merknad"];
-    const linjer = alle.map((x) => [
-      x.butikk, datoNorsk(x.dato), String(x.maaned).slice(0, 7), x.order_name ?? "", LINJETYPE[x.art] ?? x.art,
-      tall(x.varebelop), tall(x.provisjon_pct), tall(x.provisjon), tall(x.til_butikk), x.beskrivelse ?? "",
-    ].map(felt).join(";"));
-    const csv = "﻿" + [hode.join(";"), ...linjer].join("\r\n") + "\r\n";
-    const navn = butikk ? (alleButikker.find((b) => b.id === butikk)?.name ?? stores.find((b) => b.id === butikk)?.name ?? "butikk") : "alle";
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-    a.download = `garnly-oppgjor_${navn.toLowerCase().replace(/[^a-z0-9æøå]+/g, "-")}_${fra}_${til}.csv`;
-    document.body.append(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  } finally {
-    el.oppgjorCsv.disabled = false;
-  }
-});
