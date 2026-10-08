@@ -11,13 +11,14 @@ import { ensureVariantsTracked, iterateVariants } from "../_shared/shopify.ts";
 import { normalizeEan } from "../_shared/adapters/types.ts";
 import { gramFraShopify } from "../_shared/shipping/consignment.ts";
 import { erGarnpakke } from "../_shared/lines.ts";
+import { assignEans, type EanRow, staleEanHolders } from "../_shared/ean.ts";
 
 Deno.serve(async (req) => {
   const unauthorized = requireInternalSecret(req);
   if (unauthorized) return unauthorized;
   const db = adminClient();
   let seen = 0, upserted = 0, withEan = 0;
-  const rows: Record<string, unknown>[] = [];
+  const rows: Array<Record<string, unknown> & EanRow> = [];
   const seenVariantIds: string[] = [];
   const untracked = new Map<string, string[]>();
   const garnpakkeVarianter: string[] = [];
@@ -55,8 +56,23 @@ Deno.serve(async (req) => {
       active: v.product.status === "ACTIVE",
     });
   }
-  for (let i = 0; i < rows.length; i += 200) {
-    const { error, data } = await db.from("products").upsert(rows.slice(i, i + 200), { onConflict: "shopify_variant_id" }).select("id");
+  // products.ean er unik: samme strekkode på to varianter (en farge flyttet til et annet produkt,
+  // med utkastet igjen) gir EAN-en til den aktive, og raden som hadde den fra før mister den.
+  const { rows: unike, duplicates } = assignEans(rows);
+  const eksisterende: Array<{ id: string; ean: string | null; shopify_variant_id: string | null }> = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await db.from("products").select("id, ean, shopify_variant_id").not("ean", "is", null).order("id").range(from, from + 999);
+    if (error) return json({ error: error.message, at: "ean-oppslag" }, 500);
+    eksisterende.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
+  const frigjor = staleEanHolders(eksisterende, unike);
+  for (let i = 0; i < frigjor.length; i += 200) {
+    const { error } = await db.from("products").update({ ean: null }).in("id", frigjor.slice(i, i + 200));
+    if (error) return json({ error: error.message, at: "ean-frigjoring" }, 500);
+  }
+  for (let i = 0; i < unike.length; i += 200) {
+    const { error, data } = await db.from("products").upsert(unike.slice(i, i + 200), { onConflict: "shopify_variant_id" }).select("id");
     if (error) return json({ error: error.message, at: i }, 500);
     upserted += data?.length ?? 0;
   }
@@ -77,7 +93,10 @@ Deno.serve(async (req) => {
   }
   // Lagersporing må være på for at antall per location skal styre salg (§4)
   const tracked = await ensureVariantsTracked(untracked);
-  return json({ seen, upserted, with_ean: withEan, without_ean: rows.length - withEan, tracking_enabled: tracked, garnpakker_unntatt: ekskludert });
+  return json({
+    seen, upserted, with_ean: withEan, without_ean: rows.length - withEan, tracking_enabled: tracked, garnpakker_unntatt: ekskludert,
+    ean_flyttet: frigjor.length, ean_duplikater: duplicates,
+  });
 });
 
 export function parseName(vendor: string | null, productTitle: string, variantTitle: string) {

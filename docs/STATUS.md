@@ -10,7 +10,7 @@ kobler kassa og Shopify på EAN først, og Strikkefryd har hele garnlinjer uten 
 aldri lest – så 57 Saga-farger var 57 like rader, og alt sto som utsolgt hos oss.
 Strikkefryd orker ikke legge inn EAN. Det trengs heller ikke.
 
-**Løsningen (kode i repoet, IKKE deployet ennå):**
+**Løsningen (deployet 09.10: sync-store v37):**
 - `_shared/adapters/mystore.ts` leser fargen per variant. Verifisert mot ekte data:
   variantlisten har `meta.product_variants[].products_stock_attributes = "7-3648"`
   (fargesett 7 «Farger Filcolana», fargeverdi 3648 «111 Pumpkin»). Linja heter nå
@@ -46,8 +46,34 @@ Sunday, Double Sunday og Peer Gynt. Dem må Halvor legge inn. Resten er utgåtte
 produktene i den gamle Shopify-butikken og har ikke virket siden flyttingen 27.09. Cardiff er
 utkast, så ingenting tapes i dag; garn + kode kobler Cardiff uten dem når den aktiveres.
 
-**Gjenstår:** deploy `sync-store` (og følg første Strikkefryd-kjøring), slett `test-etikett`
-(brukt som midlertidig, låst lesefunksjon mot Mystore 09.10).
+**Første kjøring (Strikkefryd 09.10 01:29):** 2 434 koblede varianter mot 1 799 før, alle
+3 767 fargeverdier mellomlagret, ingen feil. Nye varer aktiveres på butikkens location i bolker
+på 25 innenfor 240 s per kjøring (2 Shopify-kall per vare); det som ikke rekkes, tas av neste.
+
+**Sortimentet, etter Embriks ja 09.10:**
+- De 35 utkastene som butikkene har lager av, er aktive og publisert i alle fem kanalene
+  (Ístex 4, Rauma 9, Rowan 7, Permin Bella og Bella Color, Solberg 5, Cardiff 2, Viking 6).
+- 9 aktive produkter uten lager i noen butikk er satt til utkast: Kidsilk Erle, Alpakka Forte,
+  Alpakka Wool, Tjukk Mohair, Atlas PetiteKnit, KlompeLOMPE Merinoull, KlompeLOMPE Tynn
+  Merinoull, Labbegarn, Tresko.
+- Rauma Finull: de 37 fargene i «Finull (2)» (blåtoner og melert) er lagt inn som varianter på
+  Finull, med samme strekkode, SKU = strekkode, 65 kr, 50 g og bildet. Finull har nå 137
+  farger. Den ble delt i to bare fordi Shopify hadde maks 100 varianter per produkt; grensen er
+  2 048 siden 15.10.2025, og temaet viser opptil 250. «Finull (2)» står igjen som utkast.
+  Arkivering eller sletting av den venter på Embriks bekreftelse.
+- Utsolgte farger skjules ikke. Hele fargekartet vises, og lageret oppdateres selv når en
+  butikk får inn varen.
+
+**sync-products tåler samme EAN på to varianter** (`_shared/ean.ts`, deployet v19).
+`products.ean` er unik, og etter Finull-flyttingen hadde utkastet og Finull samme strekkode.
+Aktiv variant får EAN-en, den andre lagres uten, og raden som hadde den fra før mister den
+før upserten. Uten dette hadde hele sync-products stoppet på den unike nøkkelen. Svaret viser
+`ean_flyttet` og `ean_duplikater`.
+
+**Gjenstår:** slett `test-etikett` (brukt som midlertidig, låst lesefunksjon mot Mystore
+09.10, utløper 09.10 22:22 UTC uansett): `supabase functions delete test-etikett`.
+Halvors liste: 171 manglende farger, 10 EAN-avvik, fargekoder på Isager Silk Mohair/Soft og
+Bellissima, priser (Tynn Merinoull Lemon 47 kr, Plum 52,50 kr), 18 Permin-produkter til 0 kr.
 
 ## Svarfrist 5 timer i stedet for 3 (08.10.2026)
 
