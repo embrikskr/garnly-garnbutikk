@@ -1,6 +1,53 @@
 # Status – garnly-garnbutikk
 
-Oppdatert: 2026-10-08
+Oppdatert: 2026-10-09
+
+## Matching på garnnavn + fargekode, og farge fra Mystore (09.10.2026)
+
+**Problemet.** Halvors kontroll av garnbasen fant 104 produkter med varianter uten EAN. Synken
+kobler kassa og Shopify på EAN først, og Strikkefryd har hele garnlinjer uten EAN i Mystore
+(Saga, Puno, Tilia, Pernilla, Alpakka Lin …). Mystore-linjene het bare «Saga» – fargen ble
+aldri lest – så 57 Saga-farger var 57 like rader, og alt sto som utsolgt hos oss.
+Strikkefryd orker ikke legge inn EAN. Det trengs heller ikke.
+
+**Løsningen (kode i repoet, IKKE deployet ennå):**
+- `_shared/adapters/mystore.ts` leser fargen per variant. Verifisert mot ekte data:
+  variantlisten har `meta.product_variants[].products_stock_attributes = "7-3648"`
+  (fargesett 7 «Farger Filcolana», fargeverdi 3648 «111 Pumpkin»). Linja heter nå
+  «Saga 111 Pumpkin» og har garn, farge og merke hver for seg. Fargeverdiene (~3 800)
+  mellomlagres i `pos_catalog` (source `mystore-farger:<shop>`): første kjøring blar hele
+  lista (~76 kall, ~45 s ekstra), deretter hentes bare nye. HTML-entiteter i navnene
+  («Korallr&oslash;d») dekodes (`dekodHtml`).
+- `_shared/matching.ts` har et femte steg, garnnavn + fargekode, etter EAN, alias, SKU og navn.
+  Kobler bare ved nøyaktig ett treff, aldri mot en variant med en annen EAN, og bare til merket
+  kassa oppgir når det er kjent («Farger Solberg Spinderi», Duells leverandør). Tåler
+  «(Utgått) 30%», «50g», «Léttlopi»/«Lettlopi», «Finull PT2» = Finull, «Lamullgarn» = Lamull,
+  «Cashmere Classic» = Cardiff Cashmere Classic. 11 nye tester.
+- Duell-adapteren gir leverandøren som merke.
+
+**Tørrkjøring mot ekte data** (Strikkefryds 5 038 varianter fra Mystore, Garnkildens umatchede
+garnrader, alle 7 836 varianter i Shopify; bare farger med lager som ikke er koblet i dag):
+
+| | Strikkefryd | Garnkilden |
+|---|---|---|
+| Kobles nå (aktive produkter) | 148 farger, 1 874 nøster | 2 farger, 34 nøster |
+| Kobles når utkastet aktiveres | 540 farger, 8 294 nøster | 957 farger, 12 343 nøster |
+| Fargen finnes ikke i Shopify | 213 farger, 2 420 nøster | 164 farger, 1 428 nøster |
+| Garnet finnes ikke i Shopify | 392 farger, 908 nøster | 218 farger, 1 997 nøster |
+| Varianten i Shopify har ingen fargekode | 3 | 13 |
+| Ulik EAN i kassa og Shopify | 3 | 7 |
+
+De fleste nye koblingene hos Strikkefryd kommer fordi navnet nå har fargen og er likt Shopify
+(«Saga 111 Pumpkin» = «Saga – 111 Pumpkin»); garn + kode tar resten. Av «fargen finnes ikke»
+er 171 farger (2 670 nøster) i vanlig salg på garn som er aktive hos oss – mest Sandnes Atlas,
+Sunday, Double Sunday og Peer Gynt. Dem må Halvor legge inn. Resten er utgåtte farger på salg.
+
+**Funnet underveis:** de 94 aliasene i `product_aliases` (mest Cardiff) peker fortsatt på
+produktene i den gamle Shopify-butikken og har ikke virket siden flyttingen 27.09. Cardiff er
+utkast, så ingenting tapes i dag; garn + kode kobler Cardiff uten dem når den aktiveres.
+
+**Gjenstår:** deploy `sync-store` (og følg første Strikkefryd-kjøring), slett `test-etikett`
+(brukt som midlertidig, låst lesefunksjon mot Mystore 09.10).
 
 ## Svarfrist 5 timer i stedet for 3 (08.10.2026)
 

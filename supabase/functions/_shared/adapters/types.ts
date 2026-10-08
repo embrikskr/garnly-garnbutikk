@@ -28,6 +28,24 @@ export class AdapterError extends Error {
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+const ENTITETER: Record<string, string> = {
+  aring: "å", Aring: "Å", oslash: "ø", Oslash: "Ø", aelig: "æ", AElig: "Æ",
+  auml: "ä", ouml: "ö", uuml: "ü", eacute: "é", amp: "&", quot: '"', apos: "'", nbsp: " ",
+};
+
+/**
+ * HTML-entiteter i tekst fra kassesystemet: «Korallr&oslash;d» → «Korallrød».
+ * Mystore lagrer fargenavn slik (verifisert 09.10.2026: &oslash;, &aring;, &aelig;, &#039;),
+ * og uten dekoding blir de aldri like Shopify-navnet.
+ */
+export function dekodHtml(s: string): string {
+  return s.replace(/&(#\d+|#x[0-9a-f]+|[a-z]+);/gi, (hele, e: string) => {
+    if (e[0] !== "#") return ENTITETER[e] ?? hele;
+    const n = e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+    return Number.isFinite(n) && n > 0 ? String.fromCodePoint(n) : hele;
+  });
+}
+
 export function normalizeEan(v: unknown): string | null {
   if (v === null || v === undefined) return null;
   const s = String(v).replace(/\s+/g, "");

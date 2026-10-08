@@ -51,6 +51,14 @@ export interface StockLine {
   qty: number;
   /** Kassesystemets egen nøkkel (Duell product_number, Mystore "v:<id>"/"p:<id>"). Brukes av product_aliases. */
   external_id?: string | null;
+  /**
+   * Garnnavn og farge hver for seg, når kassesystemet har dem (Mystore: produktnavn + fargeopsjon).
+   * Brukes av matchsteget garnnavn + fargekode. Uten dem leses de av `name`.
+   */
+  yarn?: string | null;
+  color?: string | null;
+  /** Merket kassesystemet oppgir (Mystore: «Farger Filcolana», Duell: leverandør). Bare et filter, aldri en nøkkel. */
+  brand?: string | null;
 }
 
 export interface LineItem {

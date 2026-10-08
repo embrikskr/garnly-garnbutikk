@@ -138,6 +138,7 @@ function catalogSource(secrets: Record<string, string>): string {
 interface CatalogEntry {
   sku: string | null;
   ean: string | null;
+  supplier: string | null;
   name: string | null;
   deleted: boolean;
 }
@@ -192,12 +193,12 @@ async function loadCatalog(source: string): Promise<{ map: Map<string, CatalogEn
   for (let from = 0;; from += 1000) {
     const { data, error } = await db
       .from("pos_catalog")
-      .select("pos_id, sku, ean, name, deleted, updated_at")
+      .select("pos_id, sku, ean, name, supplier, deleted, updated_at")
       .eq("source", source)
       .range(from, from + 999);
     if (error) throw new AdapterError(`Kunne ikke lese Duell-katalog: ${error.message}`);
     for (const r of data ?? []) {
-      map.set(String(r.pos_id), { sku: r.sku, ean: r.ean, name: r.name, deleted: !!r.deleted });
+      map.set(String(r.pos_id), { sku: r.sku, ean: r.ean, name: r.name, supplier: r.supplier ?? null, deleted: !!r.deleted });
       const t = Date.parse(r.updated_at as string);
       if (Number.isFinite(t) && (refreshedAt === null || t > refreshedAt)) refreshedAt = t;
     }
@@ -235,7 +236,7 @@ export const duellAdapter: PosAdapter = {
         if (p?.deleted) continue;
         const sku = p?.sku ?? (row.product_number ? String(row.product_number) : null);
         if (p?.ean) withEan++;
-        out.push({ ean: p?.ean ?? null, sku, name: p?.name ?? null, qty: qtyOf(row), external_id: sku });
+        out.push({ ean: p?.ean ?? null, sku, name: p?.name ?? null, qty: qtyOf(row), external_id: sku, brand: p?.supplier ?? null });
       }
     });
     console.log(`[duell] ${store.name}: ${out.length} lagerrader, ${withEan} med strekkode (katalog: ${products.size} produkter)`);

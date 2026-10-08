@@ -124,6 +124,13 @@ Regler:
 
 Butikkens lager for varer Garnly ikke selger ignoreres. Varer Garnly selger som butikken ikke har, får 0 på den locationen.
 
+**Rekkefølgen i dag (`_shared/matching.ts`):** EAN → alias (`product_aliases`) → SKU → navn → **garnnavn +
+fargekode** (fra 09.10.2026). Det siste steget er for butikker som ikke har EAN på alle farger
+(Strikkefryd: Saga, Tilia, Pernilla …) og for farger der Shopify mangler EAN. Det kobler bare når
+nøyaktig én variant har garnnavnet og koden, aldri mot en variant med en annen EAN enn butikkens,
+og bare til merket kassa oppgir når merket er kjent (Alva finnes hos både Filcolana og Solberg).
+Mystore gir fargen per variant (fargesett + fargeverdi); Duell har den i varenavnet.
+
 ---
 
 ## 6. Lagersynk til Shopify

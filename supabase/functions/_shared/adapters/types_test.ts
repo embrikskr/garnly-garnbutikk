@@ -1,5 +1,13 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { borProveIgjen } from "./types.ts";
+import { borProveIgjen, dekodHtml } from "./types.ts";
+
+Deno.test("dekodHtml: fargenavn fra Mystore", () => {
+  assertEquals(dekodHtml("B137 Korallr&oslash;d"), "B137 Korallrød");
+  assertEquals(dekodHtml("38 Lys gr&aring; melert"), "38 Lys grå melert");
+  assertEquals(dekodHtml("28 H&oslash;stb&aelig;r"), "28 Høstbær");
+  assertEquals(dekodHtml("Mary&#039;s"), "Mary's");
+  assertEquals(dekodHtml("A &amp; B &ukjent;"), "A & B &ukjent;");
+});
 
 Deno.test("nytt forsøk bare der det kan hjelpe", () => {
   // Mystore svarte 504 på første produktside 30.09 og 01.10. Neste kjøring gikk fint –
