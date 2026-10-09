@@ -79,6 +79,28 @@ før upserten. Uten dette hadde hele sync-products stoppet på den unike nøkkel
 Halvors liste: 171 manglende farger, 10 EAN-avvik, fargekoder på Isager Silk Mohair/Soft og
 Bellissima, priser (Tynn Merinoull Lemon 47 kr, Plum 52,50 kr), 18 Permin-produkter til 0 kr.
 
+## Prisgjennomgang (09.10.2026)
+
+Alle 93 aktive garn er sammenlignet med andre norske nettbutikker, produsentenes veiledende
+priser og Strikkefryds egne priser (Mystore, uten mva × 1,25). 63 lå riktig. Etter Embriks ja
+er 21 garn rettet (productVariantsBulkUpdate, verifisert etterpå):
+
+- Feil: Solberg Alva 49 → 129, Viking Snorre 79 → 138, Viking Alpaca Bris 79 → 105,
+  Viking Wool 79 → 69, Tynn Merinoull 9004 Lemon 47 → 85, Plum 2 farger 52,50 → 105.
+- Gammel pris på noen farger: Poppy 129, Smart 75, Perfect 59, Duo 79, Børstet Alpakka 129,
+  Fritidsgarn 59, Paia 89, Metallic 109, Alpakka Ull 89 (tweed 99), tweedfargene i Peer Gynt
+  og Tynn Peer Gynt 69.
+- Én pris per garn, lik Strikkefryd: Pus 119, Faerytale 129, Arwetta 75, Merci 94.
+
+Ikke endret: SUNDAY PetiteKnit 85 (flere tar 79), Cardiff Classic 215 på 18 farger (andre tar
+210), Permin Bella 139 og Alpakka Tweed 99 (markedet litt lavere, men likt Strikkefryd).
+Ingen ordrer hadde de gale prisene. Prinsippet videre: Garnly tar samme pris som butikkenes
+hyllepris / veiledende pris, én pris per garn, med tillegg bare der produsenten har det (tweed).
+
+Funnet underveis, til Halvor: fargenavn med teknisk prefiks («pistachio-mist Pistachio Mist»,
+Filcolana), samme fargekode to ganger i 16 garn (lageret deles på to varianter), og farger
+uten navn (Isager Silk Mohair, Faerytale, Trend Merino m.fl.).
+
 ## Svarfrist 5 timer i stedet for 3 (08.10.2026)
 
 Embrik vil gi butikkene mer tid. Migrasjon 033 setter `offer_ttl_hours = 5` for begge
