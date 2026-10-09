@@ -59,8 +59,8 @@ på 25 innenfor 240 s per kjøring (2 Shopify-kall per vare); det som ikke rekke
 - Rauma Finull: de 37 fargene i «Finull (2)» (blåtoner og melert) er lagt inn som varianter på
   Finull, med samme strekkode, SKU = strekkode, 65 kr, 50 g og bildet. Finull har nå 137
   farger. Den ble delt i to bare fordi Shopify hadde maks 100 varianter per produkt; grensen er
-  2 048 siden 15.10.2025, og temaet viser opptil 250. «Finull (2)» står igjen som utkast.
-  Arkivering eller sletting av den venter på Embriks bekreftelse.
+  2 048 siden 15.10.2025, og temaet viser opptil 250. «Finull (2)» er arkivert
+  (Embriks ja 09.10). sync-products hopper over arkiverte varianter, og radene har ikke EAN.
 - Etter åpningen og to synkrunder (09.10 01:42 og 01:48): Garnkilden kobler 1 912 varianter
   (1 345 før), Strikkefryd 2 467 (1 799 før i går). Alle nye varer med lager er aktivert på
   butikkenes locations, ingen står igjen. De 37 nye Finull-fargene har lager hos begge
