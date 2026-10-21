@@ -79,6 +79,27 @@ før upserten. Uten dette hadde hele sync-products stoppet på den unike nøkkel
 Halvors liste: 171 manglende farger, 10 EAN-avvik, fargekoder på Isager Silk Mohair/Soft og
 Bellissima, priser (Tynn Merinoull Lemon 47 kr, Plum 52,50 kr), 18 Permin-produkter til 0 kr.
 
+## Supabase-rådgiveren og skriving gjennom view (21.10.2026)
+
+Rådgiveren flagger 8 «Security Definer View» som CRITICAL. De er bevisste (se 030): de
+filtrerer selv på butikk/admin. Men gjennomgangen fant et ekte hull rådgiveren ikke ser:
+`authenticated` hadde ALLE rettigheter på viewene, og `v_panel_stats` og `v_admin_sync` er
+enkle view over `stores`, altså automatisk oppdaterbare – og som eier går de forbi RLS. En
+innlogget butikkbruker kunne slette sin egen butikkrad (CASCADE til lager, synk, aliaser,
+brukere, hemmeligheter) eller endre id-en på den via REST-API-et.
+
+034 (kjørt 21.10): `authenticated` har bare SELECT, og bare på de sju viewene panelet leser.
+`v_panel_stats` (ubrukt siden 08.10), `v_admin_settlement`, `v_store_settlement` og
+`v_pos_catalog_status` har ingen tilgang for innloggede. Rådgiveren viser nå 7 view.
+
+Resten av rådgiverlista, vurdert:
+- 8 SECURITY DEFINER-funksjoner kan kalles av innloggede: alle sjekker selv
+  (`current_store_ids`/`is_garnly_admin` må kunne kalles, viewene bruker dem). Bevisst.
+- 15 tabeller med RLS uten policy: bevisst, bare service role leser dem. De to
+  `_flytting_backup_*_2026_09_27` kan slettes når Embrik vil (krever DROP).
+- `pg_net` i public: Supabase-standard, lar vi stå.
+- Lekkede passord-beskyttelse er av: slås på i dashboardet (Authentication → passord).
+
 ## Prisgjennomgang (09.10.2026)
 
 Alle 93 aktive garn er sammenlignet med andre norske nettbutikker, produsentenes veiledende
