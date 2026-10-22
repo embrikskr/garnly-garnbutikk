@@ -79,6 +79,25 @@ før upserten. Uten dette hadde hele sync-products stoppet på den unike nøkkel
 Halvors liste: 171 manglende farger, 10 EAN-avvik, fargekoder på Isager Silk Mohair/Soft og
 Bellissima, priser (Tynn Merinoull Lemon 47 kr, Plum 52,50 kr), 18 Permin-produkter til 0 kr.
 
+## Dobbelte farger og feil fargekoder (22.10.2026)
+
+Halvor fant Mitu «Natur - SFN10» to ganger. Skanning av alle aktive garn (samme fargekode, eller
+samme navn med ulik kode), kontrollert mot hva Garnkilden (Duell) og Strikkefryd (Mystore)
+kaller hver EAN i kassa:
+
+- **Slettet (Embriks ja):** Mitu «Natur - SFN10» og Alpakka Lin «Flamingorosa- 1366» – lagt inn
+  på nytt som «Navn - kode» uten EAN og uten lager, ved siden av fargen med EAN. Ingen ordrer.
+- **Fargekode rettet (18):** en utgått farge sto med koden til fargen som erstattet den, så to
+  ulike farger hadde samme kode. Riktig kode er den kassene bruker: 9004 Lemon (ikke 2009/9602),
+  5023 Lilac (ikke 4813), 4018 Scarlet Red, 3009 Orange Tiger, 3073 Sjokolade, 3522 Pudder,
+  227 Gammelrosa, 192 Bris, Mitu 3083 Burgunder, Tumi 0232 Burgunder, og Tynn Merinoull
+  «2650 Lys eikenott» → «2650 Beigemelert» (Lys eikenøtt er 2550). Strekkodene er uendret.
+- **Står (bevisst):** samme farge i to pakninger med hver sin EAN og lager – Merinoull 3081 og
+  4032, Tynn Merinoull 2650 (vanlig og KlompeLOMPE).
+- **Til Halvor:** Puno «343 Marineblå Melange» (Strikkefryd sier 21347), og Alpaca Silk
+  «1358 Lys lilla», «2329 Marine» og Pelini «50 Beige» – uten EAN og lager, finnes ikke i noen
+  kasse, og har en navnebror med EAN. Trolig dobbelte.
+
 ## Supabase-rådgiveren og skriving gjennom view (21.10.2026)
 
 Rådgiveren flagger 8 «Security Definer View» som CRITICAL. De er bevisste (se 030): de
