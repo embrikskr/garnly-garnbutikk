@@ -12,6 +12,7 @@ import { normalizeEan } from "../_shared/adapters/types.ts";
 import { gramFraShopify } from "../_shared/shipping/consignment.ts";
 import { erGarnpakke } from "../_shared/lines.ts";
 import { assignEans, type EanRow, staleEanHolders } from "../_shared/ean.ts";
+import { goneVariantRows } from "../_shared/variants.ts";
 
 Deno.serve(async (req) => {
   const unauthorized = requireInternalSecret(req);
@@ -59,9 +60,9 @@ Deno.serve(async (req) => {
   // products.ean er unik: samme strekkode på to varianter (en farge flyttet til et annet produkt,
   // med utkastet igjen) gir EAN-en til den aktive, og raden som hadde den fra før mister den.
   const { rows: unike, duplicates } = assignEans(rows);
-  const eksisterende: Array<{ id: string; ean: string | null; shopify_variant_id: string | null }> = [];
+  const eksisterende: Array<{ id: string; ean: string | null; shopify_variant_id: string | null; active: boolean }> = [];
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await db.from("products").select("id, ean, shopify_variant_id").not("ean", "is", null).order("id").range(from, from + 999);
+    const { data, error } = await db.from("products").select("id, ean, shopify_variant_id, active").order("id").range(from, from + 999);
     if (error) return json({ error: error.message, at: "ean-oppslag" }, 500);
     eksisterende.push(...(data ?? []));
     if (!data || data.length < 1000) break;
@@ -87,15 +88,25 @@ Deno.serve(async (req) => {
     ekskludert += data?.length ?? 0;
   }
 
-  // Varianter som er borte fra Shopify deaktiveres
-  if (seenVariantIds.length) {
-    await db.from("products").update({ active: false }).not("shopify_variant_id", "in", `(${seenVariantIds.map((s) => `"${s}"`).join(",")})`);
+  // Varianter som er borte fra Shopify (slettet, eller produktet arkivert) deaktiveres, etter id
+  // og i bolker. Sperre: svarer Shopify med langt færre varianter enn vi har aktive, er noe galt
+  // med svaret, ikke med sortimentet – da deaktiveres ingenting, og svaret sier fra.
+  const borte = goneVariantRows(eksisterende, seenVariantIds);
+  const aktiveFor = eksisterende.filter((r) => r.active).length;
+  const forMange = borte.length > Math.max(50, aktiveFor * 0.2);
+  if (!forMange) {
+    for (let i = 0; i < borte.length; i += 200) {
+      const { error } = await db.from("products").update({ active: false }).in("id", borte.slice(i, i + 200));
+      if (error) return json({ error: error.message, at: "deaktivering" }, 500);
+    }
   }
   // Lagersporing må være på for at antall per location skal styre salg (§4)
   const tracked = await ensureVariantsTracked(untracked);
   return json({
     seen, upserted, with_ean: withEan, without_ean: rows.length - withEan, tracking_enabled: tracked, garnpakker_unntatt: ekskludert,
     ean_flyttet: frigjor.length, ean_duplikater: duplicates,
+    deaktivert: forMange ? 0 : borte.length,
+    ...(forMange ? { advarsel: `${borte.length} varianter mangler i Shopify-svaret – ikke deaktivert` } : {}),
   });
 });
 

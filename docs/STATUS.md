@@ -94,6 +94,12 @@ kaller hver EAN i kassa:
   «2650 Lys eikenott» → «2650 Beigemelert» (Lys eikenøtt er 2550). Strekkodene er uendret.
 - **Står (bevisst):** samme farge i to pakninger med hver sin EAN og lager – Merinoull 3081 og
   4032, Tynn Merinoull 2650 (vanlig og KlompeLOMPE).
+- **Funnet underveis – IKKE DEPLOYET:** sync-products deaktiverte aldri varianter som er slettet
+  i Shopify. Steget sendte alle ~7 800 variant-id-ene i én URL, kallet feilet, og feilen ble
+  ikke sjekket. De to slettede variantene står derfor fortsatt `active` i `products`. Rettet i
+  koden (`_shared/variants.ts` + test, deaktivering etter id i bolker, med sperre hvis Shopify
+  svarer med langt færre varianter enn vanlig), men deployen ble avvist 23.10. Til den er ute:
+  de to radene kan settes inaktive for hånd.
 - **Til Halvor:** Puno «343 Marineblå Melange» (Strikkefryd sier 21347), og Alpaca Silk
   «1358 Lys lilla», «2329 Marine» og Pelini «50 Beige» – uten EAN og lager, finnes ikke i noen
   kasse, og har en navnebror med EAN. Trolig dobbelte.
