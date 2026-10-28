@@ -1,6 +1,19 @@
 # Status – garnly-garnbutikk
 
-Oppdatert: 2026-10-09
+Oppdatert: 2026-10-28
+
+## Testordrer slettet i Shopify, og Strikkefryd trykker ikke «Slått ut» (28.10.2026)
+
+- **#1001–#1018 er slettet i Shopify** (`orderDelete`, Embrik 28.10). Alle var testordrer fra
+  Claude Connector-appen, merket TEST, refundert og arkivert. Radene i `routing_orders`/
+  `routing_groups` står som historikk; ingen backstop slår dem opp i Shopify (testordrer og
+  kansellerte hoppes over i `transfer_sync`, `refund_sync` leser bare ordrer som finnes).
+- **Strikkefryd skriver ut etiketten, men trykker aldri «Slått ut og klar til sending».**
+  #1019, #1020, #1021, #1023 og #1024 har sending og etikett, men ikke kassauttrekk,
+  fulfillment i Shopify eller overføring til PostNord. Det finnes ingen kall til `ship-order`
+  og ingen `ship_failed` – knappen står på kortet, den er bare ikke trykket. Garnkilden gjorde
+  begge deler for #1022. Kunden har ikke fått sporing, og sendingen er «Usendt» hos PostNord
+  til knappen trykkes. Strikkefryd må trykke knappen på hvert kort.
 
 ## Matching på garnnavn + fargekode, og farge fra Mystore (09.10.2026)
 
