@@ -1,0 +1,17 @@
+# Garnly-appen for partnerbutikker med lager i egen Shopify. Se README.md.
+# Én app per butikk (custom distribution). client_id fylles inn av `shopify app config link`,
+# eller ignoreres hvis appen settes opp i Dev Dashboard for hånd.
+name = "Garnly"
+application_url = "https://zesaeleooiptrpjzqhxe.supabase.co/functions/v1/shopify-install"
+embedded = false
+
+[access_scopes]
+scopes = "read_products,read_inventory,read_locations,write_orders"
+# Edge Function `shopify-install` gjør innloggingen selv (authorization code grant).
+use_legacy_install_flow = true
+
+[auth]
+redirect_urls = ["https://zesaeleooiptrpjzqhxe.supabase.co/functions/v1/shopify-install"]
+
+[webhooks]
+api_version = "2025-07"

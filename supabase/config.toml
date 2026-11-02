@@ -22,3 +22,5 @@ verify_jwt = false
 verify_jwt = false
 [functions.shipping-label]
 verify_jwt = false
+[functions.shopify-install]
+verify_jwt = false

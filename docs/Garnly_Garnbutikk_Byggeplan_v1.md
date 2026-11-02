@@ -396,6 +396,26 @@ Estimat for fase 0–4: 60–90 timer utvikling. Frakt-valget (§10) og EAN-dekn
 
 ---
 
+## 15b. Utenlandske partnerbutikker (Danmark og EU, besluttet 02.11.2026)
+
+Samme Garnly-butikk i Shopify, med egne markeder for Danmark og EU (Shopify Markets). Garnly er
+selger overalt; partnerbutikken selger varene til Garnly. Garnly momsregistreres i Danmark (og i
+hvert land det står en butikk), med OSS for salg til resten av EU – avklares med regnskapsfører.
+
+- **Aldri over tollgrensen:** norske kunder får varene fra norske butikker, EU-kunder fra EU-butikker.
+  Varer skal bare vises som tilgjengelige i et marked når en butikk i det markedet har dem.
+- **Lager fra butikkens egen Shopify:** butikken installerer Garnly-appen (Dev Dashboard, custom
+  distribution, én app per butikk; butikker kan ikke lage API-nøkler selv etter januar 2026).
+  Innloggingen: `shopify-install`, `_shared/shopify_oauth.ts`, `_shared/partner_shop.ts`.
+  Tilganger: read_products, read_inventory, read_locations, write_orders. Oppskrift:
+  `shopify-partner-app/README.md`. **Bygget og deployet 02.11.2026.**
+- **Ved godkjenning** opprettes ordren i butikkens Shopify, med Garnly som kunde og forbrukerens
+  leveringsadresse, så lageret trekkes automatisk. Ikke bygget.
+- **Frakt:** Shipmondo (PostNord DK, GLS, DAO) med butikkens avtale. Ikke bygget.
+- **Oppgjør:** som i Norge (varebeløp minus `commission_pct`), utbetalt i DKK/EUR. Ikke bygget.
+- **Gjenstår før første danske ordre:** adapter `shopify` (lagersynk), ruting per marked, ordre i
+  butikkens Shopify, Shipmondo, oppgjør i valuta, Markets i Garnlys Shopify, dansk momsregistrering.
+
 ## 16. Kilder brukt i denne planen
 
 - Duell: `https://www.duell.no/support/api-dokumentasjon/` og Duells egen WooCommerce-integrasjon `https://github.com/Kasseservice/woocommerce-3x` (endepunkter og feltnavn hentet derfra)

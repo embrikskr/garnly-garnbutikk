@@ -35,7 +35,8 @@ supabase/migrations/      001 schema, 002 cron, 003 exclude_from_sync, 004 inven
                           030 view- og funksjonstilgang (anon ut),
                           031 oppgjør: refusjoner, utbetalinger, regnebok,
                           032 etikett i «Til pakking» + sletting ved kansellering,
-                          033 svarfrist 5 timer, 034 view bare lesing
+                          033 svarfrist 5 timer, 034 view bare lesing,
+                          035 shopify-partnerbutikk (pos_system 'shopify', unik shop_domain)
 supabase/seed/            product_aliases.sql (varer uten brukbar EAN, kjøres etter første sync-products)
 panel/                    butikkpanelet (statisk side, Vercel med rot `panel/`).
                           garnly-butikkpanel.vercel.app – deployes av git push
@@ -59,6 +60,8 @@ supabase/functions/
   _shared/settlement.ts   REN logikk: hvor mye refundert varebeløp som trekkes fra hvilken gruppe/butikk
   _shared/refund_sync.ts  refusjon fra Shopify → settlement_adjustments (webhook + backstop), registrerer webhooken
   _shared/offers.ts       makeNextOffer, escalateGroup, refreshOrderStatus
+  _shared/shopify_oauth.ts  REN logikk: Garnly-appen i partnerbutikkens Shopify (hmac, state, tilganger)
+  _shared/partner_shop.ts   nøkler fra Garnly-appen i store_secrets, fornying, partnerGql mot butikkens Shopify
   _shared/shipping/       cargonizer.ts (finn sending + hent etikett-PDF), bookShipment, shipmondo.ts
   sync-store/             cron: kassesystem → inventory → Shopify (+ metafelt garnly.stock_by_store)
   sync-products/          Shopify-varianter → products-tabellen (+ slår på inventory tracking)
@@ -75,11 +78,13 @@ supabase/functions/
   ship-order/             panelknappen «Slått ut og klar til sending» (bruker-JWT)
   store-settings/         butikkens egen innstilling: auto-godkjenning (bruker-JWT)
   backfill-lines/         vedlikehold: etterfyller varelinjer med felt som kom til senere
+  shopify-install/        Garnly-appen: installasjon og innlogging i partnerbutikkens egen Shopify
   admin-actions/          Garnly-admin: gi ordren til en butikk, prøv ruting på nytt (admin-JWT)
   ops-digest/             daglig cron kl. 08: e-post hvis noe står i «Trenger handling» (også feilede sendinger)
 scripts/                  set-barcodes.ts, import-products.ts, backfill-store-inventory.ts, enable-tracking.ts
 dashboard/                Next.js admin-dashboard (Vercel): oversikt, ordrer, umatchet, lager, synk
 shopify-app/              Shopify Function: kassevalidering «ett parti fra én butikk» (§7)
+shopify-partner-app/      Garnly-appen for utenlandske partnerbutikker med egen Shopify (én app per butikk, se README)
 ```
 
 ## Regler for arbeid i repoet

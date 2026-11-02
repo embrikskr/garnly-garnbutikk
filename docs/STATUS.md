@@ -1,6 +1,18 @@
 # Status – garnly-garnbutikk
 
-Oppdatert: 2026-10-28
+Oppdatert: 2026-11-02
+
+## Garnly-appen for partnerbutikker med egen Shopify (02.11.2026)
+
+- Dansk partnerbutikk på vei inn; modellen står i byggeplanen §15b.
+- **Bygget og deployet:** `shopify-install` (v1) med `_shared/shopify_oauth.ts` (7 tester) og
+  `_shared/partner_shop.ts`, migrasjon 035. Røyktestet: ugyldig domene 400, ukjent butikk 404.
+- **Gjenstår for å koble butikken til:** lage appen i Dev Dashboard, butikkraden i `stores`
+  (`pos_system 'shopify'`, `active = false`, `pos_config.shop_domain`), klient-id og -hemmelighet
+  i `store_secrets.secrets.app`, og sende installasjonslenken. Oppskrift i
+  `shopify-partner-app/README.md`.
+- **Ikke bygget:** lagersynk fra butikkens Shopify (adapter `shopify`), ruting per marked, ordre i
+  butikkens Shopify ved godkjenning, Shipmondo, oppgjør i DKK.
 
 ## Testordrer slettet i Shopify, og Strikkefryd trykker ikke «Slått ut» (28.10.2026)
 
