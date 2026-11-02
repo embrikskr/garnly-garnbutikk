@@ -556,8 +556,8 @@ el.queue.addEventListener("click", async (e) => {
 /**
  * Fraktetiketten fra ikonet på kortet.
  *
- * I «Til pakking» lager serveren sendingen i Cargonizer hvis den ikke finnes – uten å melde den
- * inn til PostNord; det skjer først ved «Slått ut og klar til sending». Har Garnly satt opp en
+ * I «Til pakking» lager serveren sendingen i Cargonizer hvis den ikke finnes, og melder den inn
+ * til PostNord før etiketten kommer – en pakke med etikett skal alltid bli tatt imot. Har Garnly satt opp en
  * DirectPrint-skriver for butikken, går etiketten dit og svaret er JSON. Ellers kommer PDF-en,
  * som åpnes i ny fane. API-nøkkelen ligger på serveren.
  */

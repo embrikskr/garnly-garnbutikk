@@ -1,6 +1,22 @@
 # Status – garnly-garnbutikk
 
-Oppdatert: 2026-11-02
+Oppdatert: 2026-11-03
+
+## Pakker i retur fra PostNord – sendingen meldes nå inn ved etiketten (03.11.2026)
+
+- **Feilen:** Strikkefryd skrev ut etiketten, leverte inn pakken og trykket «Slått ut og klar til
+  sending» timer eller dager senere. Overføringen til PostNord skjedde på knappen, så PostNord fikk
+  pakker uten informasjon og sendte dem i retur: #1019, #1020, #1021 (returnert), #1027
+  (klargjøres for retur 02.11 kl. 21:50, meldt inn 23:08). Pakker som ble meldt inn før de kom til
+  PostNord, kom fram (#1022–#1026). Sjekket på my.postnord.no for alle ni.
+- **Rettelsen:** `etikett.ts` melder sendingen inn (`overfoerGruppe`) før etiketten gis ut. Feiler
+  det, får butikken ingen etikett, men «Prøv igjen om litt». Backstoppen i `transfer_sync.ts` tar
+  også etiketter som er skrevet ut uten overføring. `shipping-label` v9 deployet og røyktestet;
+  `timeout-sweeper` (backstoppen) er ikke deployet på nytt – trengs bare for etiketter fra før
+  rettelsen, og det finnes ingen nå.
+- **Ulempe:** kanselleres ordren etter at etiketten er skrevet ut, står sendingen meldt inn uten pakke.
+- **Gjenstår:** nye sendinger for #1019, #1020, #1021 (og #1027 hvis den ikke stoppes) når pakkene er
+  tilbake hos Strikkefryd, med ny sporing i Shopify.
 
 ## Garnly-appen for partnerbutikker med egen Shopify (02.11.2026)
 

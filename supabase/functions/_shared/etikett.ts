@@ -2,9 +2,17 @@
  * Fraktetiketten fra ikonet på kortet – i «Til pakking» og i «Tidligere ordrer».
  *
  * I «Til pakking» lages sendingen i Cargonizer her, hvis den ikke finnes: samme oppsett som
- * sendeflyten (butikkens avsender og avtale, pakkeboks eller hentested etter vekt, SMS), men
- * ALLTID uten overføring. Butikken skal kunne skrive ut etiketten og teipe den på mens de
- * pakker; PostNord får beskjed først når de trykker «Slått ut og klar til sending».
+ * sendeflyten (butikkens avsender og avtale, pakkeboks eller hentested etter vekt, SMS).
+ *
+ * **Sendingen meldes inn til PostNord før etiketten gis ut** (endret 03.11.2026). Før skjedde
+ * det først ved «Slått ut og klar til sending». Strikkefryd skrev ut etiketten, leverte inn
+ * pakken og trykket knappen timer eller dager senere – og PostNord sendte alle pakkene de fikk
+ * før innmeldingen i retur (#1019, #1020, #1021, #1027). En etikett ser ferdig ut, så den skal
+ * være det. Feiler innmeldingen, får butikken ingen etikett, men beskjed om å prøve igjen.
+ * Testordrer meldes aldri inn (overfoerGruppe hopper over dem), men får etiketten.
+ *
+ * Kanselleres ordren etter dette, kan sendingen ikke slettes (annullering.ts lar overførte
+ * sendinger være). Den står da meldt inn uten pakke; PostNord tar betalt for pakker de får.
  *
  * I «Tidligere ordrer» lages ingenting – ordren kan være sendt på annen måte. Der hentes bare
  * etiketten til sendingen som finnes.
@@ -16,6 +24,7 @@
 import { adminClient, audit } from "./db.ts";
 import { hentEtikett, skrivUtEtikett } from "./shipping/cargonizer.ts";
 import { erKansellert, finnEksisterendeSending, hentKontekst, KANSELLERT, sikreSending } from "./sending.ts";
+import { overfoerGruppe } from "./transfer_sync.ts";
 
 export type EtikettUtfall =
   | { ok: true; via: "skriver"; consignmentId: number; ny: boolean }
@@ -50,6 +59,26 @@ export async function lagEtikett(groupId: string): Promise<EtikettUtfall> {
     const melding = e instanceof Error ? e.message : String(e);
     await audit("routing_group", groupId, "label_failed", { steg: "sending", error: melding, order: orderName });
     return { ok: false, status: 502, melding };
+  }
+
+  if (tilPakking) {
+    // Meld inn før etiketten finnes på papir. Alt som ikke er en feil (overført nå, alt overført,
+    // testordre, et annet forsøk på samme gruppe i samme sekund) gir etiketten.
+    let feil: string | null = null;
+    try {
+      const u = await overfoerGruppe(groupId);
+      if (u.status === "feilet") feil = u.grunn;
+    } catch (e) {
+      feil = e instanceof Error ? e.message : String(e);
+    }
+    if (feil) {
+      await audit("routing_group", groupId, "label_failed", { steg: "overføring", error: feil, order: orderName, consignment_id: consignmentId });
+      return {
+        ok: false,
+        status: 502,
+        melding: "Fikk ikke meldt inn sendingen til PostNord. Prøv igjen om litt.",
+      };
+    }
   }
 
   try {

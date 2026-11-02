@@ -6,8 +6,9 @@
  * En sending som ikke er overført står som «Usendt» hos Logistra, transportøren får aldri
  * EDI-en, og sporingsnummeret kunden fikk i Shopify er dødt. Funnet 30.09.2026 på #1004.
  *
- * Kalles fra to steder, med samme kodevei:
- *   - `fulfillment_sync` i det en gruppe får `fulfilled_at` (umiddelbart)
+ * Kalles fra disse stedene, med samme kodevei:
+ *   - `etikett.ts` før etiketten gis ut i «Til pakking» (fra 03.11.2026)
+ *   - `ship.ts` / `fulfillment_sync` i det en gruppe får `fulfilled_at` (umiddelbart)
  *   - `timeout-sweeper` som backstop, for de som feilet eller ble hoppet over
  *
  * Tre ting som styrer utformingen:
@@ -264,7 +265,10 @@ async function bokførFeil(g: GruppeRad, orderName: string, grunn: string): Prom
 export async function overfoerEtterslep(db: ReturnType<typeof adminClient>, grense = TRANSFER_BATCH): Promise<{ forsokt: number; overfort: number }> {
   const sjekketFør = new Date(Date.now() - TRANSFER_RECHECK_MIN * 60 * 1000).toISOString();
 
-  const { data: kandidater } = await db
+  // To slags: sendt (fulfilled) uten overføring, og etikett skrevet ut uten overføring. Den
+  // siste skal ikke finnes – etiketten gis ikke ut før sendingen er meldt inn – men grupper fra
+  // før 03.11.2026, eller en feil vi ikke har tenkt på, skal ikke bli liggende.
+  const sendt = db
     .from("routing_groups")
     .select("id, routing_orders!inner(is_test, status)")
     .in("status", ["assigned", "fulfilled"])
@@ -275,9 +279,24 @@ export async function overfoerEtterslep(db: ReturnType<typeof adminClient>, gren
     .neq("routing_orders.status", "cancelled")
     .or(`transfer_checked_at.is.null,transfer_checked_at.lt.${sjekketFør}`)
     .limit(grense);
+  const etiketter = db
+    .from("routing_groups")
+    .select("id, routing_orders!inner(is_test, status)")
+    .eq("status", "assigned")
+    .is("fulfilled_at", null)
+    .not("label_printed_at", "is", null)
+    .not("cargonizer_consignment_id", "is", null)
+    .is("transferred_at", null)
+    .is("manually_shipped_at", null)
+    .eq("routing_orders.is_test", false)
+    .neq("routing_orders.status", "cancelled")
+    .or(`transfer_checked_at.is.null,transfer_checked_at.lt.${sjekketFør}`)
+    .limit(grense);
+  const [a, b] = await Promise.all([sendt, etiketter]);
+  const kandidater = [...(a.data ?? []), ...(b.data ?? [])].slice(0, grense) as Array<{ id: string }>;
 
   let overfort = 0;
-  for (const k of (kandidater ?? []) as Array<{ id: string }>) {
+  for (const k of kandidater) {
     try {
       const utfall = await overfoerGruppe(k.id);
       if (utfall.status === "overfort" || utfall.status === "allerede") overfort++;
@@ -286,5 +305,5 @@ export async function overfoerEtterslep(db: ReturnType<typeof adminClient>, gren
       console.error("[transfer-backstop]", k.id, e instanceof Error ? e.message : e);
     }
   }
-  return { forsokt: (kandidater ?? []).length, overfort };
+  return { forsokt: kandidater.length, overfort };
 }

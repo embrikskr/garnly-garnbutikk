@@ -21,8 +21,9 @@
  * og to sporingsnumre.
  *
  * Etiketten kan skrives ut før dette, fra ikonet i «Til pakking» (_shared/etikett.ts). Da finnes
- * sendingen alt, uten å være overført, og den gjenbrukes her. **Overføringen til PostNord skjer
- * først her**, etter fulfillment – ikke når etiketten skrives ut, for da er pakken ikke klar.
+ * sendingen alt, og den er alt meldt inn til PostNord (fra 03.11.2026 – pakker som ble levert inn
+ * før knappen ble trykket, gikk i retur). Den gjenbrukes her, og steg 4b sier bare «allerede».
+ * Lages sendingen her (ingen etikett først), meldes den inn i steg 4b, etter fulfillment.
  * Etiketten skrives ikke ut på nytt hvis den alt er skrevet ut.
  *
  * Testordrer overføres aldri: sendingen opprettes i Cargonizer, men ingenting går til PostNord.

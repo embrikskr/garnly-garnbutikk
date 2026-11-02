@@ -6,8 +6,9 @@
  *     mens de pakker
  *   - «Slått ut og klar til sending» (_shared/ship.ts), som gjenbruker sendingen fra etiketten
  *
- * Sendingen lages ALLTID med `transfer=false`. PostNord får beskjed først når pakken er slått
- * ut og sendt – det gjør sendeflyten med transfer_sync, ett sted, for alle sendinger likt.
+ * Sendingen lages ALLTID med `transfer=false`, og meldes inn til PostNord med transfer_sync,
+ * ett sted, for alle sendinger likt: før etiketten gis ut (etikett.ts), eller etter fulfillment
+ * når den lages av sendeknappen (ship.ts).
  *
  * Rekkefølgen er kravet: lagret id først, så oppslag på ordrenummeret, og først hvis ingen av
  * delene gir treff lager vi en ny. To trykk tett i tid skal ikke gi to sendinger: selve
