@@ -139,3 +139,21 @@ function localToUtc(y: number, m: number, d: number, h: number, min: number, tz:
 export function replanIsUseful(groups: Group[], _uncovered: LineItem[], _totalLines: number): boolean {
   return groups.reduce((n, g) => n + g.line_items.length, 0) > 0;
 }
+
+/**
+ * Butikkene som skal få et nytt tilbud når admin trykker «Prøv ruting på nytt».
+ *
+ * Før så den nye rutingen bare på butikker som ennå ikke hadde fått tilbud. En butikk der fristen
+ * hadde gått ut, ble aldri spurt igjen – selv om den var den eneste med varene (#1030, 03.11.2026:
+ * «Ingen butikk har varene på lager», mens Strikkefryd hadde alt). Nå kommer alle som har lageret
+ * i dag med, unntatt de som aktivt har sagt nei til akkurat denne ordren. Dem gir admin ordren
+ * med «Gi ordren til butikk» hvis det skal være.
+ *
+ * REN logikk. Rekkefølgen er `qualifiedIds` sin (fordelingsregelen).
+ */
+export function storesToReoffer(qualifiedIds: string[], offers: Array<{ store_id: string; status: string }>): string[] {
+  const utelatt = new Set(
+    offers.filter((o) => ["declined", "pending", "offered", "accepted"].includes(o.status)).map((o) => o.store_id),
+  );
+  return qualifiedIds.filter((id) => !utelatt.has(id));
+}

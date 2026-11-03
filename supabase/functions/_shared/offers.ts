@@ -2,7 +2,7 @@
  * Felles tilbudslogikk brukt av order-intake, offer-respond og timeout-sweeper.
  */
 import { adminClient, audit } from "./db.ts";
-import { deadlineWithinBusinessHours, planGroups, replanIsUseful } from "./routing.ts";
+import { deadlineWithinBusinessHours, planGroups, replanIsUseful, storesToReoffer } from "./routing.ts";
 import { hashToken, newToken, offerLinks } from "./tokens.ts";
 import { notifyOps, notifyStoreOffer } from "./notify.ts";
 import { splitHeldFulfillmentOrder } from "./shopify.ts";
@@ -115,15 +115,11 @@ export async function tildelManuelt(groupId: string, storeId: string, av: string
   const { data: apent } = await db.from("offers").select("id").eq("routing_group_id", groupId).eq("status", "offered").limit(1);
   if (apent?.length) return { ok: false, melding: "Gruppen har alt et tilbud ute. Vent til fristen går ut." };
 
-  // Butikken var kanskje aldri kandidat; da finnes ingen pending-rad å flippe.
-  let offerId = (await db.from("offers").select("id").eq("routing_group_id", groupId).eq("store_id", storeId).eq("status", "pending").maybeSingle()).data?.id;
-  if (!offerId) {
-    const { count } = await db.from("offers").select("id", { count: "exact", head: true }).eq("routing_group_id", groupId);
-    const { data: ny, error } = await db.from("offers")
-      .insert({ routing_group_id: groupId, store_id: storeId, sequence_no: (count ?? 0) + 1, status: "pending" })
-      .select("id").single();
-    if (error || !ny) return { ok: false, melding: error?.message ?? "Fikk ikke opprettet tilbudet" };
-    offerId = ny.id;
+  let offerId: string;
+  try {
+    offerId = await pendingTilbud(groupId, storeId);
+  } catch (e) {
+    return { ok: false, melding: e instanceof Error ? e.message : "Fikk ikke opprettet tilbudet" };
   }
 
   await db.from("routing_groups").update({ status: "routing" }).eq("id", groupId);
@@ -151,12 +147,50 @@ export async function provRutingPaNytt(groupId: string, av: string): Promise<{ o
   if (!["escalated", "routing"].includes(group.status)) {
     return { ok: false, melding: `Gruppen er ${group.status} og kan ikke rutes på nytt.` };
   }
+  // makeNextOffer ser bare på pending-tilbud. Uten nye pending-rader ville en butikk der fristen
+  // gikk ut aldri blitt spurt igjen, selv med varene på lager (se storesToReoffer).
+  const { data: full } = await db.from("routing_groups").select("line_items").eq("id", groupId).single();
+  const { data: kvalifisert } = await db.rpc("qualified_stores", { p_line_items: full?.line_items ?? [] });
+  const { data: tidligere } = await db.from("offers").select("store_id, status").eq("routing_group_id", groupId);
+  const nye = storesToReoffer(((kvalifisert ?? []) as Array<{ store_id: string }>).map((r) => r.store_id), tidligere ?? []);
+  for (const storeId of nye) await pendingTilbud(groupId, storeId);
+
   await db.from("routing_groups").update({ status: "routing" }).eq("id", groupId);
-  await audit("routing_group", groupId, "manual_reroute", { av });
+  await audit("routing_group", groupId, "manual_reroute", { av, nye_kandidater: nye.length });
   const sendt = await makeNextOffer(groupId);
   return sendt
     ? { ok: true, melding: "Tilbudet er sendt til neste butikk i køen." }
     : { ok: false, melding: "Ingen butikk har varene på lager nå. Ordren står fortsatt som eskalert." };
+}
+
+/**
+ * Et pending-tilbud til butikken for gruppen, klart for sendOffer.
+ *
+ * `offers` har én rad per gruppe og butikk (unik nøkkel). Har butikken hatt tilbudet før (frist
+ * gått ut, tom for lager), settes den samme raden tilbake til pending, og det den sto som,
+ * havner i revisjonsloggen. Før prøvde «Gi ordren til butikk» å lage en rad til, og feilet på
+ * nøkkelen for nettopp de butikkene admin oftest vil gi ordren til.
+ */
+async function pendingTilbud(groupId: string, storeId: string): Promise<string> {
+  const db = adminClient();
+  const { data: finnes } = await db.from("offers").select("id, status, responded_at, response_note")
+    .eq("routing_group_id", groupId).eq("store_id", storeId).maybeSingle();
+  if (finnes?.status === "pending") return finnes.id;
+  if (finnes) {
+    if (["offered", "accepted"].includes(finnes.status)) throw new Error(`Butikken har alt tilbudet (${finnes.status}).`);
+    const { error } = await db.from("offers").update({
+      status: "pending", token_hash: null, offered_at: null, deadline_at: null, responded_at: null, response_note: null,
+    }).eq("id", finnes.id);
+    if (error) throw new Error(error.message);
+    await audit("offer", finnes.id, "reopened", { var: finnes.status, svart: finnes.responded_at, merknad: finnes.response_note });
+    return finnes.id;
+  }
+  const { count } = await db.from("offers").select("id", { count: "exact", head: true }).eq("routing_group_id", groupId);
+  const { data: ny, error } = await db.from("offers")
+    .insert({ routing_group_id: groupId, store_id: storeId, sequence_no: (count ?? 0) + 1, status: "pending" })
+    .select("id").single();
+  if (error || !ny) throw new Error(error?.message ?? "Fikk ikke opprettet tilbudet");
+  return ny.id;
 }
 
 export async function escalateGroup(group: RoutingGroupRow & { routing_orders?: { shopify_order_name?: string } }, reason: string) {

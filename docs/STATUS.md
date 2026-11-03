@@ -2,6 +2,17 @@
 
 Oppdatert: 2026-11-03
 
+## «Prøv ruting på nytt» og «Gi ordren til butikk» virket ikke etter utløpt frist (03.11.2026)
+
+- **#1030** (5 × 3 Tilia): Strikkefryd fikk tilbudet 11:08, svarte ikke innen 16:08, og ordren ble
+  eskalert – Strikkefryd er eneste butikk med Tilia (15–32 av hver farge). «Prøv ruting på nytt»
+  sa «Ingen butikk har varene», fordi den bare så på butikker som ikke hadde hatt tilbud.
+  «Gi ordren til butikk» ville feilet på den unike nøkkelen (routing_group_id, store_id) i `offers`.
+- **Rettet:** `storesToReoffer` (routing.ts, 2 tester) tar med butikker der fristen gikk ut eller
+  lageret kom tilbake, men ikke de som aktivt avslo. `pendingTilbud` (offers.ts) gjenbruker den gamle
+  tilbudsraden (status → pending, det den var står i audit_log som `reopened`). `admin-actions` v3
+  deployet og røyktestet.
+
 ## Pakker i retur fra PostNord – sendingen meldes nå inn ved etiketten (03.11.2026)
 
 - **Feilen:** Strikkefryd skrev ut etiketten, leverte inn pakken og trykket «Slått ut og klar til

@@ -149,3 +149,19 @@ Deno.test("replanIsUseful: framgang så lenge noen linjer blir dekket", async ()
   // Ingen av de gjenværende dekker noe.
   assertEquals(replanIsUseful([], [a, b], 2), false);
 });
+
+import { storesToReoffer } from "./routing.ts";
+
+Deno.test("storesToReoffer: utløpt frist og tom-for-lager spørres igjen, aktivt avslag ikke", () => {
+  const offers = [
+    { store_id: "strikkefryd", status: "expired" },
+    { store_id: "garnkilden", status: "declined" },
+    { store_id: "c", status: "declined_stock" },
+    { store_id: "d", status: "pending" },
+  ];
+  assertEquals(storesToReoffer(["strikkefryd", "garnkilden", "c", "d", "ny"], offers), ["strikkefryd", "c", "ny"]);
+});
+
+Deno.test("storesToReoffer: ingen kvalifiserte – ingen nye tilbud", () => {
+  assertEquals(storesToReoffer([], [{ store_id: "a", status: "expired" }]), []);
+});
