@@ -6,7 +6,10 @@ Oppdatert: 2026-11-11
 
 - KreStoffer (kre-stoffer.myshopify.com, Odense) ligger i `stores` som `pos_system 'shopify'`,
   `active = false`, uten `shopify_location_id`. App-nøklene står i `store_secrets.secrets.app`.
-  **Appen er ikke installert ennå** – venter på at Embrik sender installasjonslenken.
+  Appen «Garnly - KreStoffer» ligger i Partner-organisasjonen «Studio Ull AS» (den første, i
+  butikkorganisasjonen «Garnly», kunne ikke distribueres). Nøklene er byttet, og første steg av
+  installasjonen er testet med signert forespørsel (302 til kre-stoffer, riktige tilganger).
+  **Ikke installert ennå** – lenken sendes til KreStoffer 11.11.2026.
 - **Bygget:** `_shared/adapters/shopify.ts` (5 tester) leser «available» fra butikkens nettlokasjon
   med strekkode, SKU, garnnavn og farge; registrert i adapters/index.ts, og `sync-store` tar med
   `shopify`-butikker. Partnerkallene bruker API 2026-10 (`PARTNER_SHOPIFY_API_VERSION`).

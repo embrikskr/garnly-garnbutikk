@@ -14,7 +14,9 @@ Innloggingen gjøres av Edge Function `shopify-install`; koden er i `_shared/sho
 
 1. **Butikken i databasen.** Raden i `stores` må finnes før de installerer, med
    `pos_system = 'shopify'`, `active = false` og `pos_config = {"shop_domain": "navn.myshopify.com"}`.
-2. **Lag appen** på https://dev.shopify.com/dashboard (Garnlys konto):
+2. **Lag appen** på https://dev.shopify.com/dashboard, i **Partner-organisasjonen «Studio Ull AS»**
+   (partners.shopify.com/5319993). En app i butikkorganisasjonen «Garnly» kan bare installeres i
+   Garnlys egne butikker – den får aldri noe distribusjonsvalg (prøvd 11.11.2026).
    - *Create app* → *Start from Dev Dashboard* → navn: `Garnly`
    - *Versions → Create version*:
      - App URL: `https://zesaeleooiptrpjzqhxe.supabase.co/functions/v1/shopify-install`
@@ -23,7 +25,8 @@ Innloggingen gjøres av Edge Function `shopify-install`; koden er i `_shared/sho
      - Use legacy install flow: **på**
      - Redirect URLs: samme adresse som App URL
      - *Release*
-   - *Distribution* → *Custom distribution* → butikkens `navn.myshopify.com` → *Generate link*
+   - Distribusjon i Partner Dashboard (appen → *Distribusjon*) → *Tilpasset distribusjon* → butikkens
+     `navn.myshopify.com`, uten «flere butikker i én Plus-organisasjon» → *Generer kobling*
 3. **Klient-id og -hemmelighet** (*Settings* i appen) legges i `store_secrets` for butikken:
    `{"app": {"client_id": "...", "client_secret": "..."}}`. Aldri i kode eller `pos_config`.
 4. **Send installasjonslenken** til butikken. De logger inn i Shopify, trykker *Install* og
