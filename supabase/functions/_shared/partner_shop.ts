@@ -16,7 +16,12 @@
 import { adminClient } from "./db.ts";
 import { expiresAt, needsRefresh } from "./shopify_oauth.ts";
 
-const API_VERSION = Deno.env.get("SHOPIFY_API_VERSION") ?? "2025-07";
+/**
+ * Egen API-versjon for partnerbutikkene, uavhengig av Garnlys egen (SHOPIFY_API_VERSION).
+ * 2026-10 fordi lagerlesingen bruker `InventoryItem.variants` og `ProductVariant.barcodes`;
+ * `variant` og `barcode` er utfaset der (sjekket 11.11.2026).
+ */
+const API_VERSION = Deno.env.get("PARTNER_SHOPIFY_API_VERSION") ?? "2026-10";
 
 export interface PartnerApp {
   client_id: string;

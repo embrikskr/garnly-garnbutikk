@@ -408,7 +408,8 @@ hvert land det står en butikk), med OSS for salg til resten av EU – avklares 
   distribution, én app per butikk; butikker kan ikke lage API-nøkler selv etter januar 2026).
   Innloggingen: `shopify-install`, `_shared/shopify_oauth.ts`, `_shared/partner_shop.ts`.
   Tilganger: read_products, read_inventory, read_locations, write_orders. Oppskrift:
-  `shopify-partner-app/README.md`. **Bygget og deployet 02.11.2026.**
+  `shopify-partner-app/README.md`. **Bygget og deployet 02.11.2026.** Lagerlesingen (adapter
+  `shopify`, «available» på butikkens nettlokasjon, API 2026-10) er bygget 11.11.2026.
 - **Ved godkjenning** opprettes ordren i butikkens Shopify, med Garnly som kunde og forbrukerens
   leveringsadresse, så lageret trekkes automatisk. Ikke bygget.
 - **Frakt:** Shipmondo (PostNord DK, GLS, DAO) med butikkens avtale. Ikke bygget.

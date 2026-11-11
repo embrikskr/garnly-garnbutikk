@@ -1,6 +1,21 @@
 # Status – garnly-garnbutikk
 
-Oppdatert: 2026-11-03
+Oppdatert: 2026-11-11
+
+## KreStoffer: lagerlesing fra egen Shopify bygget (11.11.2026)
+
+- KreStoffer (kre-stoffer.myshopify.com, Odense) ligger i `stores` som `pos_system 'shopify'`,
+  `active = false`, uten `shopify_location_id`. App-nøklene står i `store_secrets.secrets.app`.
+  **Appen er ikke installert ennå** – venter på at Embrik sender installasjonslenken.
+- **Bygget:** `_shared/adapters/shopify.ts` (5 tester) leser «available» fra butikkens nettlokasjon
+  med strekkode, SKU, garnnavn og farge; registrert i adapters/index.ts, og `sync-store` tar med
+  `shopify`-butikker. Partnerkallene bruker API 2026-10 (`PARTNER_SHOPIFY_API_VERSION`).
+- **Ikke deployet:** `sync-store` må deployes med adapteren før prøvesynken. Gjøres når butikken har
+  installert. Prøvesynk: `{"store_id": "<KreStoffer>", "dry_run": true, "wait": true}` – fyller
+  `inventory`/`unmatched_items`, skriver ingenting til Shopify (ingen location), gir ingen ordrer
+  (butikken er inaktiv).
+- **Før butikken kan aktiveres:** ruting per land og kassesjekk mot land (byggeplan §15b), dansk
+  frakt, ordre i butikkens Shopify, oppgjør i DKK, dansk marked og momsregistrering.
 
 ## «Prøv ruting på nytt» og «Gi ordren til butikk» virket ikke etter utløpt frist (03.11.2026)
 

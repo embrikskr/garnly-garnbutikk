@@ -1,4 +1,4 @@
-export type PosSystem = "duell" | "mystore" | "csv" | "manual";
+export type PosSystem = "duell" | "mystore" | "csv" | "manual" | "shopify";
 
 export interface StoreRow {
   id: string;

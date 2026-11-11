@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
     const schedule = scheduleFromEnv();
     const cutoff = dueCutoff(new Date(), schedule);
     if (!cutoff) return json({ started: 0, skipped: "natt", night_interval_min: schedule.nightIntervalMin });
-    const { data } = await db.from("stores").select("*").eq("active", true).in("pos_system", ["duell", "mystore", "csv"]);
+    const { data } = await db.from("stores").select("*").eq("active", true).in("pos_system", ["duell", "mystore", "csv", "shopify"]);
     stores = (data ?? []).filter((s: StoreRow) => isDue(s.last_sync_at, cutoff));
   }
 
