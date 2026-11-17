@@ -39,7 +39,7 @@ const el = {
   giSend: $("gi-send"), giLukk: $("gi-lukk"),
   faneSalg: $("fane-salg"), visningSalg: $("visning-salg"),
   salgButikk: $("salg-butikk"), salgButikkFelt: $("salg-butikk-felt"), salgPeriode: $("salg-periode"),
-  salgTopp: $("salg-topp"), salgManglet: $("salg-manglet"),
+  salgTotal: $("salg-total"), salgTopp: $("salg-topp"), salgManglet: $("salg-manglet"),
   faneOppgjor: $("fane-oppgjor"), visningOppgjor: $("visning-oppgjor"),
   oppgjorButikk: $("oppgjor-butikk"), oppgjorButikkFelt: $("oppgjor-butikk-felt"),
   oppgjorForrige: $("oppgjor-forrige"), oppgjorNeste: $("oppgjor-neste"), oppgjorMaaned: $("oppgjor-maaned"),
@@ -1276,15 +1276,28 @@ async function lastSalg() {
   const butikk = rapportbutikk(el.salgButikk);
   if (!butikk) return;
   const dager = Number(el.salgPeriode.value) || 30;
-  const [topp, manglet] = await Promise.all([
+  const [total, topp, manglet] = await Promise.all([
+    sb.rpc("sales_report_total", { p_days: dager, p_store: butikk }),
     sb.rpc("sales_report_top", { p_days: dager, p_store: butikk }),
     sb.rpc("sales_report_missed", { p_days: dager, p_store: butikk }),
   ]);
-  if (topp.error || manglet.error) {
-    console.error("[salg]", topp.error ?? manglet.error);
+  if (total.error || topp.error || manglet.error) {
+    console.error("[salg]", total.error ?? topp.error ?? manglet.error);
     toast("Fikk ikke hentet salgsrapporten.", "error");
     return;
   }
+  // Totalen på tvers av butikkene. «Dere har nå» i rødt når butikken ikke har noe av en vare
+  // som går – det er hele poenget med tabellen.
+  const tot = total.data ?? [];
+  el.salgTotal.innerHTML = tot.length
+    ? `<table><thead><tr><th>Vare</th><th class="num">Nøster</th><th class="num">Ordrer</th><th class="num">Dere har nå</th></tr></thead><tbody>${
+      tot.map((r) => `<tr>
+        <td>${esc(r.vare)}</td>
+        <td class="num">${antall(r.antall)}</td>
+        <td class="num">${antall(r.ordrer)}</td>
+        <td class="num${Number(r.lager_na ?? 0) === 0 ? " svak--feil" : ""}">${antall(r.lager_na ?? 0)}</td>
+      </tr>`).join("")}</tbody></table>`
+    : '<p class="empty">Ingen salg i perioden.</p>';
   const t = topp.data ?? [];
   el.salgTopp.innerHTML = t.length
     ? `<table><thead><tr><th>Vare</th><th class="num">Nøster</th><th class="num">Ordrer</th><th class="num">Beløp</th><th class="num">På lager nå</th></tr></thead><tbody>${

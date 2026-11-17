@@ -13,6 +13,9 @@ Oppdatert: 2026-11-17
   om gangen, «‹ Forrige / Neste ›», «Marker som utbetalt» for Garnly). Testet i Chromium med
   simulert admin-innlogging og svar fra databasen byttet ut med kjente tall; ingen feil i konsollen.
   Ikke testet med ekte innlogging – første ekte visning er når noen åpner panelet etter push.
+- **037:** «Mest solgt i Garnly» øverst i Salg: summert over alle butikker (aldri per butikk), med
+  butikkens eget lager; rød 0 når de ikke har en vare som går. Med to aktive butikker kan hver regne
+  ut den andres salg (total − eget) – sagt til Embrik.
 - Oppgjørsregelen er uendret: butikken får varebeløpet minus provisjon (10 %); frakten er Garnlys.
 
 ## KreStoffer: lagerlesing fra egen Shopify bygget (11.11.2026)
