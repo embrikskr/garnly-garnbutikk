@@ -13,10 +13,15 @@
  *
  * Kanseller er med vilje ikke en handling her: refusjon og kansellering skal gjøres av et
  * menneske i Shopify. Panelet lenker dit i stedet.
+ *
+ * **To veier inn (fra 17.11.2026):** panelets admin-JWT som før, eller admin.garnly.no, som
+ * har sjekket admin-tilgangen i sin egen innlogging og kaller med denne basens service
+ * role-nøkkel og navnet på den som trykket i `x-garnly-actor` (se _shared/admin_bridge.ts).
  */
 import { adminClient, json } from "../_shared/db.ts";
 import { cors } from "../_shared/cors.ts";
 import { provRutingPaNytt, tildelManuelt } from "../_shared/offers.ts";
+import { bridgeActor } from "../_shared/admin_bridge.ts";
 
 Deno.serve(async (req) => {
   const CORS = cors(req);
@@ -26,14 +31,24 @@ Deno.serve(async (req) => {
   const jwt = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
   if (!jwt) return json({ ok: false, melding: "ikke innlogget" }, 401, CORS);
 
-  const db = adminClient();
-  const { data: auth, error: authErr } = await db.auth.getUser(jwt);
-  if (authErr || !auth?.user) return json({ ok: false, melding: "ikke innlogget" }, 401, CORS);
+  const bridge = bridgeActor(jwt, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"), req.headers.get("x-garnly-actor"));
+  if (bridge.kind === "missing_actor") {
+    return json({ ok: false, melding: "x-garnly-actor mangler" }, 400, CORS);
+  }
 
-  const { data: admin } = await db.from("garnly_admins").select("user_id, name").eq("user_id", auth.user.id).maybeSingle();
-  if (!admin) return json({ ok: false, melding: "Krever Garnly-admin" }, 403, CORS);
+  let av: string;
+  if (bridge.kind === "ok") {
+    av = bridge.actor;
+  } else {
+    const db = adminClient();
+    const { data: auth, error: authErr } = await db.auth.getUser(jwt);
+    if (authErr || !auth?.user) return json({ ok: false, melding: "ikke innlogget" }, 401, CORS);
 
-  const av = auth.user.email ?? admin.name ?? auth.user.id;
+    const { data: admin } = await db.from("garnly_admins").select("user_id, name").eq("user_id", auth.user.id).maybeSingle();
+    if (!admin) return json({ ok: false, melding: "Krever Garnly-admin" }, 403, CORS);
+
+    av = auth.user.email ?? admin.name ?? auth.user.id;
+  }
   const body = await req.json().catch(() => ({}));
   if (!body.group_id) return json({ ok: false, melding: "group_id mangler" }, 400, CORS);
 

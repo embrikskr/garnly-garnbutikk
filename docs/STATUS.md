@@ -2,6 +2,26 @@
 
 Oppdatert: 2026-11-17
 
+## Garnly-admin flytter til admin.garnly.no (17.11.2026)
+
+- **Hvorfor:** Embrik: «butikkene må ha tilgang til shopadmin … men vi admin trenger bare én
+  innlogging, og et sted der all oversikt ligger». Butikkpanelet (shopadmin.garnly.no) er
+  fortsatt butikkenes. Garnlys oversikt – Trenger handling, alle ordrer, synk, salg og oppgjør
+  for alle butikker – står i fanen «Garnbutikk» på admin.garnly.no (app-repoet `garnlyno`).
+- **Migrasjon 038** (`038_admin_fra_garnly_admin.sql`), **MÅ KJØRES** i SQL Editor:
+  `is_garnly_admin()` er sann for service role (ga null rader før), og ny
+  `garnly_admin_actor()` gir navnet fra `x-garnly-actor` når kallet er service role, ellers
+  e-posten til en innlogget i `garnly_admins`. `mark_settlement_paid` / `unmark_settlement_paid`
+  bruker den og nekter uten navn; kroppen er ellers lik den i basen 17.11 (fra 031). Prøvd to
+  ganger på rad mot lokal Postgres 16: service role uten navn nektes, med navn markeres og
+  angres (navnet står i `marked_by`, `annullert_av` og audit_log), panelets admin virker som
+  før, en butikkbruker med falsk header nektes, og `authenticated` kan ikke kalle
+  `garnly_admin_actor()` direkte.
+- **`admin-actions`** tar imot `Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>` + `x-garnly-actor`
+  (`_shared/admin_bridge.ts`, 5 tester, nøkkelen sammenlignes i konstant tid). Uten navn: 400.
+  Panelets JWT-vei er uendret. **MÅ DEPLOYES:** `supabase functions deploy admin-actions`.
+- **Neste:** når Embrik har prøvd fanen på admin.garnly.no, fjernes «Garnly»-fanen fra panelet.
+
 ## Salg og Oppgjør i panelet (17.11.2026)
 
 - **Migrasjon 036:** `missed_lines` + trigger `routing_groups_missed_lines` (hva hver aktiv butikk
