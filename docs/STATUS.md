@@ -1,6 +1,19 @@
 # Status – garnly-garnbutikk
 
-Oppdatert: 2026-11-11
+Oppdatert: 2026-11-17
+
+## Salg og Oppgjør i panelet (17.11.2026)
+
+- **Migrasjon 036:** `missed_lines` + trigger `routing_groups_missed_lines` (hva hver aktiv butikk
+  ikke hadde nok av da ordren kom inn; ingen historikk før 17.11), `sales_report_top`,
+  `sales_report_missed` og `settlement_month_lines` (regneboka per måned, med frakten). Tilgang
+  som 031: butikken ser seg selv, Garnly alle. Testet med simulert JWT: Strikkefryd får 0 rader for
+  Garnkilden; admin ser begge. Triggeren testet i en transaksjon som ble rullet tilbake.
+- **Panelet:** fanene «Salg» (mest solgt + det dere manglet, 7/30/90 dager) og «Oppgjør» (én måned
+  om gangen, «‹ Forrige / Neste ›», «Marker som utbetalt» for Garnly). Testet i Chromium med
+  simulert admin-innlogging og svar fra databasen byttet ut med kjente tall; ingen feil i konsollen.
+  Ikke testet med ekte innlogging – første ekte visning er når noen åpner panelet etter push.
+- Oppgjørsregelen er uendret: butikken får varebeløpet minus provisjon (10 %); frakten er Garnlys.
 
 ## KreStoffer: lagerlesing fra egen Shopify bygget (11.11.2026)
 

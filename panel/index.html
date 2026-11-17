@@ -52,6 +52,8 @@
   <nav class="faner" role="tablist">
     <button id="fane-aktive" class="fane fane--valgt" role="tab" aria-selected="true" aria-controls="visning-aktive">Aktive ordrer</button>
     <button id="fane-historikk" class="fane" role="tab" aria-selected="false" aria-controls="visning-historikk">Tidligere ordrer</button>
+    <button id="fane-salg" class="fane" role="tab" aria-selected="false" aria-controls="visning-salg" hidden>Salg</button>
+    <button id="fane-oppgjor" class="fane" role="tab" aria-selected="false" aria-controls="visning-oppgjor" hidden>Oppgjør</button>
     <button id="fane-garnly" class="fane" role="tab" aria-selected="false" aria-controls="visning-garnly" hidden>Garnly</button>
   </nav>
 
@@ -104,6 +106,51 @@
       </div>
       <div id="admin-ordrer" class="tabell"></div>
       <p id="admin-ordrer-tom" class="empty" hidden>Ingen ordrer i utvalget.</p>
+    </section>
+  </main>
+
+  <!-- Salg: hva som selger, og hva butikken gikk glipp av. Garnly velger butikk. -->
+  <main id="visning-salg" class="admin" role="tabpanel" aria-labelledby="fane-salg" hidden>
+    <div class="filtre">
+      <label class="felt" id="salg-butikk-felt" hidden>Butikk <select id="salg-butikk"></select></label>
+      <label class="felt">Periode
+        <select id="salg-periode">
+          <option value="7">Siste 7 dager</option>
+          <option value="30" selected>Siste 30 dager</option>
+          <option value="90">Siste 90 dager</option>
+        </select>
+      </label>
+    </div>
+
+    <section>
+      <h2 class="col__title">Mest solgt</h2>
+      <div id="salg-topp" class="tabell"></div>
+    </section>
+
+    <section>
+      <h2 class="col__title">Dette manglet dere</h2>
+      <p class="svak">Varer kundene bestilte da dere ikke hadde nok på lager, så ordren gikk til en annen butikk eller til Garnly. Telles fra 17. november 2026.</p>
+      <div id="salg-manglet" class="tabell"></div>
+    </section>
+  </main>
+
+  <!-- Oppgjør: én måned om gangen. Tallene kommer ferdig regnet fra databasen (031, 036). -->
+  <main id="visning-oppgjor" class="admin" role="tabpanel" aria-labelledby="fane-oppgjor" hidden>
+    <div class="filtre">
+      <label class="felt" id="oppgjor-butikk-felt" hidden>Butikk <select id="oppgjor-butikk"></select></label>
+    </div>
+    <div class="maaned">
+      <button id="oppgjor-forrige" class="btn btn--secondary" aria-label="Forrige måned">‹ Forrige</button>
+      <h2 id="oppgjor-maaned" class="maaned__navn"></h2>
+      <button id="oppgjor-neste" class="btn btn--secondary" aria-label="Neste måned">Neste ›</button>
+    </div>
+    <div id="oppgjor-sum" class="tall"></div>
+    <div id="oppgjor-status" class="maaned__status"></div>
+
+    <section>
+      <h2 class="col__title">Ordrer</h2>
+      <div id="oppgjor-linjer" class="tabell"></div>
+      <p class="svak">Frakten kunden betaler går til Garnly. Av varene tar Garnly provisjonen, og resten går til butikken. Eksempel: kunden betaler 1 079 kr, der 79 kr er frakt. Av varene på 1 000 kr tar Garnly 10 % (100 kr), og butikken får 900 kr. Refunderte varer trekkes i måneden de ble refundert, eller i neste måned hvis den alt er utbetalt. Testordrer telles ikke.</p>
     </section>
   </main>
 
