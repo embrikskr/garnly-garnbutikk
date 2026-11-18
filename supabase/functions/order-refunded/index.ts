@@ -1,8 +1,8 @@
 /**
  * order-refunded: Shopify-webhook `refunds/create` → trekk i butikkens oppgjør.
  *
- * Refunderte varer trekkes fra butikken som hadde ordren: minus refundert varebeløp ×
- * (100 − provisjon) / 100. Frakt trekkes aldri; den er Garnlys. Testordrer hoppes over.
+ * Refunderte varer trekkes fra butikken som hadde ordren: butikkens andel av det refunderte
+ * varebeløpet uten mva, pluss mva (040). Refundert frakt trekkes aldri. Testordrer hoppes over.
  * Selve jobben ligger i _shared/refund_sync.ts.
  *
  * Kan også kalles internt med x-cron-secret:

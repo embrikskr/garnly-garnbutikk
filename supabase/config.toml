@@ -26,3 +26,5 @@ verify_jwt = false
 verify_jwt = false
 [functions.partner-preview]
 verify_jwt = false
+[functions.settlement-fees]
+verify_jwt = false

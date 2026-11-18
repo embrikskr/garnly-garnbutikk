@@ -6,8 +6,9 @@
  * refusjonen – samme prinsipp som fulfillment_sync: payloaden er et varsel, Shopify er fasit.
  *
  * Trygt å kjøre om igjen: (shopify_refund_id, group_id) er unik i settlement_adjustments, og
- * en rad som alt finnes hoppes over. Provisjon, avrunding og hvilken måned trekket havner i
- * regnes av databasen (031); her avgjøres bare hvor mye varer som ble refundert per gruppe.
+ * en rad som alt finnes hoppes over. Butikkens andel, mva, avrunding og hvilken periode trekket
+ * havner i regnes av databasen (040); her avgjøres bare hvor mye varer som ble refundert per
+ * gruppe.
  */
 import { adminClient, audit } from "./db.ts";
 import { gql } from "./shopify.ts";
@@ -115,7 +116,7 @@ export async function behandleRefusjon(refundGid: string): Promise<RefusjonUtfal
         reason: `Refusjon ${r.order.name}`,
         occurred_at: r.processedAt,
       }, { onConflict: "shopify_refund_id,group_id", ignoreDuplicates: true })
-      .select("amount_inc_vat, settlement_month")
+      .select("amount_inc_vat")
       .maybeSingle();
     if (error) throw new Error(`settlement_adjustments: ${error.message}`);
     if (!rad) { fantesFra++; continue; }
@@ -125,7 +126,6 @@ export async function behandleRefusjon(refundGid: string): Promise<RefusjonUtfal
       refund: r.id,
       refundert_varer: kr(t.varebelopOre),
       trekk: rad.amount_inc_vat,
-      maaned: rad.settlement_month,
       frakt_ikke_trukket: kr(fordeling.fraktOre),
     });
   }

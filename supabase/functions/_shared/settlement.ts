@@ -1,14 +1,16 @@
 /**
  * Oppgjør: hvor mye av en refusjon som trekkes fra hvilken butikk. REN logikk, ingen I/O.
  *
- * Regelen: butikken får varebeløp minus Garnlys provisjon. Frakt tilhører Garnly og er aldri
- * med i butikkens oppgjør – heller ikke når den refunderes. Refunderes varer, trekkes butikken
- * det den fikk for dem: refundert varebeløp × (100 − provisjon) / 100.
+ * Regelen (avtalens punkt 5, migrasjon 040): grunnlaget per ordre er varesalg + fraktinntekt −
+ * fraktkostnad − betalingsgebyr, uten mva, og butikken får sin prosent av det. Refunderes
+ * varer, trekkes butikkens andel av det refunderte varebeløpet: varebeløpet uten mva × butikkens
+ * prosent, pluss mva hvis butikken er registrert. Frakt og gebyr på ordren er alt delt og røres
+ * ikke – heller ikke når frakten refunderes.
  *
- * Her fordeles bare det refunderte VAREBELØPET på gruppene. Provisjonen og avrundingen regnes
- * i databasen (trigger på settlement_adjustments, 031), med samme regnestykke som salget i
- * settlement_ledger. Da går en hel refusjon nøyaktig i null mot salget, øre for øre – to
- * implementasjoner av avrundingen, én i TypeScript og én i SQL, ville ikke gjort det.
+ * Her fordeles bare det refunderte VAREBELØPET (inkl. mva) på gruppene. Andelen, mva og
+ * avrundingen regnes i databasen (trigger på settlement_adjustments, 040), samme sted som
+ * salget i settlement_ledger – to implementasjoner av avrundingen, én i TypeScript og én i
+ * SQL, ville ikke gitt samme øre.
  *
  * Alle beløp i øre (heltall) for å slippe flyttallsstøy: 0.1 + 0.2 er ikke 0.3.
  */

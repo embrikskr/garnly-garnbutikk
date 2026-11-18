@@ -347,10 +347,13 @@ button { font: inherit; }
 /* ---------------------------------------------------------------- salg og oppgjør */
 .tabell td.num, .tabell th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tabell tr.minus td { color: var(--red); }
+.tabell tr.sum td { font-weight: 700; border-top: 2px solid var(--border); }
+/* Flere tabeller i samme ramme (ordrer og returer): skill dem. */
+.tabell table + table { border-top: 2px solid var(--border); }
 .tabell .btn--sm { min-height: 36px; padding: 6px 12px; font-size: 14px; }
 .utbetalt { color: var(--green); font-weight: 600; }
 .maaned { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.maaned__navn { margin: 0; font-size: 22px; text-transform: capitalize; text-align: center; flex: 1; }
+.maaned__navn { margin: 0; font-size: 22px; text-align: center; flex: 1; }
 .maaned .btn { min-height: 44px; }
 .maaned__status { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-height: 1em; }
 /* Kronebeløp med øre er lange; de skal stå på én linje i kortene. */
