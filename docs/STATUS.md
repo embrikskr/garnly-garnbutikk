@@ -45,7 +45,16 @@ Oppdatert: 2026-11-17
   Appen «Garnly - KreStoffer» ligger i Partner-organisasjonen «Studio Ull AS» (den første, i
   butikkorganisasjonen «Garnly», kunne ikke distribueres). Nøklene er byttet, og første steg av
   installasjonen er testet med signert forespørsel (302 til kre-stoffer, riktige tilganger).
-  **Ikke installert ennå** – lenken sendes til KreStoffer 11.11.2026.
+  **Installert 18.11.2026 09:22 UTC.**
+- **Prøvekjøring 18.11.2026** (`partner-preview`, skriver ingenting): lokasjon «KreStoffer, Odense»,
+  13 317 varelinjer med lagerstyring, 3 673 med EAN. 847 av Garnlys 3 327 aktive varer treffer på
+  EAN, 759 av dem med lager. Tallene er ikke til å stole på: plassholdere rundt 9 999/10 000 på
+  tilbehør, og 700–900 nøster per farge på Alpakka Silke. 9 569 varianter står på «fortsett å selge»
+  (CONTINUE), som hos dem betyr «bestilles hjem fra produsent, lang leveringstid»; DENY betyr utsolgt.
+  **Må avgjøres før synken slås på:** hvordan antallet skal tolkes (forslag: bare antall > 0 teller,
+  maks 10 per farge, policy ignoreres, og butikken godkjenner hver ordre selv).
+- Alexander (18.11): varsle før testordrer (Black Week). Han lurte på tilgangen til ordrehistorikk
+  (60 dager følger med `write_orders`); vi leser ikke ordrene deres.
 - **Bygget:** `_shared/adapters/shopify.ts` (5 tester) leser «available» fra butikkens nettlokasjon
   med strekkode, SKU, garnnavn og farge; registrert i adapters/index.ts, og `sync-store` tar med
   `shopify`-butikker. Partnerkallene bruker API 2026-10 (`PARTNER_SHOPIFY_API_VERSION`).
