@@ -50,9 +50,11 @@ Oppdatert: 2026-11-17
   13 317 varelinjer med lagerstyring, 3 673 med EAN. 847 av Garnlys 3 327 aktive varer treffer på
   EAN, 759 av dem med lager. Tallene er ikke til å stole på: plassholdere rundt 9 999/10 000 på
   tilbehør, og 700–900 nøster per farge på Alpakka Silke. 9 569 varianter står på «fortsett å selge»
-  (CONTINUE), som hos dem betyr «bestilles hjem fra produsent, lang leveringstid»; DENY betyr utsolgt.
-  **Må avgjøres før synken slås på:** hvordan antallet skal tolkes (forslag: bare antall > 0 teller,
-  maks 10 per farge, policy ignoreres, og butikken godkjenner hver ordre selv).
+  (CONTINUE), som hos dem betyr at de bestiller inn med kort leveringstid når fargen er tom.
+  **Besluttet (Embrik):** CONTINUE står med 30 uansett tall, øvrige følger «available», tak 30
+  (`pos_config.continue_selling_qty` / `stock_cap`, satt på KreStoffer). Butikken godkjenner hver ordre.
+- **KreStoffer er selger i Danmark, ikke Garnly (18.11.2026, Embrik og Halvor).** Garnly tar imot
+  pengene på vegne av butikken; vilkår og kvittering avgjør hvem som er selger. Byggeplan §15b.
 - Alexander (18.11): varsle før testordrer (Black Week). Han lurte på tilgangen til ordrehistorikk
   (60 dager følger med `write_orders`); vi leser ikke ordrene deres.
 - **Bygget:** `_shared/adapters/shopify.ts` (5 tester) leser «available» fra butikkens nettlokasjon

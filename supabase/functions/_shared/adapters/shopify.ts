@@ -10,16 +10,20 @@
  *   location.inventoryLevels { quantities(names: ["available"]) item { id sku tracked
  *     variants(first: 1) { id title inventoryPolicy barcodes { value } product { title vendor status } } } }
  *
- * `inventoryPolicy` er «continue selling when out of stock». KreStoffer (Alexander, 18.11.2026):
- * lagertallene er ikke eksakte; CONTINUE betyr at fargen kan bestilles inn fra produsenten (lang
- * leveringstid), DENY at den er utsolgt når den er tom. Hentes, men brukes ikke i antallet ennå:
- * negativt eller 0 gir uansett 0 ledig for Garnly.
+ * `inventoryPolicy` er «continue selling when out of stock». KreStoffer (18.11.2026): lagertallene
+ * er ikke eksakte, og mye står med plassholdere (9 999). CONTINUE betyr at de bestiller fargen inn
+ * med kort leveringstid når den er tom og sender fort; DENY at den er utsolgt når den er tom.
+ * Embrik: Garnly selger som butikken selv gjør. Regelen står i pos_config (se `lagerRegel`):
+ *   continue_selling_qty  CONTINUE-varianter står med dette antallet uansett lagertall (KreStoffer: 30)
+ *   stock_cap             høyeste antall Garnly ser per variant (KreStoffer: 30)
+ * Uten disse brukes «available» som det er.
  *
  * Antallet er «available», ikke «on_hand»: det butikken alt har solgt i egen nettbutikk og ikke
  * sendt ennå, er ikke ledig for Garnly. Varer uten lagersporing (tracked = false) har ikke noe
  * meningsfullt antall og hoppes over.
  *
- * pos_config: { "shop_domain": "navn.myshopify.com", "location_id"?: "gid://shopify/Location/…" }
+ * pos_config: { "shop_domain": "navn.myshopify.com", "location_id"?: "gid://shopify/Location/…",
+ *               "continue_selling_qty"?: 30, "stock_cap"?: 30 }
  * Har butikken én aktiv lokasjon for nettordrer, brukes den. Har den flere, må location_id settes.
  *
  * external_id (for product_aliases) = "v:<variant-id>".
@@ -75,8 +79,31 @@ export function velgLokasjon(lokasjoner: Lokasjon[], valgt: string | null | unde
 /** Shopifys standardnavn på en vare uten varianter. Det er ikke en farge. */
 const UTEN_VARIANT = "Default Title";
 
+export interface LagerRegel {
+  /** Antallet en CONTINUE-variant står med, uansett lagertall. Null = bruk lagertallet. */
+  fortsettAntall?: number | null;
+  /** Høyeste antall per variant. Null = ingen grense. */
+  maks?: number | null;
+}
+
+const heltall = (x: unknown): number | null => (typeof x === "number" && Number.isFinite(x) && x >= 0 ? Math.floor(x) : null);
+
+/** Lagerregelen fra pos_config. REN logikk. */
+export function lagerRegel(posConfig: unknown): LagerRegel {
+  const c = (posConfig ?? {}) as { continue_selling_qty?: unknown; stock_cap?: unknown };
+  return { fortsettAntall: heltall(c.continue_selling_qty), maks: heltall(c.stock_cap) };
+}
+
+/** Antallet Garnly ser for én variant. REN logikk. */
+export function ledigAntall(available: number, policy: string | undefined, regel: LagerRegel): number {
+  // Negativt «available» betyr oversolgt i egen butikk: ingenting ledig, med mindre butikken
+  // selger videre og bestiller inn (CONTINUE med fortsettAntall).
+  const antall = policy === "CONTINUE" && regel.fortsettAntall != null ? regel.fortsettAntall : Math.max(0, available);
+  return regel.maks != null ? Math.min(antall, regel.maks) : antall;
+}
+
 /** Lagernivåene fra Shopify som lagerlinjer. REN logikk. */
-export function tilLagerlinjer(noder: NivaNode[]): StockLine[] {
+export function tilLagerlinjer(noder: NivaNode[], regel: LagerRegel = {}): StockLine[] {
   const ut: StockLine[] = [];
   for (const n of noder) {
     const item = n.item;
@@ -90,8 +117,7 @@ export function tilLagerlinjer(noder: NivaNode[]): StockLine[] {
       ean,
       sku: item.sku?.trim() || null,
       name: farge ? `${produkt} ${farge}` : produkt || null,
-      // Negativt «available» betyr oversolgt i egen butikk: ingenting ledig for Garnly.
-      qty: Math.max(0, antall),
+      qty: ledigAntall(antall, v.inventoryPolicy, regel),
       external_id: `v:${v.id.split("/").pop()}`,
       yarn: produkt || null,
       color: farge,
@@ -137,7 +163,7 @@ export async function hentNivaer(store: StoreRow): Promise<{ lokasjon: Lokasjon;
 }
 
 async function hentLager(store: StoreRow): Promise<StockLine[]> {
-  return tilLagerlinjer((await hentNivaer(store)).noder);
+  return tilLagerlinjer((await hentNivaer(store)).noder, lagerRegel(store.pos_config));
 }
 
 export const shopifyAdapter: PosAdapter = {

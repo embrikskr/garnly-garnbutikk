@@ -12,7 +12,7 @@
  * sync-store stopper synken for alle butikkene, denne rører ingen andre.
  */
 import { adminClient, json, requireInternalSecret } from "../_shared/db.ts";
-import { hentNivaer, tilLagerlinjer } from "../_shared/adapters/shopify.ts";
+import { hentNivaer, lagerRegel, tilLagerlinjer } from "../_shared/adapters/shopify.ts";
 import { matchLines } from "../_shared/matching.ts";
 import type { ProductRow, StoreRow } from "../_shared/types.ts";
 
@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
 
   try {
     const { lokasjon, noder } = await hentNivaer(store as StoreRow);
-    const linjer = tilLagerlinjer(noder);
+    const linjer = tilLagerlinjer(noder, lagerRegel(store.pos_config));
 
     const products: ProductRow[] = [];
     for (let from = 0;; from += 1000) {

@@ -396,11 +396,29 @@ Estimat for fase 0–4: 60–90 timer utvikling. Frakt-valget (§10) og EAN-dekn
 
 ---
 
-## 15b. Utenlandske partnerbutikker (Danmark og EU, besluttet 02.11.2026)
+## 15b. Utenlandske partnerbutikker (Danmark og EU, besluttet 02.11.2026, selger endret 18.11.2026)
 
-Samme Garnly-butikk i Shopify, med egne markeder for Danmark og EU (Shopify Markets). Garnly er
-selger overalt; partnerbutikken selger varene til Garnly. Garnly momsregistreres i Danmark (og i
-hvert land det står en butikk), med OSS for salg til resten av EU – avklares med regnskapsfører.
+Samme Garnly-butikk i Shopify, med egne markeder for Danmark og EU (Shopify Markets).
+
+**Selger i Danmark er partnerbutikken, ikke Garnly (18.11.2026).** Embrik og Halvor: KreStoffer står
+som selger, så Garnly slipper dansk moms. Garnly formidler salget og tar imot betalingen på vegne av
+butikken. Halvor: «Hvem som mottar betalingen avgjør ikke hvem som er selger; det avgjør vilkårene og
+kvitteringen. Det som må henge sammen er hvem pengene tilhører.» Det betyr:
+- **Pengene** kommer inn hos Garnly (Shopify Payments deler ikke et kjøp mellom to selskaper, og
+  Shopify Collective krever samme land/region). De tilhører butikken; Garnly holder dem til oppgjøret.
+- **Vilkårene** for det danske markedet sier at varene selges av partnerbutikken, og at Garnly
+  formidler og tar imot betalingen. Butikken har angrerett, reklamasjon og retur. Garnly skriver dem.
+- **Kvitteringen** kommer fra butikken: ordren som lages i butikkens Shopify ved godkjenning, er
+  kundens ordre hos selgeren (kunden som kunde, butikkens CVR og danske moms), og butikken sender
+  ordrebekreftelsen. Garnlys egen bekreftelse i det danske markedet sier at ordren formidles, og at
+  kvitteringen kommer fra butikken som tar den – ved betaling vet vi ikke hvilken butikk det blir.
+- **Garnly tar ikke dansk moms** i sin Shopify for Danmark. Prisene vises med dansk moms, som
+  butikken oppgir.
+- **Oppgjøret:** hele beløpet kunden betalte (varer og frakt) er butikkens salg. Butikken får det
+  minus Garnlys provisjon (`commission_pct` av varene), i DKK. Garnly fakturerer provisjonen til
+  butikken. Refusjoner gjøres i Garnlys Shopify (pengene ligger der) og trekkes i oppgjøret som i Norge.
+- Avklares med regnskapsfører: moms på provisjonen (tjeneste fra Norge til dansk virksomhet) og
+  valutaen (Garnly får utbetalt i NOK, butikken skal ha DKK).
 
 - **Aldri over tollgrensen:** norske kunder får varene fra norske butikker, EU-kunder fra EU-butikker.
   Varer skal bare vises som tilgjengelige i et marked når en butikk i det markedet har dem.
@@ -410,12 +428,18 @@ hvert land det står en butikk), med OSS for salg til resten av EU – avklares 
   Tilganger: read_products, read_inventory, read_locations, write_orders. Oppskrift:
   `shopify-partner-app/README.md`. **Bygget og deployet 02.11.2026.** Lagerlesingen (adapter
   `shopify`, «available» på butikkens nettlokasjon, API 2026-10) er bygget 11.11.2026.
-- **Ved godkjenning** opprettes ordren i butikkens Shopify, med Garnly som kunde og forbrukerens
-  leveringsadresse, så lageret trekkes automatisk. Ikke bygget.
-- **Frakt:** Shipmondo (PostNord DK, GLS, DAO) med butikkens avtale. Ikke bygget.
-- **Oppgjør:** som i Norge (varebeløp minus `commission_pct`), utbetalt i DKK/EUR. Ikke bygget.
-- **Gjenstår før første danske ordre:** adapter `shopify` (lagersynk), ruting per marked, ordre i
-  butikkens Shopify, Shipmondo, oppgjør i valuta, Markets i Garnlys Shopify, dansk momsregistrering.
+  KreStoffer installerte appen 18.11.2026.
+- **Lagertallene** (18.11.2026): KreStoffers tall er ikke eksakte. Varianter med «fortsett å selge
+  når tomt» bestiller de inn med kort leveringstid, så Garnly selger dem som de selv gjør: de står
+  med `pos_config.continue_selling_qty` (30) uansett tall. Øvrige følger «available», og alle har tak
+  `pos_config.stock_cap` (30). Butikken godkjenner hver ordre selv.
+- **Ved godkjenning** opprettes ordren i butikkens Shopify som betalt, med forbrukeren som kunde og
+  leveringsadresse, varene og frakten. Lageret trekkes der, og butikken sender med sitt eget
+  fraktoppsett. Sporingen hentes fra butikkens Shopify og legges på ordren i Garnly. Ikke bygget.
+- **Frakt:** butikkens egen (i butikkens Shopify). Ingen Shipmondo/Cargonizer fra Garnly.
+- **Gjenstår før første danske ordre:** lagersynk (adapter `shopify`, deploy av `sync-store`),
+  ruting per marked og kassesjekk mot land, ordre i butikkens Shopify og sporing tilbake, oppgjør i
+  DKK med frakten til butikken, Markets i Garnlys Shopify, danske vilkår og ordrebekreftelse.
 
 ## 16. Kilder brukt i denne planen
 

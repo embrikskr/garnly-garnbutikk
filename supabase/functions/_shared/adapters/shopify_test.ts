@@ -1,5 +1,5 @@
 import { assertEquals, assertThrows } from "jsr:@std/assert@1";
-import { type NivaNode, tilLagerlinjer, velgLokasjon } from "./shopify.ts";
+import { lagerRegel, ledigAntall, type NivaNode, tilLagerlinjer, velgLokasjon } from "./shopify.ts";
 
 const lok = (id: string, name: string, isActive = true, fulfillsOnlineOrders = true) => ({ id, name, isActive, fulfillsOnlineOrders });
 
@@ -55,4 +55,22 @@ Deno.test("tilLagerlinjer: første gyldige strekkode, negativt lager blir 0, ute
 
 Deno.test("tilLagerlinjer: uten lagersporing eller uten vare hoppes over", () => {
   assertEquals(tilLagerlinjer([node({ tracked: false }), node({ item: null })]), []);
+});
+
+Deno.test("ledigAntall: CONTINUE står med fast antall, DENY følger lageret, begge med tak", () => {
+  const regel = lagerRegel({ shop_domain: "x.myshopify.com", continue_selling_qty: 30, stock_cap: 30 });
+  assertEquals(ledigAntall(0, "CONTINUE", regel), 30);
+  assertEquals(ledigAntall(-4, "CONTINUE", regel), 30);
+  assertEquals(ledigAntall(9999, "CONTINUE", regel), 30);
+  assertEquals(ledigAntall(12, "DENY", regel), 12);
+  assertEquals(ledigAntall(850, "DENY", regel), 30);
+  assertEquals(ledigAntall(-2, "DENY", regel), 0);
+});
+
+Deno.test("ledigAntall: uten regel i pos_config brukes «available» som det er", () => {
+  const regel = lagerRegel({ shop_domain: "x.myshopify.com" });
+  assertEquals(regel, { fortsettAntall: null, maks: null });
+  assertEquals(ledigAntall(0, "CONTINUE", regel), 0);
+  assertEquals(ledigAntall(850, "DENY", regel), 850);
+  assertEquals(lagerRegel({ stock_cap: "30", continue_selling_qty: -1 }), { fortsettAntall: null, maks: null });
 });
