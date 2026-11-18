@@ -133,9 +133,18 @@ Oppdatert: 2026-11-18
   **Ikke prøvd:** selve `orderCreate` hos KreStoffer (skjemaet er sjekket). Første ekte ordre bør være
   en avtalt testordre (de vil ha beskjed først).
 - **Før KreStoffer kan aktiveres:**
-  1. Lokasjon «KreStoffer, Odense» i Garnlys Shopify, og `stores.shopify_location_id` satt.
+  1. ~~Lokasjon i Garnlys Shopify~~ **Laget 18.11.2026:** «KreStoffer (Odense)»,
+     `gid://shopify/Location/95550046268`, tom. Id-en står i `pos_config.garnly_location_id`, men
+     `stores.shopify_location_id` er **bevisst tom** til butikken aktiveres: sync-store skriver
+     `garnly.stock_by_store` for alle butikker med lokasjon, og kassasjekken (shopify-app,
+     parti-validering) tar største antall én lokasjon har uten å se på land. Med koblingen satt ville
+     KreStoffers 30-tall sluppet norske kunder gjennom på varer bare KreStoffer har.
+     Ved aktivering: sett `shopify_location_id` fra `pos_config.garnly_location_id`, og gjør
+     kassasjekken landbevisst først (bare lokasjoner i kundens land – se punkt 2).
   2. Fraktprofiler: norske lokasjoner sender bare til Norge, KreStoffer bare til Danmark – ellers kan
      norske kunder kjøpe varer bare KreStoffer har (de eskaleres, men sendes aldri over grensen).
+     Kassasjekken (parti-validering) må også bli landbevisst: metafeltet bør ha land per lokasjon, og
+     funksjonen bare telle lokasjoner i leveringslandet.
   3. Markets for Danmark, danske vilkår og ordrebekreftelse (Embrik/Halvor).
   4. Oppgjør i DKK med frakten til butikken (ikke bygget).
 - Garnlys bestselgere hos KreStoffer: Tynn Silk Mohair 56 av 64 farger, Ballerina Chunky Mohair
