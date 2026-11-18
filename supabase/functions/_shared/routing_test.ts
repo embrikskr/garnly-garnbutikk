@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { deadlineWithinBusinessHours, planGroups } from "./routing.ts";
+import { deadlineWithinBusinessHours, planGroups, routingCountry, sammeLand } from "./routing.ts";
 import { matchLines, normName } from "./matching.ts";
 import type { LineItem, ProductRow } from "./types.ts";
 
@@ -164,4 +164,21 @@ Deno.test("storesToReoffer: utløpt frist og tom-for-lager spørres igjen, aktiv
 
 Deno.test("storesToReoffer: ingen kvalifiserte – ingen nye tilbud", () => {
   assertEquals(storesToReoffer([], [{ store_id: "a", status: "expired" }]), []);
+});
+
+Deno.test("routingCountry: leveringslandet, ellers Norge", () => {
+  assertEquals(routingCountry("DK"), "DK");
+  assertEquals(routingCountry(" dk "), "DK");
+  assertEquals(routingCountry("NO"), "NO");
+  assertEquals(routingCountry(null), "NO");
+  assertEquals(routingCountry(""), "NO");
+  assertEquals(routingCountry("Danmark"), "NO");
+});
+
+Deno.test("sammeLand: aldri over tollgrensen, butikk uten land er norsk", () => {
+  assertEquals(sammeLand("DK", "DK"), true);
+  assertEquals(sammeLand("DK", "NO"), false);
+  assertEquals(sammeLand("NO", null), true);
+  assertEquals(sammeLand(null, "NO"), true);
+  assertEquals(sammeLand("DK", null), false);
 });

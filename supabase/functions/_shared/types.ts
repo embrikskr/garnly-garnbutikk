@@ -22,6 +22,8 @@ export interface StoreRow {
   timeout_streak: number;
   weight: number;
   active: boolean;
+  /** ISO 3166-1 alpha-2, «NO» for de norske (039). Rutingen holder seg innenfor landet. */
+  country: string;
   last_sync_at: string | null;
   last_sync_status: string | null;
   consecutive_sync_failures: number;

@@ -2,7 +2,7 @@
  * Felles tilbudslogikk brukt av order-intake, offer-respond og timeout-sweeper.
  */
 import { adminClient, audit } from "./db.ts";
-import { deadlineWithinBusinessHours, planGroups, replanIsUseful, storesToReoffer } from "./routing.ts";
+import { deadlineWithinBusinessHours, planGroups, replanIsUseful, routingCountry, sammeLand, storesToReoffer } from "./routing.ts";
 import { hashToken, newToken, offerLinks } from "./tokens.ts";
 import { notifyOps, notifyStoreOffer } from "./notify.ts";
 import { splitHeldFulfillmentOrder } from "./shopify.ts";
@@ -15,15 +15,19 @@ import type { LineItem, RoutingGroupRow, StoreRow } from "./types.ts";
  */
 export async function makeNextOffer(groupId: string): Promise<boolean> {
   const db = adminClient();
-  const { data: group } = await db.from("routing_groups").select("*, routing_orders!inner(shopify_order_name, status)").eq("id", groupId).single();
+  const { data: group } = await db.from("routing_groups").select("*, routing_orders!inner(shopify_order_name, status, ship_country)").eq("id", groupId).single();
   if (!group || group.status !== "routing") return false;
 
   // Aktiv (offered) finnes allerede? Da gjør vi ingenting.
   const { data: open } = await db.from("offers").select("id").eq("routing_group_id", groupId).eq("status", "offered").limit(1);
   if (open?.length) return true;
 
-  // Kandidater: pending-tilbud, re-sortert etter fordelingsregelen NÅ, og med lager re-sjekket fra siste synk
-  const { data: qualifiedNow } = await db.rpc("qualified_stores", { p_line_items: group.line_items });
+  // Kandidater: pending-tilbud, re-sortert etter fordelingsregelen NÅ, og med lager re-sjekket fra siste synk.
+  // Bare butikker i ordrens land (039): et pending-tilbud til en butikk i et annet land blir aldri sendt.
+  const { data: qualifiedNow } = await db.rpc("qualified_stores", {
+    p_line_items: group.line_items,
+    p_country: routingCountry(group.routing_orders.ship_country),
+  });
   const qualifiedIds: string[] = (qualifiedNow ?? []).map((r: { store_id: string }) => r.store_id);
   const { data: pending } = await db.from("offers").select("*").eq("routing_group_id", groupId).eq("status", "pending");
   const pendingByStore = new Map((pending ?? []).map((o: any) => [o.store_id, o]));
@@ -100,7 +104,7 @@ export async function tildelManuelt(groupId: string, storeId: string, av: string
   const db = adminClient();
   const { data: group } = await db
     .from("routing_groups")
-    .select("*, routing_orders!inner(shopify_order_name)")
+    .select("*, routing_orders!inner(shopify_order_name, ship_country)")
     .eq("id", groupId).single();
   if (!group) return { ok: false, melding: "Fant ikke gruppen" };
   if (!["escalated", "routing"].includes(group.status)) {
@@ -110,6 +114,11 @@ export async function tildelManuelt(groupId: string, storeId: string, av: string
   const { data: store } = await db.from("stores").select("*").eq("id", storeId).single();
   if (!store) return { ok: false, melding: "Fant ikke butikken" };
   if (!store.active) return { ok: false, melding: `${store.name} er ikke aktiv.` };
+  // Lagersjekken kan omgås her, landet kan ikke: Garnly sender aldri over tollgrensen.
+  if (!sammeLand(store.country, group.routing_orders?.ship_country)) {
+    const land = routingCountry(group.routing_orders?.ship_country);
+    return { ok: false, melding: `${store.name} er i ${routingCountry(store.country)}, og ordren skal leveres i ${land}. Garnly sender ikke over grensen.` };
+  }
 
   // Et åpent tilbud på samme gruppe ville gitt to butikker samme ordre.
   const { data: apent } = await db.from("offers").select("id").eq("routing_group_id", groupId).eq("status", "offered").limit(1);
@@ -149,8 +158,9 @@ export async function provRutingPaNytt(groupId: string, av: string): Promise<{ o
   }
   // makeNextOffer ser bare på pending-tilbud. Uten nye pending-rader ville en butikk der fristen
   // gikk ut aldri blitt spurt igjen, selv med varene på lager (se storesToReoffer).
-  const { data: full } = await db.from("routing_groups").select("line_items").eq("id", groupId).single();
-  const { data: kvalifisert } = await db.rpc("qualified_stores", { p_line_items: full?.line_items ?? [] });
+  const { data: full } = await db.from("routing_groups").select("line_items, routing_orders!inner(ship_country)").eq("id", groupId).single();
+  const land = routingCountry((full?.routing_orders as { ship_country?: string | null } | null)?.ship_country);
+  const { data: kvalifisert } = await db.rpc("qualified_stores", { p_line_items: full?.line_items ?? [], p_country: land });
   const { data: tidligere } = await db.from("offers").select("store_id, status").eq("routing_group_id", groupId);
   const nye = storesToReoffer(((kvalifisert ?? []) as Array<{ store_id: string }>).map((r) => r.store_id), tidligere ?? []);
   for (const storeId of nye) await pendingTilbud(groupId, storeId);
@@ -160,7 +170,7 @@ export async function provRutingPaNytt(groupId: string, av: string): Promise<{ o
   const sendt = await makeNextOffer(groupId);
   return sendt
     ? { ok: true, melding: "Tilbudet er sendt til neste butikk i køen." }
-    : { ok: false, melding: "Ingen butikk har varene på lager nå. Ordren står fortsatt som eskalert." };
+    : { ok: false, melding: `Ingen butikk i ${land} har varene på lager nå. Ordren står fortsatt som eskalert.` };
 }
 
 /**
@@ -255,9 +265,11 @@ async function replanGroup(group: RoutingGroupRow & { routing_orders?: { shopify
     .in("status", ["declined", "declined_stock", "expired", "cancelled"]);
   const utelatt = new Set((sagtNei ?? []).map((o: { store_id: string }) => o.store_id));
 
-  const { data: cov } = await db.rpc("store_coverage", { p_line_items: lines });
+  const { data: ro } = await db.from("routing_orders").select("ship_country").eq("id", group.routing_order_id).single();
+  const land = routingCountry(ro?.ship_country);
+  const { data: cov } = await db.rpc("store_coverage", { p_line_items: lines, p_country: land });
   const dekning = (cov ?? []).filter((c: { store_id: string }) => !utelatt.has(c.store_id));
-  const { data: order_ } = await db.from("stores").select("id").eq("active", true)
+  const { data: order_ } = await db.from("stores").select("id").eq("active", true).eq("country", land)
     .order("last_assigned_at", { ascending: true, nullsFirst: true }).order("created_at", { ascending: true });
   const rekkefolge = (order_ ?? []).map((s: { id: string }) => s.id).filter((id: string) => !utelatt.has(id));
   const { groups: subs, uncovered } = planGroups(lines, dekning, rekkefolge);

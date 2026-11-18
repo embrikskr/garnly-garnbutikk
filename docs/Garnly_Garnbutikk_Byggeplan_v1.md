@@ -424,6 +424,12 @@ kvitteringen. Det som må henge sammen er hvem pengene tilhører.» Det betyr:
 
 - **Aldri over tollgrensen:** norske kunder får varene fra norske butikker, EU-kunder fra EU-butikker.
   Varer skal bare vises som tilgjengelige i et marked når en butikk i det markedet har dem.
+  **Rutingen er bygget og deployet 18.11.2026 (039):** `stores.country` (KreStoffer `DK`, resten `NO`),
+  `routing_orders.ship_country` fra leveringsadressen, og `store_coverage` / `qualified_stores` tar
+  landet. Uten leveringsadresse rutes ordren i Norge (`routingCountry` i routing.ts). «Gi ordren til
+  butikk» nekter en butikk i et annet land, og offer-respond nekter å godta på tvers av land.
+  Finnes ingen butikk i landet, eskaleres ordren som før – den går aldri over grensen.
+  **Gjenstår her:** at kassa i Garnlys Shopify bare selger det danske butikker har til danske kunder.
 - **Lager fra butikkens egen Shopify:** butikken installerer Garnly-appen (Dev Dashboard, custom
   distribution, én app per butikk; butikker kan ikke lage API-nøkler selv etter januar 2026).
   Innloggingen: `shopify-install`, `_shared/shopify_oauth.ts`, `_shared/partner_shop.ts`.
@@ -439,9 +445,9 @@ kvitteringen. Det som må henge sammen er hvem pengene tilhører.» Det betyr:
   leveringsadresse, varene og frakten. Lageret trekkes der, og butikken sender med sitt eget
   fraktoppsett. Sporingen hentes fra butikkens Shopify og legges på ordren i Garnly. Ikke bygget.
 - **Frakt:** butikkens egen (i butikkens Shopify). Ingen Shipmondo/Cargonizer fra Garnly.
-- **Gjenstår før første danske ordre:** lagersynk (adapter `shopify`, deploy av `sync-store`),
-  ruting per marked og kassesjekk mot land, ordre i butikkens Shopify og sporing tilbake, oppgjør i
-  DKK med frakten til butikken, Markets i Garnlys Shopify, danske vilkår og ordrebekreftelse.
+- **Gjenstår før første danske ordre:** kassesjekk mot land (Markets), ordre i butikkens Shopify og
+  sporing tilbake, oppgjør i DKK med frakten til butikken, Markets i Garnlys Shopify, danske vilkår og
+  ordrebekreftelse. Lagersynk og ruting per land er gjort (18.11.2026).
 
 ## 16. Kilder brukt i denne planen
 

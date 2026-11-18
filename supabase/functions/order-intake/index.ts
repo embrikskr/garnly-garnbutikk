@@ -11,7 +11,7 @@
  */
 import { adminClient, audit, json } from "../_shared/db.ts";
 import { getOrder, holdFulfillmentOrder, splitHeldFulfillmentOrder, verifyShopifyHmac } from "../_shared/shopify.ts";
-import { planGroups } from "../_shared/routing.ts";
+import { planGroups, routingCountry } from "../_shared/routing.ts";
 import { erTestordre } from "../_shared/testorder.ts";
 import { escalateGroup, makeNextOffer } from "../_shared/offers.ts";
 import type { LineItem } from "../_shared/types.ts";
@@ -123,9 +123,11 @@ async function processOrder(orderGid: string) {
     return;
   }
 
-  // Dekning og fordelingsrekkefølge
-  const { data: cov } = await db.rpc("store_coverage", { p_line_items: lines });
-  const { data: order_ } = await db.from("stores").select("id").eq("active", true)
+  // Dekning og fordelingsrekkefølge, bare blant butikker i leveringslandet: Garnly sender aldri
+  // over tollgrensen (byggeplan §15b). Landet står også på routing_orders.ship_country (039).
+  const land = routingCountry(order.shippingAddress?.countryCodeV2);
+  const { data: cov } = await db.rpc("store_coverage", { p_line_items: lines, p_country: land });
+  const { data: order_ } = await db.from("stores").select("id").eq("active", true).eq("country", land)
     .order("last_assigned_at", { ascending: true, nullsFirst: true }).order("created_at", { ascending: true });
   // NB: timeout-nedvekting håndteres i qualified_stores ved selve tilbudet; her trengs bare grov rekkefølge
   const { groups, uncovered } = planGroups(lines, cov ?? [], (order_ ?? []).map((s: any) => s.id));
@@ -160,7 +162,7 @@ async function processOrder(orderGid: string) {
       gross_inc_vat: sumBelop(uncovered, "amount_inc_vat"),
       vat_amount: sumBelop(uncovered, "vat_amount"),
     }).select().single();
-    await escalateGroup({ ...row, routing_orders: { shopify_order_name: order.name } }, "Ingen butikk har hele antallet av disse linjene");
+    await escalateGroup({ ...row, routing_orders: { shopify_order_name: order.name } }, `Ingen butikk i ${land} har hele antallet av disse linjene`);
   }
 }
 

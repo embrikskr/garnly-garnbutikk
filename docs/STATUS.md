@@ -64,8 +64,21 @@ Oppdatert: 2026-11-17
   Prøvesynk for KreStoffer (`{"store_id": "<KreStoffer>", "dry_run": true, "wait": true}`): 13 324
   linjer, 847 treff, 792 varer med lager (780 av dem på 30). Ligger i `inventory`/`unmatched_items`,
   ingenting skrevet til Shopify (ingen location). Butikken er inaktiv, så cron synker den ikke og
-  rutingen ser den ikke. **Ikke aktiver KreStoffer før ruting per land er bygget** – da ville norske
-  ordrer gått til Danmark.
+  rutingen ser den ikke.
+- **Ruting per land bygget og deployet 18.11.2026 (039).** `stores.country` (KreStoffer `DK`),
+  `routing_orders.ship_country` (generert fra leveringsadressen; alle 65 ordrer står med `NO`).
+  `store_coverage` / `qualified_stores` har fått et land-argument; de gamle med ett argument ruter
+  bare i Norge, så ingenting kunne gå galt mens funksjonene ble deployet. Deployet: admin-actions v5,
+  order-intake v24, offer-respond v31, timeout-sweeper v28 (den siste tok også med
+  PostNord-backstoppen fra 03.11 for etiketter som er skrevet ut). Prøvd med KreStoffer slått på i en
+  transaksjon som ble rullet tilbake: en vare begge land har gikk til KreStoffer for `DK` og til
+  Strikkefryd/Garnkilden for `NO`. «Manglet» (036) teller bare butikker i ordrens land.
+- **NB om deploy:** de fire funksjonene over er deployet som én minifisert fil (`deno bundle --minify`,
+  npm-importer eksterne) fordi MCP-deploy krever alt innhold i kallet. Kilden er fortsatt filene i
+  repoet; deploy med CLI (`supabase functions deploy`) gir vanlige filer igjen.
+- **Før KreStoffer kan aktiveres:** ordren må lages i deres Shopify ved godkjenning (offer-respond
+  krever i dag `shopify_location_id` og svarer «Oppsettsfeil» uten), og kassa må bare selge til
+  danske kunder det danske butikker har.
 - Garnlys bestselgere hos KreStoffer: Tynn Silk Mohair 56 av 64 farger, Ballerina Chunky Mohair
   15 av 43, Bella 13 av 70, Tilia 0 av 60.
 - Gebyret til Shopify Payments på danske ordrer betaler Garnly (Embrik 18.11.2026).

@@ -16,6 +16,7 @@ import { hashToken } from "../_shared/tokens.ts";
 import { getAdapter } from "../_shared/adapters/index.ts";
 import { moveFulfillmentOrder, releaseHold } from "../_shared/shopify.ts";
 import { makeNextOffer, refreshOrderStatus } from "../_shared/offers.ts";
+import { sammeLand } from "../_shared/routing.ts";
 import { bookShipment } from "../_shared/shipping/index.ts";
 import type { LineItem, StoreRow } from "../_shared/types.ts";
 
@@ -153,6 +154,15 @@ async function applyResponse(offer: any, action: "accept" | "decline", byUser?: 
   }
 
   // --- Godta ---
+  // 0. Aldri over tollgrensen. Rutingen tilbyr bare butikker i ordrens land (039); dette er
+  //    sikringen hvis et tilbud likevel skulle ligge hos en butikk i et annet land.
+  if (!sammeLand(store.country, order.ship_country)) {
+    await db.from("offers").update({ status: "cancelled", responded_at: now, response_note: "feil land" }).eq("id", offer.id);
+    await audit("offer", offer.id, "wrong_country", { store_id: store.id, store_country: store.country, ship_country: order.ship_country });
+    await makeNextOffer(group.id);
+    return { ok: false, code: "handled", title: "Ordren kan ikke sendes herfra", message: "Ordren skal leveres i et annet land. Garnly sender den fra en butikk der." };
+  }
+
   // 1. Re-verifiser lager live mot kassesystemet
   const items = group.line_items as LineItem[];
   const { data: products } = await db.from("products").select("id, ean, name").in("id", items.map((i) => i.product_id));

@@ -157,3 +157,30 @@ export function storesToReoffer(qualifiedIds: string[], offers: Array<{ store_id
   );
   return qualifiedIds.filter((id) => !utelatt.has(id));
 }
+
+/** Landet Garnly selger fra når ordren ikke sier noe annet. */
+export const HJEMLAND = "NO";
+
+/**
+ * Landet en ordre rutes i: leveringslandet (Shopify `countryCodeV2`), ellers Norge.
+ *
+ * Garnly sender aldri over tollgrensen (byggeplan §15b): en ordre tilbys bare butikker i samme land
+ * som leveringsadressen. En ordre uten leveringsadresse (henting, bare gavekort) er Garnlys egen
+ * og rutes i Norge, som alle ordrer gjorde før de danske butikkene kom.
+ *
+ * REN logikk.
+ */
+export function routingCountry(countryCode: string | null | undefined): string {
+  const k = (countryCode ?? "").trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(k) ? k : HJEMLAND;
+}
+
+/**
+ * Kan butikken få tilbud om ordren? Brukes der rutingen omgås (admin gir ordren til en butikk)
+ * og som sikring når en butikk godtar. Feil land er aldri riktig, heller ikke uten lagersjekk.
+ *
+ * REN logikk. `storeCountry` er `stores.country`; mangler den, regnes butikken som norsk.
+ */
+export function sammeLand(storeCountry: string | null | undefined, orderCountry: string | null | undefined): boolean {
+  return routingCountry(storeCountry) === routingCountry(orderCountry);
+}
