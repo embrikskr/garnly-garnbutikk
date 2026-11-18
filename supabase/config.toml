@@ -24,3 +24,5 @@ verify_jwt = false
 verify_jwt = false
 [functions.shopify-install]
 verify_jwt = false
+[functions.partner-preview]
+verify_jwt = false

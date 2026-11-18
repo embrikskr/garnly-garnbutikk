@@ -8,7 +8,12 @@
  * Feltene er sjekket mot Admin API 2026-10 (11.11.2026), mot Garnlys egen butikk:
  *   locations { id name isActive fulfillsOnlineOrders }
  *   location.inventoryLevels { quantities(names: ["available"]) item { id sku tracked
- *     variants(first: 1) { id title barcodes { value } product { title vendor status } } } }
+ *     variants(first: 1) { id title inventoryPolicy barcodes { value } product { title vendor status } } } }
+ *
+ * `inventoryPolicy` er «continue selling when out of stock». KreStoffer (Alexander, 18.11.2026):
+ * lagertallene er ikke eksakte; CONTINUE betyr at fargen kan bestilles inn fra produsenten (lang
+ * leveringstid), DENY at den er utsolgt når den er tom. Hentes, men brukes ikke i antallet ennå:
+ * negativt eller 0 gir uansett 0 ledig for Garnly.
  *
  * Antallet er «available», ikke «on_hand»: det butikken alt har solgt i egen nettbutikk og ikke
  * sendt ennå, er ikke ledig for Garnly. Varer uten lagersporing (tracked = false) har ikke noe
@@ -43,6 +48,7 @@ export interface NivaNode {
       nodes: Array<{
         id: string;
         title: string | null;
+        inventoryPolicy?: "CONTINUE" | "DENY" | string;
         barcodes: { nodes: Array<{ value: string }> };
         product: { title: string; vendor: string | null; status: string } | null;
       }>;
@@ -104,13 +110,14 @@ const NIVAER = `query Lager($id: ID!, $after: String) {
       nodes {
         quantities(names: ["available"]) { name quantity }
         item { id sku tracked
-          variants(first: 1) { nodes { id title barcodes(first: 3) { nodes { value } } product { title vendor status } } } }
+          variants(first: 1) { nodes { id title inventoryPolicy barcodes(first: 3) { nodes { value } } product { title vendor status } } } }
       }
     }
   }
 }`;
 
-async function hentLager(store: StoreRow): Promise<StockLine[]> {
+/** Lokasjonen og de rå lagernivåene. Brukt av hentLager og av prøvekjøringen (partner-preview). */
+export async function hentNivaer(store: StoreRow): Promise<{ lokasjon: Lokasjon; noder: NivaNode[] }> {
   const lok = await partnerGql<{ locations: { nodes: Lokasjon[] } }>(store.id, LOKASJONER);
   const valgt = (store.pos_config as { location_id?: string } | null)?.location_id;
   const lokasjon = velgLokasjon(lok.locations.nodes, valgt);
@@ -126,7 +133,11 @@ async function hentLager(store: StoreRow): Promise<StockLine[]> {
     if (!conn.pageInfo.hasNextPage) break;
     after = conn.pageInfo.endCursor;
   }
-  return tilLagerlinjer(noder);
+  return { lokasjon, noder };
+}
+
+async function hentLager(store: StoreRow): Promise<StockLine[]> {
+  return tilLagerlinjer((await hentNivaer(store)).noder);
 }
 
 export const shopifyAdapter: PosAdapter = {
