@@ -141,7 +141,13 @@ Oppdatert: 2026-11-18
      KreStoffers 30-tall sluppet norske kunder gjennom på varer bare KreStoffer har.
      Ved aktivering: sett `shopify_location_id` fra `pos_config.garnly_location_id`, og gjør
      kassasjekken landbevisst først (bare lokasjoner i kundens land – se punkt 2).
-  2. Fraktprofiler: norske lokasjoner sender bare til Norge, KreStoffer bare til Danmark – ellers kan
+  2. ~~Fraktprofiler~~ **Gjort 18.11.2026 (Embrik: «bare ha norge og danmark som marked. ha samme
+     pris … frakten er 79 uansett»):** Markeder: «Norway» og «Danmark» (tidligere «European Union»,
+     nå bare DK, lokal valuta DKK, samme priser omregnet). EU-markedet med 14 land er satt til utkast
+     (DRAFT), kan slås på igjen. Generell profil: Garnkilden, Strikkefryd og Studio Ull → bare Norge,
+     Standard 79 kr; «Utland» (27 land, 500 kr) er slettet. KreStoffer (Odense) → egen gruppe, bare
+     Danmark, Standard 79 kr (NOK, vises omregnet i DKK).
+     Opprinnelig punkt: norske lokasjoner sender bare til Norge, KreStoffer bare til Danmark – ellers kan
      norske kunder kjøpe varer bare KreStoffer har (de eskaleres, men sendes aldri over grensen).
      **Kassasjekken er gjort landbevisst 18.11.2026:** metafeltet har land i nøkkelen
      (`"DK:gid://…": 30`, `lagerNokkel` i routing.ts), bare aktive butikker tas med (sync-store v39),
