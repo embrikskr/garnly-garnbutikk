@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { deadlineWithinBusinessHours, planGroups, routingCountry, sammeLand } from "./routing.ts";
+import { deadlineWithinBusinessHours, lagerNokkel, planGroups, routingCountry, sammeLand } from "./routing.ts";
 import { matchLines, normName } from "./matching.ts";
 import type { LineItem, ProductRow } from "./types.ts";
 
@@ -181,4 +181,9 @@ Deno.test("sammeLand: aldri over tollgrensen, butikk uten land er norsk", () => 
   assertEquals(sammeLand("NO", null), true);
   assertEquals(sammeLand(null, "NO"), true);
   assertEquals(sammeLand("DK", null), false);
+});
+
+Deno.test("lagerNokkel: landet foran lokasjonen, butikk uten land er norsk", () => {
+  assertEquals(lagerNokkel("DK", "gid://shopify/Location/9"), "DK:gid://shopify/Location/9");
+  assertEquals(lagerNokkel(null, "gid://shopify/Location/1"), "NO:gid://shopify/Location/1");
 });

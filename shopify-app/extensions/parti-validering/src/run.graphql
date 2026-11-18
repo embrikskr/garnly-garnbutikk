@@ -1,5 +1,15 @@
 query RunInput {
+  localization {
+    country {
+      isoCode
+    }
+  }
   cart {
+    deliveryGroups {
+      deliveryAddress {
+        countryCode
+      }
+    }
     lines {
       quantity
       merchandise {

@@ -143,8 +143,12 @@ Oppdatert: 2026-11-18
      kassasjekken landbevisst først (bare lokasjoner i kundens land – se punkt 2).
   2. Fraktprofiler: norske lokasjoner sender bare til Norge, KreStoffer bare til Danmark – ellers kan
      norske kunder kjøpe varer bare KreStoffer har (de eskaleres, men sendes aldri over grensen).
-     Kassasjekken (parti-validering) må også bli landbevisst: metafeltet bør ha land per lokasjon, og
-     funksjonen bare telle lokasjoner i leveringslandet.
+     **Kassasjekken er gjort landbevisst 18.11.2026:** metafeltet har land i nøkkelen
+     (`"DK:gid://…": 30`, `lagerNokkel` i routing.ts), bare aktive butikker tas med (sync-store v39),
+     og funksjonen teller bare lokasjoner i leveringslandet (11 tester i shopify-app). **Men den er
+     ikke deployet:** ingen kasseregel er aktiv i Garnlys Shopify (`validations` er tom). Embrik må
+     deploye med Shopify CLI (`shopify-app/README.md`) og slå den på under Innstillinger → Kasse →
+     Kasseregler. Det var heller aldri gjort for Norge – garnparti-regelen sjekkes i dag bare av rutingen.
   3. Markets for Danmark, danske vilkår og ordrebekreftelse (Embrik/Halvor).
   4. Oppgjør i DKK med frakten til butikken (ikke bygget).
 - Garnlys bestselgere hos KreStoffer: Tynn Silk Mohair 56 av 64 farger, Ballerina Chunky Mohair

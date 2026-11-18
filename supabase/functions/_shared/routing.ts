@@ -184,3 +184,11 @@ export function routingCountry(countryCode: string | null | undefined): string {
 export function sammeLand(storeCountry: string | null | undefined, orderCountry: string | null | undefined): boolean {
   return routingCountry(storeCountry) === routingCountry(orderCountry);
 }
+
+/**
+ * Nøkkelen i metafeltet garnly.stock_by_store: «NO:gid://shopify/Location/123». Kassasjekken
+ * (shopify-app/extensions/parti-validering) teller bare lokasjoner i kundens land. REN logikk.
+ */
+export function lagerNokkel(storeCountry: string | null | undefined, locationId: string): string {
+  return `${routingCountry(storeCountry)}:${locationId}`;
+}

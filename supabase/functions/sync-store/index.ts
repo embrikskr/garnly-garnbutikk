@@ -15,6 +15,7 @@ import type { ProductRow, StoreRow } from "../_shared/types.ts";
 import { matchLines } from "../_shared/matching.ts";
 import { sellableQty } from "../_shared/inventory.ts";
 import { dueCutoff, isDue, scheduleFromEnv } from "../_shared/schedule.ts";
+import { lagerNokkel } from "../_shared/routing.ts";
 
 /**
  * Aktivering av nye varer på locationen koster to Shopify-kall per vare. Åpnes mange produkter
@@ -247,7 +248,9 @@ async function syncOne(store: StoreRow, dryRun: boolean) {
       const ids = writable.map((c) => c.product.id);
       const allLoc: any[] = [];
       for (let i = 0; i < ids.length; i += 200) {
-        const { data, error } = await db.from("inventory").select("product_id, qty, stores!inner(shopify_location_id)").in("product_id", ids.slice(i, i + 200));
+        // Bare aktive butikker: en butikk som ikke tar ordrer skal ikke slippe kunder gjennom kassa.
+        const { data, error } = await db.from("inventory").select("product_id, qty, stores!inner(shopify_location_id, country, active)")
+          .in("product_id", ids.slice(i, i + 200)).eq("stores.active", true);
         if (error) throw new Error("inventory metafelt-select: " + error.message);
         allLoc.push(...(data ?? []));
       }
@@ -256,7 +259,9 @@ async function syncOne(store: StoreRow, dryRun: boolean) {
         const p = productById.get(r.product_id);
         if (!p?.shopify_variant_id || !r.stores?.shopify_location_id) continue;
         const m = byVariant.get(p.shopify_variant_id) ?? {};
-        m[r.stores.shopify_location_id] = r.qty;
+        // «NO:gid://…»: kassasjekken (shopify-app, parti-validering) teller bare lokasjoner i
+        // kundens land – aldri over tollgrensen (039).
+        m[lagerNokkel(r.stores.country, r.stores.shopify_location_id)] = r.qty;
         byVariant.set(p.shopify_variant_id, m);
       }
       await setStockByStoreMetafields([...byVariant].map(([variantId, stockByLocation]) => ({ variantId, stockByLocation })));
