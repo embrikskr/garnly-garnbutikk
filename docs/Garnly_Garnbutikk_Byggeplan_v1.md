@@ -417,6 +417,8 @@ kvitteringen. Det som må henge sammen er hvem pengene tilhører.» Det betyr:
 - **Oppgjøret:** hele beløpet kunden betalte (varer og frakt) er butikkens salg. Butikken får det
   minus Garnlys provisjon (`commission_pct` av varene), i DKK. Garnly fakturerer provisjonen til
   butikken. Refusjoner gjøres i Garnlys Shopify (pengene ligger der) og trekkes i oppgjøret som i Norge.
+  Gebyret til Shopify Payments betaler Garnly, som i Norge (Embrik 18.11.2026). Blir marginen for
+  liten, settes `commission_pct` opp for butikken i stedet for å trekke gebyret per ordre.
 - Avklares med regnskapsfører: moms på provisjonen (tjeneste fra Norge til dansk virksomhet) og
   valutaen (Garnly får utbetalt i NOK, butikken skal ha DKK).
 

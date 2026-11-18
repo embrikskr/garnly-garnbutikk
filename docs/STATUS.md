@@ -60,10 +60,15 @@ Oppdatert: 2026-11-17
 - **Bygget:** `_shared/adapters/shopify.ts` (5 tester) leser «available» fra butikkens nettlokasjon
   med strekkode, SKU, garnnavn og farge; registrert i adapters/index.ts, og `sync-store` tar med
   `shopify`-butikker. Partnerkallene bruker API 2026-10 (`PARTNER_SHOPIFY_API_VERSION`).
-- **Ikke deployet:** `sync-store` må deployes med adapteren før prøvesynken. Gjøres når butikken har
-  installert. Prøvesynk: `{"store_id": "<KreStoffer>", "dry_run": true, "wait": true}` – fyller
-  `inventory`/`unmatched_items`, skriver ingenting til Shopify (ingen location), gir ingen ordrer
-  (butikken er inaktiv).
+- **`sync-store` deployet med adapteren 18.11.2026 (v38).** Strikkefryd og Garnkilden synker som før.
+  Prøvesynk for KreStoffer (`{"store_id": "<KreStoffer>", "dry_run": true, "wait": true}`): 13 324
+  linjer, 847 treff, 792 varer med lager (780 av dem på 30). Ligger i `inventory`/`unmatched_items`,
+  ingenting skrevet til Shopify (ingen location). Butikken er inaktiv, så cron synker den ikke og
+  rutingen ser den ikke. **Ikke aktiver KreStoffer før ruting per land er bygget** – da ville norske
+  ordrer gått til Danmark.
+- Garnlys bestselgere hos KreStoffer: Tynn Silk Mohair 56 av 64 farger, Ballerina Chunky Mohair
+  15 av 43, Bella 13 av 70, Tilia 0 av 60.
+- Gebyret til Shopify Payments på danske ordrer betaler Garnly (Embrik 18.11.2026).
 - **Før butikken kan aktiveres:** ruting per land og kassesjekk mot land (byggeplan §15b), dansk
   frakt, ordre i butikkens Shopify, oppgjør i DKK, dansk marked og momsregistrering.
 
