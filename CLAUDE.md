@@ -39,7 +39,8 @@ supabase/migrations/      001 schema, 002 cron, 003 exclude_from_sync, 004 inven
                           033 svarfrist 5 timer, 034 view bare lesing,
                           035 shopify-partnerbutikk (pos_system 'shopify', unik shop_domain),
                           036 salgsrapport, «manglet» og oppgjør per måned, 037 mest solgt totalt,
-                          038 admin fra admin.garnly.no, 039 ruting per land
+                          038 admin fra admin.garnly.no, 039 ruting per land,
+                          040 ordre i partnerbutikkens Shopify
 supabase/seed/            product_aliases.sql (varer uten brukbar EAN, kjøres etter første sync-products)
 panel/                    butikkpanelet (statisk side, Vercel med rot `panel/`).
                           garnly-butikkpanel.vercel.app – deployes av git push
@@ -65,6 +66,7 @@ supabase/functions/
   _shared/offers.ts       makeNextOffer, escalateGroup, refreshOrderStatus
   _shared/shopify_oauth.ts  REN logikk: Garnly-appen i partnerbutikkens Shopify (hmac, state, tilganger)
   _shared/partner_shop.ts   nøkler fra Garnly-appen i store_secrets, fornying, partnerGql mot butikkens Shopify
+  _shared/partner_order.ts  partnerbutikk godtar → ordren lages i deres Shopify (betalt, kunden som kunde); sporingen hentes tilbake
   _shared/shipping/       cargonizer.ts (finn sending + hent etikett-PDF), bookShipment, shipmondo.ts
   sync-store/             cron: kassesystem → inventory → Shopify (+ metafelt garnly.stock_by_store)
   sync-products/          Shopify-varianter → products-tabellen (+ slår på inventory tracking)

@@ -7,6 +7,7 @@ import { adminClient, audit, json, requireInternalSecret } from "../_shared/db.t
 import { makeNextOffer } from "../_shared/offers.ts";
 import { reconcileFulfilledAt } from "../_shared/fulfillment_sync.ts";
 import { overfoerEtterslep } from "../_shared/transfer_sync.ts";
+import { partnerSporingEtterslep } from "../_shared/partner_order.ts";
 
 /** Hvor lenge en sendt ordre får stå uten at kassauttrekket er bekreftet. */
 const KASSA_PURRE_TIMER = 24;
@@ -39,8 +40,13 @@ Deno.serve(async (req) => {
   // Sendinger CargonizerConnect laget, men ikke meldte inn til transportøren. Webhooken tar
   // de fleste med en gang; dette er for de som feilet eller kom inn før koden fantes.
   const overfort = await overfoerEtterslep(db);
+  // Partnerbutikker med egen Shopify: sporingen hentes derfra når de har sendt (partner_order.ts).
+  const partner = await partnerSporingEtterslep().catch((e) => {
+    console.error("[partner-sporing]", e instanceof Error ? e.message : e);
+    return { sjekket: 0, sendt: 0 };
+  });
   const purret = await purrKassauttrekk(db, now);
-  return json({ expired: touchedGroups.size, fulfilled_merket: merket, overfort, kassa_purret: purret });
+  return json({ expired: touchedGroups.size, fulfilled_merket: merket, overfort, partner, kassa_purret: purret });
 });
 
 /**

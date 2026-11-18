@@ -76,9 +76,20 @@ Oppdatert: 2026-11-17
 - **NB om deploy:** de fire funksjonene over er deployet som én minifisert fil (`deno bundle --minify`,
   npm-importer eksterne) fordi MCP-deploy krever alt innhold i kallet. Kilden er fortsatt filene i
   repoet; deploy med CLI (`supabase functions deploy`) gir vanlige filer igjen.
-- **Før KreStoffer kan aktiveres:** ordren må lages i deres Shopify ved godkjenning (offer-respond
-  krever i dag `shopify_location_id` og svarer «Oppsettsfeil» uten), og kassa må bare selge til
-  danske kunder det danske butikker har.
+- **Ordren i butikkens Shopify bygget og deployet 18.11.2026 (040, `_shared/partner_order.ts`).**
+  Godta → ordren lages hos KreStoffer (betalt, kunden som kunde, priser i DKK, frakt, merke
+  `garnly-<gruppe>`), og butikkens Shopify sender kvitteringen. timeout-sweeper henter sporingen hvert
+  kvarter og fullfører i Garnlys Shopify. Panelkortet viser ordrenummeret hos dem, uten etikett og
+  sendeknapp. Deployet: offer-respond v32, timeout-sweeper v29, partner-preview v2 (ordreutkast).
+  Prøvd uten å lage ordre: tre Garnly-varer funnet hos KreStoffer på strekkode, utkastet bygget.
+  **Ikke prøvd:** selve `orderCreate` hos KreStoffer (skjemaet er sjekket). Første ekte ordre bør være
+  en avtalt testordre (de vil ha beskjed først).
+- **Før KreStoffer kan aktiveres:**
+  1. Lokasjon «KreStoffer, Odense» i Garnlys Shopify, og `stores.shopify_location_id` satt.
+  2. Fraktprofiler: norske lokasjoner sender bare til Norge, KreStoffer bare til Danmark – ellers kan
+     norske kunder kjøpe varer bare KreStoffer har (de eskaleres, men sendes aldri over grensen).
+  3. Markets for Danmark, danske vilkår og ordrebekreftelse (Embrik/Halvor).
+  4. Oppgjør i DKK med frakten til butikken (ikke bygget).
 - Garnlys bestselgere hos KreStoffer: Tynn Silk Mohair 56 av 64 farger, Ballerina Chunky Mohair
   15 av 43, Bella 13 av 70, Tilia 0 av 60.
 - Gebyret til Shopify Payments på danske ordrer betaler Garnly (Embrik 18.11.2026).

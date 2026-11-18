@@ -8,6 +8,12 @@
  * er et sammendrag: hvor mange varer, hvor mange med lager og strekkode, hvor mange som traff
  * Garnlys sortiment og hvordan, «continue selling»-fordelingen, og eksempler på det som ikke traff.
  *
+ *   POST { "store_id": "<uuid>", "ordreutkast": { "product_ids": ["<uuid>", …] } } + x-cron-secret
+ *
+ * Ordreutkast: finner variantene i butikkens Shopify for Garnly-varene og bygger orderCreate-
+ * variablene slik godkjenningen ville gjort (partner_order.ts), med en oppdiktet kunde – men
+ * sender ingenting. Prøver også oppslaget som finner igjen en ordre vi alt har laget.
+ *
  * Laget for KreStoffer 18.11.2026, før sync-store deployes med shopify-adapteren: en feil i
  * sync-store stopper synken for alle butikkene, denne rører ingen andre.
  */
@@ -15,14 +21,41 @@ import { adminClient, json, requireInternalSecret } from "../_shared/db.ts";
 import { hentNivaer, lagerRegel, tilLagerlinjer } from "../_shared/adapters/shopify.ts";
 import { matchLines } from "../_shared/matching.ts";
 import type { ProductRow, StoreRow } from "../_shared/types.ts";
+import { byggPartnerordre, finnPartnerordre, finnPartnervariant } from "../_shared/partner_order.ts";
+import { normalizeEan } from "../_shared/adapters/types.ts";
 
 Deno.serve(async (req) => {
   const nei = requireInternalSecret(req);
   if (nei) return nei;
-  const { store_id } = await req.json().catch(() => ({}));
+  const { store_id, ordreutkast } = await req.json().catch(() => ({}));
   const db = adminClient();
   const { data: store } = await db.from("stores").select("*").eq("id", store_id).maybeSingle();
   if (!store || store.pos_system !== "shopify") return json({ error: "fant ingen shopify-butikk med den id-en" }, 400);
+
+  if (ordreutkast) {
+    try {
+      const ids: string[] = (ordreutkast.product_ids ?? []).slice(0, 10);
+      const { data: produkter } = await db.from("products").select("id, name, ean, sku").in("id", ids);
+      const funnet = [];
+      for (const p of produkter ?? []) {
+        funnet.push({ vare: p.name, ean: p.ean, sku: p.sku, partner_variant: await finnPartnervariant(store.id, normalizeEan(p.ean), p.sku) });
+      }
+      const utkast = byggPartnerordre({
+        groupId: "00000000-0000-0000-0000-000000000000",
+        orderName: "#UTKAST",
+        kunde: { email: "test@example.com", name: "Test Kunde", address1: "Testvej 1", zip: "5000", city: "Odense C", countryCodeV2: "DK" },
+        currency: "DKK",
+        linjer: funnet.filter((f) => f.partner_variant).map((f) => ({ partnerVariantId: f.partner_variant!, qty: 1, unitPrice: 50, title: f.vare })),
+        frakt: 49,
+        test: true,
+        sendKvittering: false,
+      });
+      const finnes = await finnPartnerordre(store.id, "00000000-0000-0000-0000-000000000000");
+      return json({ varianter: funnet, utkast, oppslag_tag_virker: true, fant_ordre_med_merket: finnes });
+    } catch (e) {
+      return json({ error: e instanceof Error ? e.message : String(e) }, 500);
+    }
+  }
 
   try {
     const { lokasjon, noder } = await hentNivaer(store as StoreRow);

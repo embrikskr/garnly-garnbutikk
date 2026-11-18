@@ -295,10 +295,11 @@ function renderAssigned(rows) {
     <article class="card ${sendt ? "card--packing" : "card--klar"}${etterlyst(r) ? " card--reminder" : ""}" data-group="${r.group_id}">
       <div class="card__head">
         <span class="card__order">${esc(r.order_name ?? "Ordre")}${r.is_test ? ' <span class="merke">TEST</span>' : ""}${sendt ? ' <span class="merke">Sendt</span>' : ""}</span>
-        <span class="card__meta">${r.assigned_at ? klokke(r.assigned_at) : ""}${etikettIkon()}</span>
+        <span class="card__meta">${r.assigned_at ? klokke(r.assigned_at) : ""}${r.partner_order_name ? "" : etikettIkon()}</span>
       </div>
       <ul class="lines">${lineItems(r.line_items)}</ul>
       <p class="addr">${esc(r.ship_name ?? "")}<br>${esc(r.ship_address1 ?? "")}${r.ship_address2 ? "<br>" + esc(r.ship_address2) : ""}<br>${esc(r.ship_zip ?? "")} ${esc(r.ship_city ?? "")}</p>
+      ${partnerordre(r)}
       ${pakkeboks(r)}
       ${etikettStatus(r, sendt)}
       ${r.tracking_number ? `<p class="track">Sporing: ${r.tracking_url ? `<a href="${esc(r.tracking_url)}" target="_blank" rel="noopener">${esc(r.tracking_number)}</a>` : esc(r.tracking_number)}</p>` : ""}
@@ -323,7 +324,7 @@ function renderAssigned(rows) {
  * Etter sending: ingen knapp. Etiketten ligger som ikon i korthodet.
  */
 function handlinger(r, sendt) {
-  if (sendt) return "";
+  if (sendt || r.partner_order_name) return "";
   return `<div class="card__actions card__actions--etikett">
       <button class="btn btn--primary" data-act="send">${r.ship_error ? "Prøv igjen" : "Slått ut og klar til sending"}</button>
     </div>`;
@@ -343,6 +344,15 @@ function feilboks(r) {
   if (!r.ship_error) return "";
   const hvor = { uttrekk: "kassauttrekket", sending: "fraktsendingen", fulfillment: "Shopify", etikett: "etiketten" };
   return `<p class="feil" role="alert"><b>Stoppet på ${hvor[r.ship_step] ?? "et steg"}:</b> ${esc(r.ship_error)}</p>`;
+}
+
+/**
+ * Partnerbutikk med egen Shopify (KreStoffer): ordren ligger der, og de sender den derfra med
+ * sitt eget fraktoppsett. Ingen etikett eller knapp her – sporingen hentes av seg selv.
+ */
+function partnerordre(r) {
+  if (!r.partner_order_name) return "";
+  return `<p class="pakkeboks">Ordren ligger i Shopify-en deres som <b>${esc(r.partner_order_name)}</b>. Send den derfra – sporingen kommer hit av seg selv.</p>`;
 }
 
 /** Pakkeboksen sendingen går til. Butikken slipper å lure på hvor pakken havner. */
@@ -452,7 +462,7 @@ function renderHistorikk() {
         <span class="hist__ordre">${esc(r.order_name ?? "Ordre")}${r.is_test ? ' <span class="merke">TEST</span>' : ""}</span>
         <span class="hist__status hist__status--${r.status}">${STATUSTEKST[r.status] ?? r.status}</span>
         ${r.refundert ? '<span class="merke merke--refundert">Refundert</span>' : ""}
-        ${r.kind === "tildelt" && r.status !== "kansellert" ? etikettIkon() : ""}
+        ${r.kind === "tildelt" && r.status !== "kansellert" && !r.partner_order_name ? etikettIkon() : ""}
       </div>
       <div class="hist__bunn">
         <span>${r.ship_name ? esc(r.ship_name) : "&mdash;"}</span>
@@ -478,7 +488,7 @@ function apneDetalj(groupId) {
     r.refundert ? ["Refundert", `${kr(r.refundert)}${r.refundert_at ? " – " + tidspunkt(r.refundert_at) : ""}`] : null,
   ].filter(Boolean);
 
-  const kanHenteEtikett = r.kind === "tildelt" && r.status !== "kansellert";
+  const kanHenteEtikett = r.kind === "tildelt" && r.status !== "kansellert" && !r.partner_order_name;
   const manglerUttrekk = r.kind === "tildelt" && r.fulfilled_at && !r.pos_deducted_at;
 
   el.detaljInnhold.innerHTML = `
@@ -489,6 +499,7 @@ function apneDetalj(groupId) {
     </div>
     <ul class="lines">${lineItems(r.line_items)}</ul>
     ${adresse}
+    ${partnerordre(r)}
     ${pakkeboks(r)}
     ${r.tracking_number ? `<p class="track">Sporing: ${r.tracking_url ? `<a href="${esc(r.tracking_url)}" target="_blank" rel="noopener">${esc(r.tracking_number)}</a>` : esc(r.tracking_number)}</p>` : ""}
     ${tider.length ? `<dl class="tider">${tider.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>` : ""}

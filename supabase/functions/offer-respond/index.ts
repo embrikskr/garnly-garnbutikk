@@ -17,6 +17,7 @@ import { getAdapter } from "../_shared/adapters/index.ts";
 import { moveFulfillmentOrder, releaseHold } from "../_shared/shopify.ts";
 import { makeNextOffer, refreshOrderStatus } from "../_shared/offers.ts";
 import { sammeLand } from "../_shared/routing.ts";
+import { lagPartnerordre } from "../_shared/partner_order.ts";
 import { bookShipment } from "../_shared/shipping/index.ts";
 import type { LineItem, StoreRow } from "../_shared/types.ts";
 
@@ -207,6 +208,25 @@ async function applyResponse(offer: any, action: "accept" | "decline", byUser?: 
   if (!store.shopify_location_id) {
     return { ok: false, code: "config", title: "Oppsettsfeil", message: "Butikken mangler Shopify-location. Kontakt Garnly." };
   }
+
+  // 2b. Partnerbutikk med egen Shopify (byggeplan §15b): ordren lages hos dem før godkjenningen
+  //     lagres. Feiler det, er ordren ikke deres ennå, og de kan trykke Godta igjen.
+  let partnerMsg = "";
+  if (store.pos_system === "shopify") {
+    try {
+      const p = await lagPartnerordre(group.id, store);
+      partnerMsg = ` Ordren ligger i Shopify-en deres som ${p.name}. Send den derfra.`;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return {
+        ok: false,
+        code: "partner_order_failed",
+        title: "Fikk ikke laget ordren",
+        message: `Ordren ble ikke laget i Shopify-en deres: ${msg} Prøv igjen om litt, eller kontakt Garnly.`,
+      };
+    }
+  }
+
   const movedFoId = await moveFulfillmentOrder(group.shopify_fulfillment_order_id, store.shopify_location_id);
   await releaseHold(movedFoId);
 
@@ -223,10 +243,10 @@ async function applyResponse(offer: any, action: "accept" | "decline", byUser?: 
   await refreshOrderStatus(order.id);
   await audit("routing_group", group.id, "assigned", { store_id: store.id, offer_id: offer.id, by: byUser ?? "lenke" });
 
-  // 4. Frakt
-  let shipMsg = "";
+  // 4. Frakt. En partnerbutikk sender med sitt eget oppsett; sporingen hentes fra deres Shopify.
+  let shipMsg = partnerMsg;
   let labelUrl: string | null = null;
-  try {
+  if (!partnerMsg) try {
     const shipment = await bookShipment({ store, order, items });
     if (shipment) {
       await db.from("routing_groups").update({

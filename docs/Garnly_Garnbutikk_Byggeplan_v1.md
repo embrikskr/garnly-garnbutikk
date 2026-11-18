@@ -443,11 +443,22 @@ kvitteringen. Det som må henge sammen er hvem pengene tilhører.» Det betyr:
   `pos_config.stock_cap` (30). Butikken godkjenner hver ordre selv.
 - **Ved godkjenning** opprettes ordren i butikkens Shopify som betalt, med forbrukeren som kunde og
   leveringsadresse, varene og frakten. Lageret trekkes der, og butikken sender med sitt eget
-  fraktoppsett. Sporingen hentes fra butikkens Shopify og legges på ordren i Garnly. Ikke bygget.
+  fraktoppsett. Sporingen hentes fra butikkens Shopify og legges på ordren i Garnly.
+  **Bygget og deployet 18.11.2026** (`_shared/partner_order.ts`, 040): offer-respond lager ordren før
+  godkjenningen lagres (feiler det, kan butikken trykke Godta igjen), med merket `garnly-<gruppe>` så
+  den aldri lages to ganger. Priser i kundens valuta, frakt på første gruppe, butikkens Shopify sender
+  ordrebekreftelsen (ikke for testordrer; `pos_config.send_receipt = false` slår den av).
+  `pos_deducted_at` settes med en gang (lageret trekkes der). timeout-sweeper ser etter sporing hvert
+  kvarter og fullfører i Garnlys Shopify med «sendt manuelt», så ingen Cargonizer-innmelding prøves.
+  Panelet viser «Ordren ligger i Shopify-en deres som #…» i stedet for etikett og sendeknapp.
+  Prøvd uten å lage ordre: variantene finnes på strekkode hos KreStoffer (partner-preview, ordreutkast).
+  **Forutsetter en lokasjon for butikken i Garnlys Shopify** (`stores.shopify_location_id`), som for
+  de norske – fulfillment orderen flyttes dit, og lageret synkes dit.
 - **Frakt:** butikkens egen (i butikkens Shopify). Ingen Shipmondo/Cargonizer fra Garnly.
-- **Gjenstår før første danske ordre:** kassesjekk mot land (Markets), ordre i butikkens Shopify og
-  sporing tilbake, oppgjør i DKK med frakten til butikken, Markets i Garnlys Shopify, danske vilkår og
-  ordrebekreftelse. Lagersynk og ruting per land er gjort (18.11.2026).
+- **Gjenstår før første danske ordre:** lokasjon for KreStoffer i Garnlys Shopify og fraktprofiler som
+  holder lokasjonene innenfor sitt land (norske sender bare til Norge, KreStoffer bare til Danmark),
+  Markets i Garnlys Shopify, oppgjør i DKK med frakten til butikken, danske vilkår og
+  ordrebekreftelse. Lagersynk, ruting per land og ordren i butikkens Shopify er gjort (18.11.2026).
 
 ## 16. Kilder brukt i denne planen
 
