@@ -444,7 +444,7 @@ kvitteringen. Det som må henge sammen er hvem pengene tilhører.» Det betyr:
 - **Ved godkjenning** opprettes ordren i butikkens Shopify som betalt, med forbrukeren som kunde og
   leveringsadresse, varene og frakten. Lageret trekkes der, og butikken sender med sitt eget
   fraktoppsett. Sporingen hentes fra butikkens Shopify og legges på ordren i Garnly.
-  **Bygget og deployet 18.11.2026** (`_shared/partner_order.ts`, 040): offer-respond lager ordren før
+  **Bygget og deployet 18.11.2026** (`_shared/partner_order.ts`, 041): offer-respond lager ordren før
   godkjenningen lagres (feiler det, kan butikken trykke Godta igjen), med merket `garnly-<gruppe>` så
   den aldri lages to ganger. Priser i kundens valuta, frakt på første gruppe, butikkens Shopify sender
   ordrebekreftelsen (ikke for testordrer; `pos_config.send_receipt = false` slår den av).

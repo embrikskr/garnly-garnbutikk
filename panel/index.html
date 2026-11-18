@@ -140,23 +140,24 @@
     </section>
   </main>
 
-  <!-- Oppgjør: én måned om gangen. Tallene kommer ferdig regnet fra databasen (031, 036). -->
+  <!-- Oppgjør: én periode om gangen (1.–15. og 16.–siste). Tallene kommer ferdig regnet fra databasen (040). -->
   <main id="visning-oppgjor" class="admin" role="tabpanel" aria-labelledby="fane-oppgjor" hidden>
     <div class="filtre">
       <label class="felt" id="oppgjor-butikk-felt" hidden>Butikk <select id="oppgjor-butikk"></select></label>
     </div>
     <div class="maaned">
-      <button id="oppgjor-forrige" class="btn btn--secondary" aria-label="Forrige måned">‹ Forrige</button>
+      <button id="oppgjor-forrige" class="btn btn--secondary" aria-label="Forrige periode">‹ Forrige</button>
       <h2 id="oppgjor-maaned" class="maaned__navn"></h2>
-      <button id="oppgjor-neste" class="btn btn--secondary" aria-label="Neste måned">Neste ›</button>
+      <button id="oppgjor-neste" class="btn btn--secondary" aria-label="Neste periode">Neste ›</button>
     </div>
     <div id="oppgjor-sum" class="tall"></div>
     <div id="oppgjor-status" class="maaned__status"></div>
 
     <section>
-      <h2 class="col__title">Ordrer</h2>
+      <h2 class="col__title">Ordrer sendt i perioden</h2>
       <div id="oppgjor-linjer" class="tabell"></div>
-      <p class="svak">Frakten kunden betaler går til Garnly. Av varene tar Garnly provisjonen, og resten går til butikken. Eksempel: kunden betaler 1 079 kr, der 79 kr er frakt. Av varene på 1 000 kr tar Garnly 10 % (100 kr), og butikken får 900 kr. Refunderte varer trekkes i måneden de ble refundert, eller i neste måned hvis den alt er utbetalt. Testordrer telles ikke.</p>
+      <p class="svak">Beløpene er uten merverdiavgift. Grunnlaget er varesalg og fraktinntekt, minus fraktkostnad (avtalens sats per pakke) og det faktiske betalingsgebyret for ordren. Butikken får 90 % av grunnlaget og Garnly 10 %. Butikkens andel får merverdiavgift oppå, og returer i perioden trekkes fra. Eksempel: varer for 973 kr og frakt 79 kr gir 778,40 + 63,20 − 70,00 − 21,99 = 749,61 kr i grunnlag, og 674,65 kr til butikken før mva.</p>
+      <p class="svak">En ordre teller i perioden den ble sendt. Salg sendt 1.–15. avregnes innen den 20. og utbetales innen den 25. Salg sendt 16.–siste avregnes innen den 5. og utbetales innen den 10. måneden etter. Testordrer telles ikke.</p>
     </section>
   </main>
 

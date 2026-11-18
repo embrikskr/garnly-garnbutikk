@@ -1,6 +1,53 @@
 # Status – garnly-garnbutikk
 
-Oppdatert: 2026-11-17
+Oppdatert: 2026-11-18
+
+## Oppgjøret følger samarbeidsavtalen (18.11.2026)
+
+- **Hvorfor:** Embrik sendte avregningen SF-2026-01 (Strikkefryd, salg sendt 16.–31. oktober): «den jeg
+  sendte her er riktig. så fiks det så det blir riktig». Regneboka ga butikken varebeløpet inkl. mva minus
+  10 %, per måned, etter dagen ordren ble tildelt: 4 581,90 kr for de seks ordrene. Avregningen sier
+  4 384,19 kr.
+- **Migrasjon 040** (`040_oppgjor_etter_avtalen.sql`), **MÅ KJØRES** i SQL Editor (har DROP FUNCTION):
+  grunnlag per ordre = varesalg + fraktinntekt − fraktkostnad (70 kr per pakke) − faktisk betalingsgebyr,
+  uten mva; butikken 90 % avrundet per ordre; 25 % mva på periodens sum; returer trekkes fra. To perioder
+  i måneden etter `fulfilled_at`. Nye: `routing_orders.payment_fee`, vilkår og selskapsopplysninger på
+  `stores` (frosset på gruppa ved tildeling, som provisjonen), `settlement_statements` (avregninger med
+  frosne tall og nummer), `settlement_period_totals`, `settlement_periods`, `settlement_period_detail`,
+  `settlement_overview`, `issue_`/`withdraw_settlement_statement`, `mark_`/`unmark_settlement_paid` per
+  periode. Fjernet: `settlement_lines`, `settlement_summary`, `settlement_months`,
+  `settlement_month_lines`. `settlement_payouts` står igjen, tom og merket utgått.
+  Blokka legger inn gebyrene for #1019–#1055 (lest fra Shopify 18.11) og SF-2026-01 med avregningsdato
+  11.11.2026, og **stopper hvis regneboka ikke gir avregningens tall** (6 ordrer, grunnlag 3 897,05,
+  andel 3 507,35, mva 876,84, til utbetaling 4 384,19).
+- **Prøvd:** tre ganger på rad mot lokal Postgres 16 med de 37 ekte ordrene (uten kundedata) og de gamle
+  funksjonene fra 031/036/038 under. Alle seks periodene stemmer med en uavhengig utregning i Python, og
+  16.–31. oktober med avregningen linje for linje. 56 kontroller: butikkbruker ser bare sin butikk og kan
+  ikke lese regneboka eller avregne, anon får ingenting, service role uten navn nektes; løpende periode,
+  manglende gebyr og manglende org.nr. stopper avregningen; sen ordre og retur etter avregning havner i
+  neste åpne periode; endring etter avregning gir avvik (frosset beløp står); angret avregning beholder
+  nummeret; delt ordre; KreStoffer uten gebyrtrekk; butikk uten mva-registrering.
+- **`settlement-fees`** (ny funksjon, `_shared/payment_fee.ts`, 11 tester): leser
+  `order.transactions.fees` for ordrer som mangler gebyr. **Lagt ut 18.11.2026 (v1, uten JWT-sjekk; krever
+  x-cron-secret eller service role-nøkkel + x-garnly-actor).** Tørrkjørt mot #1055: 8,40 kr, likt Shopify.
+  Cron `settlement-fees` (12 og 42 over hver time) legges inn av 040. Annen betalingsmåte enn Shopify
+  Payments gir «må legges inn for hånd» (gjøres i admin).
+- **Panelet:** «Oppgjør» viser én periode om gangen (`settlement_period_detail`) med avregningens kolonner
+  og sum, status (løper, ikke avregnet, avregnet med nummer, utbetalt) og fristene. «Marker som utbetalt»
+  er tatt ut av panelet: avregning og utbetaling gjøres på admin.garnly.no. Til 040 er kjørt, sier fanen
+  «Oppgjøret oppdateres». Prøvd i Chromium som Strikkefryds bruker mot ekte PostgREST med 040.
+- **admin.garnly.no** (repoet `garnlyno`): Garnbutikk › Oppgjør lager avregningen, markerer utbetalingen,
+  henter gebyrer, lar Garnly fylle inn butikkens selskapsnavn og org.nr., og skriver ut avregningen med
+  samme oppsett og ordlyd som SF-2026-01.
+- **Må gjøres:** kjør 040. Fyll inn Garnkildens selskapsnavn, organisasjonsnummer og adresse i admin
+  (uten dem kan avregningen ikke lages). Marker SF-2026-01 som utbetalt når den er betalt.
+- **Valg som ikke står i avregningen** (spørsmål SP-313–SP-317 i `garnlyno/docs/SPORSMAL.md`): en retur
+  trekker butikkens andel av varene, mens frakt og gebyr på ordren står; delt ordre har fraktinntekten på
+  første pakke og gebyret fordelt etter varebeløp; 16.–siste avregnes innen den 5.; prefiks GK for
+  Garnkilden; nummeret følger året avregningen lages i.
+- **KreStoffer:** `payment_fee_on_store = false` (Embrik 18.11: Garnly betaler gebyret på danske ordrer).
+  Oppgjør i DKK, dansk fraktsats og moms er ikke bygget; regneboka regner i dag alle butikker med 25 %
+  norsk mva på varene (`settlement_ex_vat`). Må løses før KreStoffer aktiveres.
 
 ## Garnly-admin flytter til admin.garnly.no (17.11.2026)
 
@@ -36,7 +83,8 @@ Oppdatert: 2026-11-17
 - **037:** «Mest solgt i Garnly» øverst i Salg: summert over alle butikker (aldri per butikk), med
   butikkens eget lager; rød 0 når de ikke har en vare som går. Med to aktive butikker kan hver regne
   ut den andres salg (total − eget) – sagt til Embrik.
-- Oppgjørsregelen er uendret: butikken får varebeløpet minus provisjon (10 %); frakten er Garnlys.
+- Oppgjørsregelen var da: butikken får varebeløpet minus provisjon (10 %); frakten er Garnlys.
+  **Erstattet 18.11.2026 av avtalens regel (040), se øverst.**
 
 ## KreStoffer: lagerlesing fra egen Shopify bygget (11.11.2026)
 
@@ -76,7 +124,7 @@ Oppdatert: 2026-11-17
 - **NB om deploy:** de fire funksjonene over er deployet som én minifisert fil (`deno bundle --minify`,
   npm-importer eksterne) fordi MCP-deploy krever alt innhold i kallet. Kilden er fortsatt filene i
   repoet; deploy med CLI (`supabase functions deploy`) gir vanlige filer igjen.
-- **Ordren i butikkens Shopify bygget og deployet 18.11.2026 (040, `_shared/partner_order.ts`).**
+- **Ordren i butikkens Shopify bygget og deployet 18.11.2026 (041, `_shared/partner_order.ts`).**
   Godta → ordren lages hos KreStoffer (betalt, kunden som kunde, priser i DKK, frakt, merke
   `garnly-<gruppe>`), og butikkens Shopify sender kvitteringen. timeout-sweeper henter sporingen hvert
   kvarter og fullfører i Garnlys Shopify. Panelkortet viser ordrenummeret hos dem, uten etikett og
