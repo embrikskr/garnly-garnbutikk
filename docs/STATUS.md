@@ -8,7 +8,7 @@ Oppdatert: 2026-11-18
   sendte her er riktig. så fiks det så det blir riktig». Regneboka ga butikken varebeløpet inkl. mva minus
   10 %, per måned, etter dagen ordren ble tildelt: 4 581,90 kr for de seks ordrene. Avregningen sier
   4 384,19 kr.
-- **Migrasjon 040** (`040_oppgjor_etter_avtalen.sql`), **MÅ KJØRES** i SQL Editor (har DROP FUNCTION):
+- **Migrasjon 040** (`040_oppgjor_etter_avtalen.sql`), **KJØRT 21.11.2026** i SQL Editor (verifisert: SF-2026-01 = 4 384,19, avvik 0):
   grunnlag per ordre = varesalg + fraktinntekt − fraktkostnad (70 kr per pakke) − faktisk betalingsgebyr,
   uten mva; butikken 90 % avrundet per ordre; 25 % mva på periodens sum; returer trekkes fra. To perioder
   i måneden etter `fulfilled_at`. Nye: `routing_orders.payment_fee`, vilkår og selskapsopplysninger på
@@ -39,7 +39,7 @@ Oppdatert: 2026-11-18
 - **admin.garnly.no** (repoet `garnlyno`): Garnbutikk › Oppgjør lager avregningen, markerer utbetalingen,
   henter gebyrer, lar Garnly fylle inn butikkens selskapsnavn og org.nr., og skriver ut avregningen med
   samme oppsett og ordlyd som SF-2026-01.
-- **Må gjøres:** kjør 040. Fyll inn Garnkildens selskapsnavn, organisasjonsnummer og adresse i admin
+- **Må gjøres:** Fyll inn Garnkildens selskapsnavn, organisasjonsnummer og adresse i admin
   (uten dem kan avregningen ikke lages). Marker SF-2026-01 som utbetalt når den er betalt.
 - **Valg som ikke står i avregningen** (spørsmål SP-313–SP-317 i `garnlyno/docs/SPORSMAL.md`): en retur
   trekker butikkens andel av varene, mens frakt og gebyr på ordren står; delt ordre har fraktinntekten på
