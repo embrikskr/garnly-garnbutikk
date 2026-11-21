@@ -25,6 +25,17 @@ Oppdatert: 2026-11-21
   for #1058, som alt er sendt. `shipping-label` v10 og `ship-order` v10 deployet (røyktestet 401 uten
   innlogging). `fulfillment-webhook` og `timeout-sweeper` kjører forrige versjon; de søker bare når
   gruppen mangler lagret sendings-id, og det har den alltid etter etiketten eller sendeknappen.
+- **Strikkefryds del ble merket sendt med Garnkildens sending (21.11.2026, 13:35):** Strikkefryd godtok
+  delene kl. 12:34. Backstoppen i `timeout-sweeper` hentet sendingene i Shopify en time senere, og
+  `matchFulfillments` (`_shared/fulfillment.ts`) koblet Garnkildens sending til Strikkefryds gruppe:
+  fant den ingen gruppe på sendingens location, falt den tilbake på alle grupper, og én kandidat ble
+  valgt uten å se på varene. Kortene forsvant fra «Til pakking», og Strikkefryd fikk purring på
+  kassauttrekk for #1057. **Rettet:** en sending matcher bare grupper på samme location (eller uten
+  location), og én kandidat krever minst én felles variant (3 nye tester). `fulfillment-webhook` v10 og
+  `timeout-sweeper` v30 deployet (sweeperen svarer 200). Gruppene er satt tilbake til «Til pakking»
+  (status, sporing, `manually_shipped_at` og purringen nullet; `fulfilled_reverted` i audit_log). Shopify
+  var aldri endret: begge fulfillment orderne står åpne hos Strikkefryd. `ship-order` v10 bruker samme
+  matching bare når fulfillment orderen alt er lukket; deployes med rettelsen neste gang.
 - **Garnkildens del av #1057 og #1058:** meldt inn til PostNord før etiketten (#1057: 20.11 09:50:43,
   etikett samme sekund; #1058: «Slått ut» først 11:33:24, meldt inn samme sekund, etikett 11:33:35).
 - **Gjenstår:**

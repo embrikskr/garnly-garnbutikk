@@ -84,3 +84,23 @@ Deno.test("sending uten status regnes som gyldig", () => {
   const r = matchFulfillments([g("G1", GARNKILDEN, ["v1"])], [f("F1", "2026-09-29T10:00:00Z", GARNKILDEN, ["v1"])]);
   assertEquals(r.get("G1"), "2026-09-29T10:00:00Z");
 });
+
+Deno.test("sending fra en annen butikk matcher aldri (#1057/#1058, 21.11.2026)", () => {
+  // Garnkildens del er alt sendt; Strikkefryds del står igjen. Garnkildens sending skal ikke
+  // gjøre Strikkefryds del sendt.
+  const r = matchFulfillments(
+    [g("G2", STRIKKEFRYD, ["v2", "v3"])],
+    [f("F1", "2026-11-21T10:33:23Z", GARNKILDEN, ["v1"])],
+  );
+  assertEquals(r.size, 0);
+});
+
+Deno.test("én kandidat på riktig location, men ingen felles varer: ingen match", () => {
+  const r = matchFulfillments([g("G2", STRIKKEFRYD, ["v2"])], [f("F1", "2026-11-21T10:00:00Z", STRIKKEFRYD, ["v1"])]);
+  assertEquals(r.size, 0);
+});
+
+Deno.test("sending uten varelinjer på riktig location matcher fortsatt én gruppe", () => {
+  const r = matchFulfillments([g("G1", GARNKILDEN, ["v1"])], [f("F1", "2026-11-21T10:00:00Z", GARNKILDEN, [])]);
+  assertEquals(r.get("G1"), "2026-11-21T10:00:00Z");
+});

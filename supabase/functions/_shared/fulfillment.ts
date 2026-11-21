@@ -67,13 +67,21 @@ export function matchFulfillments(
     const kandidater = groups.filter((g) => !resultat.has(g.id));
     if (!kandidater.length) break;
 
-    const påLocation = f.locationId ? kandidater.filter((g) => g.location_id === f.locationId) : [];
-    const utvalg = påLocation.length ? påLocation : kandidater;
+    // En sending fra én location tilhører aldri en gruppe hos en annen butikk. Før falt vi
+    // tilbake på alle grupper når ingen lå på sendingens location, og da fikk Strikkefryds
+    // del av #1057 og #1058 Garnkildens sending (21.11.2026): kortene forsvant fra «Til pakking»
+    // før noe var pakket. Grupper uten location (ikke tildelt ennå) kan fortsatt matche.
+    const utvalg = f.locationId
+      ? kandidater.filter((g) => g.location_id === f.locationId || g.location_id === null)
+      : kandidater;
+    if (!utvalg.length) continue;
 
     let valgt: GroupForMatch | undefined;
-    if (utvalg.length === 1) {
+    // Én kandidat holder bare når sendingen ikke sier hvilke varer den har, eller har minst én
+    // av gruppens varer. En sending helt uten felles varer er en annen del av ordren.
+    if (utvalg.length === 1 && (!f.variantIds.length || utvalg[0].variant_ids.some((v) => f.variantIds.includes(v)))) {
       valgt = utvalg[0];
-    } else {
+    } else if (utvalg.length > 1) {
       // Flere mulige: ta den med flest varianter til felles med sendingen.
       let best = 0;
       for (const g of utvalg) {
@@ -81,8 +89,8 @@ export function matchFulfillments(
         if (overlapp > best) { best = overlapp; valgt = g; }
       }
       // Ingen overlapp i det hele tatt: da vet vi ikke hvilken gruppe det er, og lar den stå.
-      if (!valgt) continue;
     }
+    if (!valgt) continue;
 
     resultat.set(valgt.id, f.createdAt);
     brukt.add(f.id);
