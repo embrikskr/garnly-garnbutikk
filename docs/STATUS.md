@@ -31,8 +31,9 @@ Oppdatert: 2026-11-21
   - Oppgjøret legger hele fraktinntekten på første gruppe (040, «står fraktinntekten på den første
     gruppa»), men trekker 70 kr per pakke på hver. Med 79 kr per butikk bør fraktinntekten fordeles
     per gruppe. Ikke endret.
-  - «Bytt garn X med lignende garn Y og spar 79 kr» i handlekurven: trenger en regel for hva som er
-    lignende garn og en endring i temaet.
+  - «Bytt garn X med lignende garn Y og spar 79 kr» i handlekurven: lista over lignende garn er laget
+    (`docs/lignende-garn/`, 79 av 93 garn har minst ett lignende). Gjenstår: Halvor ser over lista,
+    hvor den skal ligge, og endringen i temaet.
 
 ## Oppgjøret følger samarbeidsavtalen (18.11.2026)
 
