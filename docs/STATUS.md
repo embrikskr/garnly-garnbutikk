@@ -1,6 +1,29 @@
 # Status – garnly-garnbutikk
 
-Oppdatert: 2026-11-18
+Oppdatert: 2026-11-21
+
+## Ordre delt i kassen: bare første del ble rutet (21.11.2026)
+
+- **Feilen:** Shopify deler selv ordren i flere fulfillment orders i kassen når ingen lokasjon har
+  alt. `order-intake` rutet bare den første (`fos[0]`). Resten fikk ikke hold, ikke tilbud og sto
+  usynlig på butikkens lokasjon i Shopify. Rammet #1057 (Alpakka Silke 6041 × 3) og #1058 (Tjukk
+  Bomull 219 × 2 og 277 × 2), begge Strikkefryd-delen; Garnkilden-delen ble sendt som normalt.
+  Første gang: før 20.11 hadde alltid én butikk alt.
+- **Rettet:** `order-intake` (v25) holder og ruter hver åpne fulfillment order for seg, med de
+  vanlige reglene (hele delen til én butikk hvis mulig). Internt etterslep:
+  `{ order_id, fulfillment_order_ids: [...] }` ruter bare de oppgitte delene, og bare hvis ingen
+  gruppe peker på dem. Brukt for #1057 og #1058: begge delene ligger som tilbud til Strikkefryd.
+- **Frakt 79 kr per butikk (Embrik 21.11: «helst én butikk … om det blir flere butikker, så blir det
+  79 kr frakt per butikk»):** hver butikk har sin egen lokasjonsgruppe i fraktprofilen, Norge
+  Standard 79 kr. Shopify legger sammen frakten per gruppe, så en ordre fra én butikk koster 79 kr,
+  fra to 158 kr. Strikkefryd er flyttet ut av gruppa med Garnkilden og Studio Ull AS (Oslo, ingen
+  lager). Nye butikker må få sin egen gruppe.
+- **Gjenstår:**
+  - Oppgjøret legger hele fraktinntekten på første gruppe (040, «står fraktinntekten på den første
+    gruppa»), men trekker 70 kr per pakke på hver. Med 79 kr per butikk bør fraktinntekten fordeles
+    per gruppe. Ikke endret.
+  - «Bytt garn X med lignende garn Y og spar 79 kr» i handlekurven: trenger en regel for hva som er
+    lignende garn og en endring i temaet.
 
 ## Oppgjøret følger samarbeidsavtalen (18.11.2026)
 

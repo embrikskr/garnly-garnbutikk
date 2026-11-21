@@ -273,6 +273,8 @@ ikke i bruk.
 
 **Ny konsekvens av splitt (§8.2):** kunden betaler én frakt, men to etiketter bookes. Anbefaling: Garnly dekker den ekstra etiketten i pilot, og `split_rate` måles. Alternativ: trekkes fra provisjon på ordren. Policyvalg, ikke teknisk.
 
+**Avgjort 21.11.2026 (Embrik):** helst én butikk; blir det flere, betaler kunden 79 kr frakt per butikk. Hver butikk har sin egen lokasjonsgruppe i fraktprofilen, så Shopify legger frakten sammen og deler ordren i kassen. `order-intake` ruter hver del. Senere: forslag i handlekurven om å bytte til lignende garn for å spare frakten.
+
 ### 10.1 Oppgjør med butikkene (01.10.2026)
 
 Butikken får varebeløpet (inkl. mva, etter rabatt, uten frakt) minus `commission_pct`. Frakt
