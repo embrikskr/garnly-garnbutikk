@@ -8,6 +8,7 @@ import {
   parsePrintere,
   parseServicePartners,
   referanseVarianter,
+  sendingsReferanse,
   sokeord,
   sokFra,
   transferBeslutning,
@@ -261,4 +262,22 @@ Deno.test("sokFra: aldri bakover i tid, bare én dag for tidssonen", () => {
   // den nye skal ikke nå tilbake til den gamle.
   assertEquals(sokFra("2026-10-04T18:17:26Z").toISOString().slice(0, 10), "2026-10-03");
   assertEquals(sokFra("2026-10-04T00:30:00+02:00").toISOString().slice(0, 10), "2026-10-02");
+});
+
+Deno.test("sendingsReferanse: første del har ordrenummeret, de andre får -2, -3", () => {
+  assertEquals(sendingsReferanse("#1058", 1), "#1058");
+  assertEquals(sendingsReferanse("#1058", null), "#1058");
+  assertEquals(sendingsReferanse("#1058", 2), "#1058-2");
+  assertEquals(sendingsReferanse("#1058", 3), "#1058-3");
+  assertEquals(sendingsReferanse("", 2), "");
+});
+
+Deno.test("sendingsReferanse: del 2 finner aldri første dels sending, og omvendt", () => {
+  const garnkilden = { id: 77575881, consignorReference: "#1058", state: "transferred", trackingUrl: null, transferAt: "x", numberWithChecksum: null };
+  const strikkefryd = { id: 77600000, consignorReference: "#1058-2", state: "open", trackingUrl: null, transferAt: null, numberWithChecksum: null };
+  // Cargonizer-søket treffer delstreng, så søket på «1058» kan gi begge.
+  const treff = [garnkilden, strikkefryd];
+  assertEquals(velgConsignment(treff, referanseVarianter(sendingsReferanse("#1058", 2)))?.id, 77600000);
+  assertEquals(velgConsignment(treff, referanseVarianter(sendingsReferanse("#1058", 1)))?.id, 77575881);
+  assertEquals(velgConsignment([garnkilden], referanseVarianter(sendingsReferanse("#1058", 2))), null);
 });

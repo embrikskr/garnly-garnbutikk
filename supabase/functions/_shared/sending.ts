@@ -17,6 +17,7 @@
 import { adminClient, audit } from "./db.ts";
 import {
   finnConsignment,
+  sendingsReferanse,
   finnServicePartnere,
   hentConsignment,
   opprettConsignment,
@@ -48,6 +49,7 @@ export interface Kontekst {
   group: {
     id: string;
     routing_order_id: string;
+    group_no: number | null;
     status: string;
     created_at: string;
     line_items: Array<{ qty: number; title?: string | null; product_id?: string | null }> | null;
@@ -78,7 +80,7 @@ export async function hentKontekst(groupId: string): Promise<Kontekst | null> {
   const { data } = await adminClient()
     .from("routing_groups")
     .select(
-      "id, routing_order_id, status, created_at, line_items, shopify_fulfillment_order_id, pos_deducted_at, fulfilled_at, " +
+      "id, routing_order_id, group_no, status, created_at, line_items, shopify_fulfillment_order_id, pos_deducted_at, fulfilled_at, " +
         "cargonizer_consignment_id, shipped_at, transferred_at, label_printed_at, " +
         "routing_orders(shopify_order_name, is_test, status, customer), " +
         "stores:assigned_store_id(name, shipping_sender_id, shipping_transport_agreement, shipping_product, shipping_product_fallback, directprint_printer_id)",
@@ -119,7 +121,7 @@ export async function finnEksisterendeSending(k: Kontekst): Promise<CargonizerCo
     // Lagret id som ikke finnes lenger: sendingen er slettet i Cargonizer. Da leter vi videre.
   }
   // Bare sendinger laget etter at gruppen kom inn: ordrenummer gjentar seg (se sokFra).
-  const funnet = await finnConsignment(k.ordre.shopify_order_name ?? "", senderId, sokFra(k.group.created_at));
+  const funnet = await finnConsignment(sendingsReferanse(k.ordre.shopify_order_name ?? "", k.group.group_no), senderId, sokFra(k.group.created_at));
   if (funnet) {
     await lagreSending(k, funnet, null);
     return funnet;
@@ -247,7 +249,7 @@ async function lagSending(k: Kontekst): Promise<{ sending: CargonizerConsignment
     product: produkt,
     // Aldri overført her – se filhodet.
     transfer: false,
-    reference: orderName,
+    reference: sendingsReferanse(orderName, k.group.group_no),
     consignee: {
       name: kunde.name ?? "",
       address1: kunde.address1,

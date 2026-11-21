@@ -28,6 +28,7 @@ import { adminClient, audit } from "./db.ts";
 import {
   erPostNord,
   finnConsignment,
+  sendingsReferanse,
   hentConsignment,
   overfoerConsignments,
   sokFra,
@@ -50,6 +51,7 @@ export type TransferUtfall =
 
 interface GruppeRad {
   id: string;
+  group_no: number | null;
   created_at: string;
   transferred_at: string | null;
   transfer_attempts: number;
@@ -77,7 +79,7 @@ export async function overfoerGruppe(groupId: string): Promise<TransferUtfall> {
   const { data } = await db
     .from("routing_groups")
     .select(
-      "id, created_at, transferred_at, transfer_attempts, transfer_alerted_at, cargonizer_consignment_id, assigned_store_id, " +
+      "id, group_no, created_at, transferred_at, transfer_attempts, transfer_alerted_at, cargonizer_consignment_id, assigned_store_id, " +
         "carrier, manually_shipped_at, " +
         "routing_orders(shopify_order_name, is_test, status), stores:assigned_store_id(name, shipping_sender_id)",
     )
@@ -176,7 +178,7 @@ async function finnSending(g: GruppeRad, orderName: string, senderId: string) {
   }
   // Aldri bakover i tid: ordrenummer gjentar seg, og å overføre en annen ordres sending ville
   // bestilt PostNord-henting av feil pakke (se sokFra).
-  const funnet = await finnConsignment(orderName, senderId, sokFra(g.created_at));
+  const funnet = await finnConsignment(sendingsReferanse(orderName, g.group_no), senderId, sokFra(g.created_at));
   if (funnet) {
     await adminClient().from("routing_groups").update({ cargonizer_consignment_id: funnet.id }).eq("id", g.id);
   }

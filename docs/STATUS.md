@@ -18,6 +18,15 @@ Oppdatert: 2026-11-21
   Standard 79 kr. Shopify legger sammen frakten per gruppe, så en ordre fra én butikk koster 79 kr,
   fra to 158 kr. Strikkefryd er flyttet ut av gruppa med Garnkilden og Studio Ull AS (Oslo, ingen
   lager). Nye butikker må få sin egen gruppe.
+- **Cargonizer-referanse per del:** første del av en ordre har ordrenummeret som referanse
+  («#1058»), de andre får «#1058-2», «#1058-3» (`sendingsReferanse`, cargonizer.ts, 2 tester).
+  Søket som finner igjen en sending uten lagret id, går på referansen, og det er ikke bekreftet at
+  Cargonizer holder søket innenfor én avsender. Uten dette kunne Strikkefryd fått Garnkildens etikett
+  for #1058, som alt er sendt. `shipping-label` v10 og `ship-order` v10 deployet (røyktestet 401 uten
+  innlogging). `fulfillment-webhook` og `timeout-sweeper` kjører forrige versjon; de søker bare når
+  gruppen mangler lagret sendings-id, og det har den alltid etter etiketten eller sendeknappen.
+- **Garnkildens del av #1057 og #1058:** meldt inn til PostNord før etiketten (#1057: 20.11 09:50:43,
+  etikett samme sekund; #1058: «Slått ut» først 11:33:24, meldt inn samme sekund, etikett 11:33:35).
 - **Gjenstår:**
   - Oppgjøret legger hele fraktinntekten på første gruppe (040, «står fraktinntekten på den første
     gruppa»), men trekker 70 kr per pakke på hver. Med 79 kr per butikk bør fraktinntekten fordeles

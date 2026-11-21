@@ -101,6 +101,22 @@ export function referanseVarianter(orderName: string): string[] {
   return [...new Set([n, utenFirkant])].filter(Boolean);
 }
 
+/**
+ * Avsenders referanse for sendingen til én gruppe. Første del av ordren har ordrenummeret
+ * («#1058»); en ordre som er delt på flere butikker, gir de andre delene «#1058-2», «#1058-3».
+ *
+ * Søket på referanse er det eneste vi har for å finne igjen en sending vi ikke har lagret id-en
+ * på, og det er ikke bekreftet at Cargonizer holder søket innenfor én avsender. Med samme
+ * referanse på to butikkers sendinger kunne Strikkefryd fått Garnkildens etikett for #1058 –
+ * en pakke som alt er sendt. Ulik referanse per del gjør det umulig (21.11.2026).
+ *
+ * REN logikk.
+ */
+export function sendingsReferanse(orderName: string, groupNo: number | null | undefined): string {
+  const n = (orderName ?? "").trim();
+  return !n || !groupNo || groupNo <= 1 ? n : `${n}-${groupNo}`;
+}
+
 /** Selve søkeordet: uten firkant, siden Cargonizer-søket uansett treffer delstreng. */
 export function sokeord(orderName: string): string {
   return (orderName ?? "").trim().replace(/^#/, "");
