@@ -6,6 +6,12 @@ import type { StockLine, StoreRow } from "../types.ts";
  */
 export interface PosAdapter {
   system: string;
+  /**
+   * Kan `fetchStockFor` slå opp enkeltvarer raskt nok til å vente på ved aksept (under 8 s)?
+   * Ingen av dagens adaptere kan det: alle henter hele katalogen. Da hoppes sanntidssjekken over,
+   * og aksepten bruker lageret fra synken (maks 15 min gammelt). Se offer-respond.
+   */
+  sanntid?: boolean;
   /** Full lagerliste for butikken. */
   fetchStock(store: StoreRow, secrets: Record<string, string>): Promise<StockLine[]>;
   /**

@@ -169,7 +169,15 @@ async function applyResponse(offer: any, action: "accept" | "decline", byUser?: 
   const { data: products } = await db.from("products").select("id, ean, name").in("id", items.map((i) => i.product_id));
   const eanByProduct = new Map((products ?? []).map((p: { id: string; ean: string | null }) => [p.id, p.ean]));
   const eans = items.map((i) => eanByProduct.get(i.product_id)).filter(Boolean) as string[];
-  if (eans.length === items.length && store.pos_system !== "manual") {
+  // Bare for kassesystemer som kan slå opp enkeltvarer raskt (`sanntid`). Før ble sjekken kjørt mot
+  // alle, men alle adaptere henter hele katalogen: 34 av 34 godkjenninger 02.–21.11.2026 gikk ut
+  // på tid etter 8 s, butikken ventet hver gang, og katalogkallet fortsatte i bakgrunnen mot Duell
+  // og Mystore. Uten sjekken godtas det på lageret fra synken, som er det som skjedde uansett.
+  let adapter: ReturnType<typeof getAdapter> | null = null;
+  try {
+    if (store.pos_system !== "manual") adapter = getAdapter(store.pos_system);
+  } catch { /* ukjent kassesystem: godtar på synket lager, som før */ }
+  if (eans.length === items.length && adapter?.sanntid) {
     try {
       const { data: sec } = await db.from("store_secrets").select("secrets").eq("store_id", store.id).maybeSingle();
       // Sanntidssjekken har en tidsfrist. Ingen av adapterne kan spørre om enkeltvarer
@@ -180,7 +188,7 @@ async function applyResponse(offer: any, action: "accept" | "decline", byUser?: 
       // det siste kvarteret, ikke fasit – og en frist som går ut er langt bedre enn
       // en knapp som ikke virker.
       const live = await Promise.race([
-        getAdapter(store.pos_system).fetchStockFor(store, (sec?.secrets ?? {}) as Record<string, string>, eans),
+        adapter.fetchStockFor(store, (sec?.secrets ?? {}) as Record<string, string>, eans),
         new Promise<null>((r) => setTimeout(() => r(null), LIVE_CHECK_MS)),
       ]);
       if (!live) {

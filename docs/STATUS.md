@@ -2,6 +2,26 @@
 
 Oppdatert: 2026-11-21
 
+## Gjennomgang av feil i loggen (21.11.2026)
+
+Audit-loggen og funksjonsloggene for 02.–21.11 er gått gjennom.
+
+- **Sanntidssjekken ved «Godta» virket aldri:** 34 av 34 godkjenninger fikk `live_check_timeout`.
+  Alle adaptere henter hele katalogen (Strikkefryd ~5200 rader, Garnkilden ~6000), så sjekken
+  rakk aldri fristen. Butikken ventet 8 s hver gang, og katalogkallet fortsatte i bakgrunnen mot
+  Mystore og Duell (Duell blokkerte IP-en én gang 17.11). **Rettet:** sjekken kjøres bare for
+  adaptere med `sanntid: true` (ny valgfri egenskap i `PosAdapter`); ingen har det i dag, så
+  aksepten bruker lageret fra synken direkte, som den i praksis alltid har gjort. `offer-respond`
+  v33 deployet og røyktestet.
+- **Synkfeil:** 20.11 kl. 19:04–19:16 svarte funksjonene 400 og «Project not specified» (feil hos
+  Supabase, gikk over av seg selv). Duell ga HTML (WAF) én gang 17.11. Ingen vedvarende feil;
+  begge butikkene har synket siste kvarter.
+- **#1033, `refund_not_deducted`:** refusjonen på 28 kr gjaldt garnbyttet 11.11. Gruppa står alt på
+  945 kr etter byttet, så det er riktig at den ikke ble trukket på nytt.
+- **Ingen grupper med feilmelding** (sending, overføring, sletting, partnerordre), ingen sendt uten
+  kassauttrekk, ingen ordre som står i ruting. Eneste åpne: Strikkefryds del av #1057 og #1058, med
+  etikett og sending meldt inn 21.11 kl. 16:21.
+
 ## Ordre delt i kassen: bare første del ble rutet (21.11.2026)
 
 - **Feilen:** Shopify deler selv ordren i flere fulfillment orders i kassen når ingen lokasjon har
