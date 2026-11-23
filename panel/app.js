@@ -1394,6 +1394,12 @@ async function lastOppgjor() {
   const pct = linjer[0]?.butikk_pct ?? null;
   const pctTekst = pct === null ? "" : ` (${Number(pct).toLocaleString("nb-NO")} %)`;
   const kort = (tall, tekst) => `<div class="tall__kort"><b>${tall}</b><span>${tekst}</span></div>`;
+  // Butikk som er selger (Danmark, 042): hele beløpet kunden betalte, i butikkens valuta, minus
+  // Garnlys provisjon på varene. Ingen fraktkostnad, gebyr eller mva oppå.
+  if (t.butikken_er_selger || d.selger?.butikken_er_selger) {
+    lastOppgjorSelger(d, t, linjer, returer, kort);
+    return;
+  }
   el.oppgjorSum.innerHTML =
     kort(antall(t.ordrer), "Ordrer sendt") +
     kort(kr(t.grunnlag), "Grunnlag uten mva") +
@@ -1452,6 +1458,57 @@ async function lastOppgjor() {
         <td>${esc(r.order_name ?? "–")}${r.art === "retur" ? "" : `<br><span class="svak">${esc(r.beskrivelse ?? "Justering")}</span>`}</td>
         <td>${datoNorsk(r.dato)}</td>
         <td class="num">${r.refundert === null || r.refundert === undefined ? "–" : belop(r.refundert)}</td>
+        <td class="num">${belop(r.trekk)}</td>
+      </tr>`).join("")}</tbody></table>`
+    : "";
+  el.oppgjorLinjer.innerHTML = salg + retur;
+}
+
+/** Oppgjøret for en butikk som er selger selv (042). Tallene er regnet i databasen. */
+function lastOppgjorSelger(d, t, linjer, returer, kort) {
+  const valuta = t.valuta ?? d.selger?.valuta ?? "DKK";
+  const sum = (v) => `${belop(v)} ${valuta}`;
+  const garnlyPct = linjer[0]?.butikk_pct == null ? null : 100 - Number(linjer[0].butikk_pct);
+  el.oppgjorSum.innerHTML =
+    kort(antall(t.ordrer), "Ordrer sendt") +
+    kort(sum(t.grunnlag), "Kunderne betalte (varer og fragt, inkl. moms)") +
+    kort(sum(t.garnly_andel), `Garnlys provision${garnlyPct === null ? "" : ` (${garnlyPct.toLocaleString("nb-NO")} % af varer uden moms)`}`) +
+    (Number(t.returer) ? kort(sum(t.returer), "Returer") : "") +
+    kort(sum(t.til_utbetaling), "Til udbetaling");
+
+  let status = "";
+  if (d.status === "utbetalt") status = `<span class="utbetalt">Udbetalt ${datoNorsk(d.avregning.utbetalt_dato)}</span> <span class="svak">Afregning ${esc(d.avregning.nummer)}</span>`;
+  else if (d.status === "avregnet") status = `<span class="utbetalt">Afregnet ${datoNorsk(d.avregning.dato)}</span> <span class="svak">Afregning ${esc(d.avregning.nummer)}. Udbetales senest ${dagMaaned(d.utbetales_innen)}.</span>`;
+  else if (d.status === "lopende") status = `<span class="svak">Perioden løber. Afregnes senest ${dagMaaned(d.avregnes_innen)} og udbetales senest ${dagMaaned(d.utbetales_innen)}.</span>`;
+  else if (linjer.length || returer.length) status = `<span class="svak">Ikke afregnet endnu. Udbetales senest ${dagMaaned(d.utbetales_innen)}.</span>`;
+  if (Number(t.gebyr_mangler) > 0) status += ` <span class="svak">Beløbet i ${esc(valuta)} mangler for ${antall(t.gebyr_mangler)} ordre(r).</span>`;
+  status += ` <span class="svak">Momsen af salget er jeres og indberettes af jer.</span>`;
+  if (erAdmin) status += ' <span class="svak">Avregning og utbetaling gjøres på admin.garnly.no.</span>';
+  el.oppgjorStatus.innerHTML = status;
+
+  const salg = linjer.length
+    ? `<table><thead><tr><th>Ordre</th><th>Sendt</th><th class="num">Varer inkl. moms</th><th class="num">Fragt</th><th class="num">I alt</th><th class="num">Provision</th><th class="num">Til jer</th></tr></thead><tbody>${
+      linjer.map((r) => `<tr>
+        <td>${esc(r.order_name ?? "–")}</td>
+        <td>${datoNorsk(r.sendt)}</td>
+        <td class="num">${r.gebyr_mangler ? '<span class="svak">mangler</span>' : belop(r.varesalg)}</td>
+        <td class="num">${belop(r.fraktinntekt)}</td>
+        <td class="num">${belop(r.grunnlag)}</td>
+        <td class="num">${belop(r.garnly)}</td>
+        <td class="num">${belop(r.butikk)}</td>
+      </tr>`).join("")}
+      <tr class="sum">
+        <td>Sum</td><td>${antall(t.ordrer)} ordre</td>
+        <td class="num">${belop(t.varesalg)}</td><td class="num">${belop(t.fraktinntekt)}</td>
+        <td class="num">${belop(t.grunnlag)}</td><td class="num">${belop(t.garnly_andel)}</td>
+        <td class="num">${belop(t.butikk_andel)}</td>
+      </tr></tbody></table>`
+    : '<p class="empty">Ingen ordrer sendt i perioden.</p>';
+  const retur = returer.length
+    ? `<table><thead><tr><th>Retur</th><th>Dato</th><th class="num">Refunderet inkl. moms</th><th class="num">Fradrag</th></tr></thead><tbody>${
+      returer.map((r) => `<tr class="minus">
+        <td>${esc(r.order_name ?? "–")}</td><td>${datoNorsk(r.dato)}</td>
+        <td class="num">${r.refundert == null ? "–" : belop(r.refundert)}</td>
         <td class="num">${belop(r.trekk)}</td>
       </tr>`).join("")}</tbody></table>`
     : "";

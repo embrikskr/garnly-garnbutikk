@@ -227,10 +227,22 @@ export async function lagPartnerordre(groupId: string, store: StoreRow): Promise
     let ordre = await finnPartnerordre(store.id, groupId);
     let ny = false;
 
+    // Prisene kunden betalte, i kundens valuta. De står på ordren hos butikken, og de er det
+    // butikken gjøres opp etter (042). Hentes også når ordren alt fantes, så beløpene lagres.
+    const linjer = g.line_items as LineItem[];
+    const priser = await gql<{ order: { presentmentCurrencyCode: string; totalShippingPriceSet: { presentmentMoney: { amount: string } }; lineItems: { nodes: Array<{ quantity: number; variant: { id: string } | null; discountedTotalSet: { presentmentMoney: { amount: string } } }> } } }>(GARNLY_PRISER, { id: ro.shopify_order_id });
+    if (!priser.order) throw new Error("Fant ikke ordren i Garnlys Shopify");
+    const prisFor = (l: LineItem) => {
+      const shopifyLinje = priser.order.lineItems.nodes.find((n) => n.variant?.id === l.variant_id);
+      return shopifyLinje ? enhetspris(Number(shopifyLinje.discountedTotalSet.presentmentMoney.amount), shopifyLinje.quantity) : 0;
+    };
+    // Frakten følger den første gruppa av ordren, som i oppgjøret (036).
+    const { data: soskne } = await db.from("routing_groups").select("group_no, status").eq("routing_order_id", g.routing_order_id);
+    const forste = Math.min(...(soskne ?? []).filter((s: { status: string }) => !["resplit", "cancelled", "archived"].includes(s.status)).map((s: { group_no: number }) => s.group_no));
+    const frakt = g.group_no === forste ? Number(priser.order.totalShippingPriceSet?.presentmentMoney?.amount ?? 0) : null;
+    const varer = øre(linjer.reduce((sum, l) => sum + prisFor(l) * l.qty, 0));
+
     if (!ordre) {
-      const linjer = g.line_items as LineItem[];
-      const priser = await gql<{ order: { presentmentCurrencyCode: string; totalShippingPriceSet: { presentmentMoney: { amount: string } }; lineItems: { nodes: Array<{ quantity: number; variant: { id: string } | null; discountedTotalSet: { presentmentMoney: { amount: string } } }> } } }>(GARNLY_PRISER, { id: ro.shopify_order_id });
-      if (!priser.order) throw new Error("Fant ikke ordren i Garnlys Shopify");
 
       const { data: produkter } = await db.from("products").select("id, ean, sku").in("id", linjer.map((l) => l.product_id));
       const produkt = new Map((produkter ?? []).map((p: { id: string; ean: string | null; sku: string | null }) => [p.id, p]));
@@ -241,16 +253,9 @@ export async function lagPartnerordre(groupId: string, store: StoreRow): Promise
         const p = produkt.get(l.product_id);
         const variantId = await finnPartnervariant(store.id, normalizeEan(p?.ean ?? l.barcode ?? null), p?.sku ?? l.sku ?? null);
         if (!variantId) { mangler.push(l.title); continue; }
-        const shopifyLinje = priser.order.lineItems.nodes.find((n) => n.variant?.id === l.variant_id);
-        const pris = shopifyLinje ? enhetspris(Number(shopifyLinje.discountedTotalSet.presentmentMoney.amount), shopifyLinje.quantity) : 0;
-        partnerlinjer.push({ partnerVariantId: variantId, qty: l.qty, unitPrice: pris, title: l.title });
+        partnerlinjer.push({ partnerVariantId: variantId, qty: l.qty, unitPrice: prisFor(l), title: l.title });
       }
       if (mangler.length) throw new Error(`Fant ikke disse varene i Shopify-en deres: ${mangler.join(", ")}`);
-
-      // Frakten følger den første gruppa av ordren, som i oppgjøret (036).
-      const { data: soskne } = await db.from("routing_groups").select("group_no, status").eq("routing_order_id", g.routing_order_id);
-      const forste = Math.min(...(soskne ?? []).filter((s: { status: string }) => !["resplit", "cancelled", "archived"].includes(s.status)).map((s: { group_no: number }) => s.group_no));
-      const frakt = g.group_no === forste ? Number(priser.order.totalShippingPriceSet?.presentmentMoney?.amount ?? 0) : null;
 
       const { order, options } = byggPartnerordre({
         groupId,
@@ -277,6 +282,10 @@ export async function lagPartnerordre(groupId: string, store: StoreRow): Promise
       partner_order_name: ordre.name,
       partner_order_created_at: nå,
       partner_order_error: null,
+      // Det butikken gjøres opp etter (042): varene og frakten kunden betalte, i kundens valuta.
+      presentment_currency: priser.order.presentmentCurrencyCode,
+      gross_presentment: varer,
+      shipping_presentment: frakt ?? 0,
       // Butikkens Shopify trakk lageret i det ordren ble laget. Se filhodet.
       pos_deducted_at: nå,
       pos_deducted_by: `ordre ${ordre.name} i butikkens Shopify`,

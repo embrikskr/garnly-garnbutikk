@@ -2,6 +2,31 @@
 
 Oppdatert: 2026-11-21
 
+## KreStoffer: oppgjør i DKK, dansk språk, moms (23.11.2026)
+
+- **Oppgjør for butikk som er selger (042, kjørt 23.11.2026).** `stores.is_seller` og
+  `settlement_currency` (KreStoffer: sann, DKK). Butikken får hele beløpet kunden betalte (varer og
+  frakt, inkl. moms, i DKK) minus Garnlys provisjon: `commission_pct` av varene **uten** moms. Ingen
+  fraktkostnad, ingen gebyr, ingen mva oppå. Returer: refundert varebeløp i DKK minus provisjonen på
+  det. Beløpene i DKK lagres på gruppa når ordren lages hos butikken (`partner_order.ts`:
+  `gross_presentment`, `shipping_presentment`, `presentment_currency`) og på refusjonen
+  (`refund_sync.ts`: `gross_presentment`). Mangler DKK-beløpet, kan perioden ikke avregnes.
+  Prøvd i en transaksjon som ble rullet tilbake: 350 DKK varer + 55 DKK frakt → provisjon 28,
+  butikken 377; retur 50 DKK → trekk 46. De norske tallene er uendret (6 perioder, 24 829,14 kr).
+  Panelet viser KreStoffers oppgjør på dansk med DKK.
+  **Deployet:** order-refunded v2. **Ikke deployet ennå: offer-respond** (skriver DKK-beløpene).
+  Må deployes før KreStoffer aktiveres – ellers mangler beløpene og perioden stopper.
+  **Avklares:** provisjon av varer med eller uten moms (bygget: uten, som i Norge), moms på
+  provisjonen (regnskapsfører), og hvilken kurs NOK → DKK ved utbetaling.
+  Tabellen `_oppgjor_for_042` (kopi av tallene før 042, låst for anon/authenticated) kan slettes.
+- **Dansk språk slått på 23.11.2026:** språket `da` er publisert, og markedet Danmark har egen
+  adresse `garnly.no/da-dk/` (web presence `51264782396`). Produktteksten er ikke oversatt; den
+  vises som i dag til noen oversetter den.
+- **Moms:** Garnly krever ikke inn moms i Shopify, verken i Norge eller Danmark (ingen skattelinjer
+  på ordrene). En dansk kunde betaler samme pris omregnet til DKK (49 kr → 35 DKK), og ingenting
+  trekkes fra. Det passer modellen: KreStoffer er selger og innberetter dansk moms av hele beløpet
+  fra sin egen ordre. Forutsetter at vilkårene og kvitteringen sier at KreStoffer er selger.
+
 ## Gjennomgang av feil i loggen (21.11.2026)
 
 Audit-loggen og funksjonsloggene for 02.–21.11 er gått gjennom.

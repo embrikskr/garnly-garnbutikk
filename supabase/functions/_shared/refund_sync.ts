@@ -15,7 +15,7 @@ import { gql } from "./shopify.ts";
 import { notifyOps } from "./notify.ts";
 import { fordelRefusjon, type OppgjorsGruppe, tilOre } from "./settlement.ts";
 
-type Penger = { shopMoney: { amount: string } };
+type Penger = { shopMoney: { amount: string }; presentmentMoney: { amount: string } };
 
 interface ShopifyRefusjon {
   id: string;
@@ -29,25 +29,26 @@ interface ShopifyRefusjon {
 }
 
 // Validert mot Admin API-skjemaet 01.10.2026 (Shopify MCP validate_graphql_codeblocks).
+// presentmentMoney (kundens valuta) lagt til 23.11.2026 for butikker som er selger (042).
 const REFUSJON = `query Refusjon($id: ID!) {
   node(id: $id) {
     ... on Refund {
       id
       processedAt
-      totalRefundedSet { shopMoney { amount } }
+      totalRefundedSet { shopMoney { amount } presentmentMoney { amount } }
       order { id name taxesIncluded }
       refundLineItems(first: 100) {
         nodes {
           quantity
-          subtotalSet { shopMoney { amount } }
-          totalTaxSet { shopMoney { amount } }
+          subtotalSet { shopMoney { amount } presentmentMoney { amount } }
+          totalTaxSet { shopMoney { amount } presentmentMoney { amount } }
           lineItem { id variant { id } }
         }
       }
       refundShippingLines(first: 10) {
         nodes {
-          subtotalAmountSet { shopMoney { amount } }
-          taxAmountSet { shopMoney { amount } }
+          subtotalAmountSet { shopMoney { amount } presentmentMoney { amount } }
+          taxAmountSet { shopMoney { amount } presentmentMoney { amount } }
         }
       }
     }
@@ -80,28 +81,33 @@ export async function behandleRefusjon(refundGid: string): Promise<RefusjonUtfal
     .select("id, status, assigned_store_id, line_items")
     .eq("routing_order_id", ro.id);
 
-  const fordeling = fordelRefusjon(
+  const oppgjorsgrupper = (grupper ?? []).map((g: any): OppgjorsGruppe => ({
+    id: g.id,
+    status: g.status,
+    storeId: g.assigned_store_id,
+    varianter: (g.line_items ?? []).map((li: any) => li.variant_id).filter(Boolean),
+  }));
+  // Samme fordeling i to valutaer: Garnlys (NOK) og kundens. Butikker som er selger (042),
+  // gjøres opp i kundens valuta; databasen velger beløpet.
+  const fordel = (valuta: "shopMoney" | "presentmentMoney") => fordelRefusjon(
     {
       taxesIncluded: r.order.taxesIncluded,
-      totalOre: tilOre(r.totalRefundedSet.shopMoney.amount),
+      totalOre: tilOre(r.totalRefundedSet[valuta].amount),
       linjer: r.refundLineItems.nodes.map((l) => ({
         variantId: l.lineItem.variant?.id ?? null,
         antall: l.quantity,
-        subtotalOre: tilOre(l.subtotalSet.shopMoney.amount),
-        mvaOre: tilOre(l.totalTaxSet.shopMoney.amount),
+        subtotalOre: tilOre(l.subtotalSet[valuta].amount),
+        mvaOre: tilOre(l.totalTaxSet[valuta].amount),
       })),
       frakt: r.refundShippingLines.nodes.map((f) => ({
-        subtotalOre: tilOre(f.subtotalAmountSet.shopMoney.amount),
-        mvaOre: tilOre(f.taxAmountSet.shopMoney.amount),
+        subtotalOre: tilOre(f.subtotalAmountSet[valuta].amount),
+        mvaOre: tilOre(f.taxAmountSet[valuta].amount),
       })),
     },
-    (grupper ?? []).map((g: any): OppgjorsGruppe => ({
-      id: g.id,
-      status: g.status,
-      storeId: g.assigned_store_id,
-      varianter: (g.line_items ?? []).map((li: any) => li.variant_id).filter(Boolean),
-    })),
+    oppgjorsgrupper,
   );
+  const fordeling = fordel("shopMoney");
+  const iKundensValuta = new Map(fordel("presentmentMoney").trekk.map((t) => [t.groupId, t.varebelopOre]));
 
   let nye = 0;
   let fantesFra = 0;
@@ -113,6 +119,7 @@ export async function behandleRefusjon(refundGid: string): Promise<RefusjonUtfal
         kind: "refund",
         shopify_refund_id: r.id,
         gross_inc_vat: -t.varebelopOre / 100,
+        gross_presentment: iKundensValuta.has(t.groupId) ? -(iKundensValuta.get(t.groupId)! / 100) : null,
         reason: `Refusjon ${r.order.name}`,
         occurred_at: r.processedAt,
       }, { onConflict: "shopify_refund_id,group_id", ignoreDuplicates: true })
