@@ -1,0 +1,114 @@
+{% comment %}
+  Garnlys ordrebekræftelse på dansk (markedet Danmark, garnly.no/da-dk/).
+  Lagt inn som dansk oversættelse af «Order confirmation» (EmailTemplate 43583438908) 23.11.2026.
+  Byggeplan §15b: den danske butik er sælger; Garnly formidler og modtager betalingen på vegne af
+  butikken. Kvitteringen med moms kommer fra butikken. Kilde: docs/epost/ordrebekreftelse_da.liquid.
+{% endcomment %}
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta name="viewport" content="width=device-width">
+  <title>Tak for din ordre</title>
+</head>
+<body style="margin:0;padding:0;background:#F7F2EA;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#2A2522;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F7F2EA;">
+    <tr><td align="center" style="padding:32px 16px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#FFFFFF;border-radius:16px;">
+        <tr><td style="padding:32px 32px 8px 32px;">
+          {% if shop.email_logo_url %}
+            <img src="{{ shop.email_logo_url }}" alt="{{ shop.name }}" width="{{ shop.email_logo_width | default: 120 }}" style="display:block;border:0;">
+          {% else %}
+            <p style="margin:0;font-size:22px;font-weight:600;color:#5F0B09;">{{ shop.name }}</p>
+          {% endif %}
+          <p style="margin:24px 0 0 0;font-size:13px;color:#7A716A;">Ordre {{ name }}</p>
+          <h1 style="margin:4px 0 16px 0;font-size:24px;font-weight:600;">Tak for din ordre{% if customer.first_name %}, {{ customer.first_name }}{% endif %}!</h1>
+          <p style="margin:0 0 12px 0;font-size:15px;line-height:1.5;">
+            Vi har modtaget din betaling. Garnly formidler ordren til en dansk garnbutik, som har garnet på lager. Butikken bekræfter ordren, pakker den og sender den til dig.
+          </p>
+          <p style="margin:0 0 12px 0;font-size:15px;line-height:1.5;">
+            <b>Butikken er sælger af varerne.</b> Du får en kvittering fra butikken, hvor butikkens navn, CVR-nummer og momsen fremgår. Betalingen er modtaget af Garnly på vegne af butikken.
+          </p>
+          <p style="margin:0 0 24px 0;font-size:15px;line-height:1.5;">
+            Du får en mail med sporingsnummer, når pakken er sendt.
+          </p>
+          {% if order_status_url %}
+            <p style="margin:0 0 24px 0;">
+              <a href="{{ order_status_url }}" style="background:#5F0B09;color:#F7F2EA;padding:12px 22px;border-radius:10px;text-decoration:none;display:inline-block;font-size:15px;">Se din ordre</a>
+            </p>
+          {% endif %}
+        </td></tr>
+
+        <tr><td style="padding:0 32px;">
+          <p style="margin:0 0 8px 0;font-size:16px;font-weight:600;">Ordreoversigt</p>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #E8E2D6;">
+            {% for line in subtotal_line_items %}
+              <tr>
+                <td style="padding:12px 0;border-bottom:1px solid #E8E2D6;font-size:14px;line-height:1.4;">
+                  {{ line.product.title | default: line.title }}{% if line.variant_title and line.variant_title != 'Default Title' %} – {{ line.variant_title }}{% endif %}<br>
+                  <span style="color:#7A716A;">Antal: {{ line.quantity }}</span>
+                </td>
+                <td align="right" style="padding:12px 0;border-bottom:1px solid #E8E2D6;font-size:14px;white-space:nowrap;vertical-align:top;">
+                  {{ line.final_line_price | money }}
+                </td>
+              </tr>
+            {% endfor %}
+          </table>
+
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:12px;">
+            <tr>
+              <td style="padding:4px 0;font-size:14px;color:#7A716A;">Varer</td>
+              <td align="right" style="padding:4px 0;font-size:14px;">{{ subtotal_price | money }}</td>
+            </tr>
+            {% if discounts_amount > 0 %}
+              <tr>
+                <td style="padding:4px 0;font-size:14px;color:#7A716A;">Rabat</td>
+                <td align="right" style="padding:4px 0;font-size:14px;">-{{ discounts_amount | money }}</td>
+              </tr>
+            {% endif %}
+            {% if requires_shipping %}
+              <tr>
+                <td style="padding:4px 0;font-size:14px;color:#7A716A;">Fragt</td>
+                <td align="right" style="padding:4px 0;font-size:14px;">{{ shipping_price | money }}</td>
+              </tr>
+            {% endif %}
+            <tr>
+              <td style="padding:10px 0 4px 0;font-size:16px;font-weight:600;border-top:1px solid #E8E2D6;">I alt</td>
+              <td align="right" style="padding:10px 0 4px 0;font-size:16px;font-weight:600;border-top:1px solid #E8E2D6;">{{ total_price | money_with_currency }}</td>
+            </tr>
+            <tr>
+              <td colspan="2" style="padding:0 0 4px 0;font-size:13px;color:#7A716A;">Inkl. dansk moms, som er butikkens og står på kvitteringen fra butikken.</td>
+            </tr>
+          </table>
+        </td></tr>
+
+        {% if shipping_address %}
+        <tr><td style="padding:24px 32px 0 32px;">
+          <p style="margin:0 0 6px 0;font-size:16px;font-weight:600;">Leveringsadresse</p>
+          <p style="margin:0;font-size:14px;line-height:1.5;">
+            {{ shipping_address.name }}<br>
+            {% if shipping_address.company %}{{ shipping_address.company }}<br>{% endif %}
+            {{ shipping_address.address1 }}<br>
+            {% if shipping_address.address2 != blank %}{{ shipping_address.address2 }}<br>{% endif %}
+            {{ shipping_address.zip }} {{ shipping_address.city }}<br>
+            {{ shipping_address.country }}
+          </p>
+          {% if shipping_method %}
+            <p style="margin:8px 0 0 0;font-size:14px;color:#7A716A;">Levering: {{ shipping_method.title }}</p>
+          {% endif %}
+        </td></tr>
+        {% endif %}
+
+        <tr><td style="padding:24px 32px 32px 32px;">
+          <p style="margin:0 0 8px 0;font-size:14px;line-height:1.5;">
+            Har du spørgsmål, så skriv til <a href="mailto:support@garnly.no" style="color:#5F0B09;">support@garnly.no</a>. Du har 14 dages fortrydelsesret fra du modtager varerne; læs mere i vores handelsbetingelser.
+          </p>
+          <p style="margin:16px 0 0 0;font-size:12px;line-height:1.5;color:#7A716A;">
+            Garnly drives af Studio Ull AS, org.nr. 938 341 567, Herman Foss' gate 14A, 0171 Oslo, Norge. Garnly formidler salget og modtager betalingen på vegne af den danske butik, der sælger varerne.
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>

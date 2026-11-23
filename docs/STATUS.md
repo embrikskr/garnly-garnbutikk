@@ -22,6 +22,15 @@ Oppdatert: 2026-11-21
 - **Dansk språk slått på 23.11.2026:** språket `da` er publisert, og markedet Danmark har egen
   adresse `garnly.no/da-dk/` (web presence `51264782396`). Produktteksten er ikke oversatt; den
   vises som i dag til noen oversetter den.
+- **Dansk ordrebekreftelse publisert 23.11.2026:** dansk oversettelse av «Order confirmation»
+  (EmailTemplate 43583438908, `translationsRegister`, locale `da`). Kilde:
+  `docs/epost/ordrebekreftelse_da.liquid`. Sier at Garnly formidler, at butikken er selger og sender
+  kvitteringen med moms, og at betalingen er tatt imot på vegne av butikken. Erstatter Shopifys
+  danske standardtekst (228 KB, for stor til å sende gjennom koblingen); angres med
+  `translationsRemove` for `da`. Norske kunder får den norske som før. **Embrik ser over.**
+- **Danske vilkår: utkast til Halvor** i den delte disken (Garnly-mappen): «Utkast – danske vilkår
+  for Garnly (KreStoffer som selger) – til Halvor». Ikke publisert. Publiseres som dansk oversettelse
+  av vilkårene i Shopify (SHOP_POLICY) når Halvor har godkjent og KreStoffers CVR er inne.
 - **Moms:** Garnly krever ikke inn moms i Shopify, verken i Norge eller Danmark (ingen skattelinjer
   på ordrene). En dansk kunde betaler samme pris omregnet til DKK (49 kr → 35 DKK), og ingenting
   trekkes fra. Det passer modellen: KreStoffer er selger og innberetter dansk moms av hele beløpet
