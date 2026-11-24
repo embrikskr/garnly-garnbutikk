@@ -2,6 +2,17 @@
 
 Oppdatert: 2026-11-21
 
+## Utbetalinger som ikke er markert i systemet (24.11.2026)
+
+- **To perioder i måneden står** (Embrik 24.11.2026, etter et øyeblikks tvil om månedlig).
+- **SF-2026-01** (Strikkefryd 16.–31. okt, 4 384,19 kr) er betalt, men skal ikke markeres ennå
+  (Embrik: «bare ikke marker enda»).
+- **Garnkilden 16.–31. okt** (991,64 kr) er betalt utenom systemet. Det finnes ingen avregning ennå,
+  fordi Garnkilden mangler juridisk navn, org.nr. og adresse i `stores`. Når de er inne: lag
+  avregningen (GK-2026-01) og marker den som betalt.
+- **Forfalt:** Strikkefryd 1.–15. nov (8 156,98 kr) og Garnkilden 1.–15. nov (4 049,14 kr) skulle
+  vært avregnet innen 20.11 og betales innen 25.11.
+
 ## KreStoffer: oppgjør i DKK, dansk språk, moms (23.11.2026)
 
 - **Oppgjør for butikk som er selger (042, kjørt 23.11.2026).** `stores.is_seller` og
