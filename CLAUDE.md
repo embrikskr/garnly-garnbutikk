@@ -41,7 +41,8 @@ supabase/migrations/      001 schema, 002 cron, 003 exclude_from_sync, 004 inven
                           036 salgsrapport, «manglet» og oppgjør per måned, 037 mest solgt totalt,
                           038 admin fra admin.garnly.no, 039 ruting per land,
                           040 oppgjør etter avtalen (grunnlag uten mva, halvmåneder, avregninger, betalingsgebyr),
-                          041 ordre i partnerbutikkens Shopify, 042 oppgjør for selgerbutikk (DKK)
+                          041 ordre i partnerbutikkens Shopify, 042 oppgjør for selgerbutikk (DKK),
+                          043 valutagebyret deles
 supabase/seed/            product_aliases.sql (varer uten brukbar EAN, kjøres etter første sync-products)
 panel/                    butikkpanelet (statisk side, Vercel med rot `panel/`).
                           garnly-butikkpanel.vercel.app – deployes av git push

@@ -22,6 +22,14 @@ Oppdatert: 2026-11-21
 - **Dansk språk slått på 23.11.2026:** språket `da` er publisert, og markedet Danmark har egen
   adresse `garnly.no/da-dk/` (web presence `51264782396`). Produktteksten er ikke oversatt; den
   vises som i dag til noen oversetter den.
+- **+2 % i Danmark og delt valutagebyr (Embrik 24.11.2026).** Shopify tar trolig 2 % når kunden
+  betaler i DKK og Garnly får NOK (Grow-planen har ikke utbetaling i DKK). Prisene i markedet Danmark
+  er satt 2 % opp: katalog «Danmark (+2 %)» (`MarketCatalog/131653828668`) med prislisten «Danmark
+  +2 % (valutagebyr)» (`PriceList/30608785468`). Avrunding er på, så prisene er hele kroner (49 kr →
+  36 DKK, før 35). Norske priser og vareutvalget i Danmark er uendret (93 varer). **Gebyret deles**
+  (043): KreStoffer trekkes `fx_fee_store_pct` = 1 % av alt kunden betalte (kolonnen gebyr i
+  regneboka); Garnly bærer resten. Prøvd i en transaksjon som ble rullet tilbake: 357 + 56 DKK →
+  valutagebyr 4,13, provisjon 28,56, butikken 380,31. Må stå i avtalen med KreStoffer.
 - **Dansk ordrebekreftelse publisert 23.11.2026:** dansk oversettelse av «Order confirmation»
   (EmailTemplate 43583438908, `translationsRegister`, locale `da`). Kilde:
   `docs/epost/ordrebekreftelse_da.liquid`. Sier at Garnly formidler, at butikken er selger og sender

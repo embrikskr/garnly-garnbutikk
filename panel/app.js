@@ -1471,7 +1471,8 @@ function lastOppgjorSelger(d, t, linjer, returer, kort) {
   const garnlyPct = linjer[0]?.butikk_pct == null ? null : 100 - Number(linjer[0].butikk_pct);
   el.oppgjorSum.innerHTML =
     kort(antall(t.ordrer), "Ordrer sendt") +
-    kort(sum(t.grunnlag), "Kunderne betalte (varer og fragt, inkl. moms)") +
+    kort(sum(Number(t.varesalg) + Number(t.fraktinntekt)), "Kunderne betalte (varer og fragt, inkl. moms)") +
+    (Number(t.gebyr) ? kort(sum(t.gebyr), "Jeres del af valutagebyret") : "") +
     kort(sum(t.garnly_andel), `Garnlys provision${garnlyPct === null ? "" : ` (${garnlyPct.toLocaleString("nb-NO")} % af varer uden moms)`}`) +
     (Number(t.returer) ? kort(sum(t.returer), "Returer") : "") +
     kort(sum(t.til_utbetaling), "Til udbetaling");
@@ -1482,25 +1483,25 @@ function lastOppgjorSelger(d, t, linjer, returer, kort) {
   else if (d.status === "lopende") status = `<span class="svak">Perioden løber. Afregnes senest ${dagMaaned(d.avregnes_innen)} og udbetales senest ${dagMaaned(d.utbetales_innen)}.</span>`;
   else if (linjer.length || returer.length) status = `<span class="svak">Ikke afregnet endnu. Udbetales senest ${dagMaaned(d.utbetales_innen)}.</span>`;
   if (Number(t.gebyr_mangler) > 0) status += ` <span class="svak">Beløbet i ${esc(valuta)} mangler for ${antall(t.gebyr_mangler)} ordre(r).</span>`;
-  status += ` <span class="svak">Momsen af salget er jeres og indberettes af jer.</span>`;
+  status += ` <span class="svak">Momsen af salget er jeres og indberettes af jer. Valutagebyret deles efter aftalen med Garnly.</span>`;
   if (erAdmin) status += ' <span class="svak">Avregning og utbetaling gjøres på admin.garnly.no.</span>';
   el.oppgjorStatus.innerHTML = status;
 
   const salg = linjer.length
-    ? `<table><thead><tr><th>Ordre</th><th>Sendt</th><th class="num">Varer inkl. moms</th><th class="num">Fragt</th><th class="num">I alt</th><th class="num">Provision</th><th class="num">Til jer</th></tr></thead><tbody>${
+    ? `<table><thead><tr><th>Ordre</th><th>Sendt</th><th class="num">Varer inkl. moms</th><th class="num">Fragt</th><th class="num">Valutagebyr</th><th class="num">Provision</th><th class="num">Til jer</th></tr></thead><tbody>${
       linjer.map((r) => `<tr>
         <td>${esc(r.order_name ?? "–")}</td>
         <td>${datoNorsk(r.sendt)}</td>
         <td class="num">${r.gebyr_mangler ? '<span class="svak">mangler</span>' : belop(r.varesalg)}</td>
         <td class="num">${belop(r.fraktinntekt)}</td>
-        <td class="num">${belop(r.grunnlag)}</td>
+        <td class="num">${belop(r.gebyr)}</td>
         <td class="num">${belop(r.garnly)}</td>
         <td class="num">${belop(r.butikk)}</td>
       </tr>`).join("")}
       <tr class="sum">
         <td>Sum</td><td>${antall(t.ordrer)} ordre</td>
         <td class="num">${belop(t.varesalg)}</td><td class="num">${belop(t.fraktinntekt)}</td>
-        <td class="num">${belop(t.grunnlag)}</td><td class="num">${belop(t.garnly_andel)}</td>
+        <td class="num">${belop(t.gebyr)}</td><td class="num">${belop(t.garnly_andel)}</td>
         <td class="num">${belop(t.butikk_andel)}</td>
       </tr></tbody></table>`
     : '<p class="empty">Ingen ordrer sendt i perioden.</p>';
